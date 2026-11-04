@@ -6,6 +6,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/solanchveliz-dev/vendigo/api/internal/auth"
+	"github.com/solanchveliz-dev/vendigo/api/internal/billetera"
 	"github.com/solanchveliz-dev/vendigo/api/internal/core"
 	"github.com/solanchveliz-dev/vendigo/api/internal/demo"
 	"github.com/solanchveliz-dev/vendigo/api/internal/httpx"
@@ -20,6 +21,7 @@ func registrarModulos(app *core.App, api chi.Router) {
 	mTiendas := tiendas.Nuevo(app)
 	mProductos := productos.Nuevo(app)
 	mPedidos := pedidos.Nuevo(app)
+	mBilletera := billetera.Nuevo(app)
 
 	mAuth.TiendaDe = mTiendas.DeUsuario
 
@@ -42,6 +44,7 @@ func registrarModulos(app *core.App, api chi.Router) {
 			mTiendas.RutasVendedor(v)
 			mProductos.RutasVendedor(v)
 			mPedidos.RutasVendedor(v)
+			mBilletera.RutasVendedor(v)
 		})
 
 		if app.Cfg.EsDev() {
