@@ -14,6 +14,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 
 	"github.com/solanchveliz-dev/vendigo/api/internal/archivos"
+	"github.com/solanchveliz-dev/vendigo/api/internal/avisos"
 	"github.com/solanchveliz-dev/vendigo/api/internal/config"
 	"github.com/solanchveliz-dev/vendigo/api/internal/core"
 	"github.com/solanchveliz-dev/vendigo/api/internal/db"
@@ -46,7 +47,14 @@ func main() {
 		slog.Error("almacenamiento", "err", err)
 		os.Exit(1)
 	}
-	app := &core.App{Cfg: cfg, DB: conexion, Cifrador: cif, Archivos: almacen, Avisos: core.NotificadorConsola{}}
+	var notificador core.Notificador = core.NotificadorConsola{}
+	if cfg.OTPCanal == "sms" {
+		if notificador, err = avisos.NuevoSNS(ctx, cfg.S3Region); err != nil {
+			slog.Error("sms", "err", err)
+			os.Exit(1)
+		}
+	}
+	app := &core.App{Cfg: cfg, DB: conexion, Cifrador: cif, Archivos: almacen, Avisos: notificador}
 
 	srv := &http.Server{
 		Addr:              ":" + cfg.Puerto,
