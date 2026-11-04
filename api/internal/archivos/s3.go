@@ -3,6 +3,7 @@ package archivos
 import (
 	"bytes"
 	"context"
+	"io"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -107,3 +108,13 @@ func (s *S3) Subir(ctx context.Context, publico bool, key, contentType string, d
 	return err
 }
 
+// Leer descarga un archivo (lo usa la IA para analizar fotos y boletas).
+func (s *S3) Leer(ctx context.Context, publico bool, key string) ([]byte, string, error) {
+	out, err := s.cliente.GetObject(ctx, &s3.GetObjectInput{Bucket: aws.String(s.bucket(publico)), Key: aws.String(key)})
+	if err != nil {
+		return nil, "", err
+	}
+	defer out.Body.Close()
+	data, err := io.ReadAll(io.LimitReader(out.Body, 6<<20))
+	return data, aws.ToString(out.ContentType), err
+}

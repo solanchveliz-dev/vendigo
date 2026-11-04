@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"log/slog"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -10,6 +12,7 @@ import (
 	"github.com/solanchveliz-dev/vendigo/api/internal/core"
 	"github.com/solanchveliz-dev/vendigo/api/internal/demo"
 	"github.com/solanchveliz-dev/vendigo/api/internal/httpx"
+	"github.com/solanchveliz-dev/vendigo/api/internal/ia"
 	"github.com/solanchveliz-dev/vendigo/api/internal/pedidos"
 	"github.com/solanchveliz-dev/vendigo/api/internal/planes"
 	"github.com/solanchveliz-dev/vendigo/api/internal/productos"
@@ -24,6 +27,17 @@ func registrarModulos(app *core.App, api chi.Router) {
 	mPedidos := pedidos.Nuevo(app)
 	mBilletera := billetera.Nuevo(app)
 	mPlanes := planes.Nuevo(app)
+
+	var proveedor ia.Proveedor = ia.Simulado{}
+	if app.Cfg.IAProveedor == "bedrock" {
+		b, err := ia.NuevoBedrock(context.Background(), app.Cfg.IARegion, app.Cfg.IAModelo)
+		if err != nil {
+			slog.Error("ia", "err", err)
+		} else {
+			proveedor = b
+		}
+	}
+	mIA := ia.Nuevo(app, proveedor)
 
 	mAuth.TiendaDe = mTiendas.DeUsuario
 	mPedidos.ValidarCupo = mPlanes.ValidarCupo
@@ -50,6 +64,7 @@ func registrarModulos(app *core.App, api chi.Router) {
 			mPedidos.RutasVendedor(v)
 			mBilletera.RutasVendedor(v)
 			mPlanes.RutasVendedor(v)
+			mIA.RutasVendedor(v)
 		})
 
 		if app.Cfg.EsDev() {

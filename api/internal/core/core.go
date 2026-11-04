@@ -26,6 +26,7 @@ type Almacen interface {
 	URLLectura(ctx context.Context, key string) (string, error)
 	URLPublica(key string) string
 	Existe(ctx context.Context, publico bool, key string) bool
+	Leer(ctx context.Context, publico bool, key string) ([]byte, string, error)
 }
 
 // Notificador envía códigos y avisos (SNS, SES o consola en pruebas).

@@ -31,6 +31,9 @@ type Config struct {
 
 	OTPCanal string // log (pruebas) o sms (Amazon SNS)
 
+	IAProveedor string // simulado (sin costo) o bedrock
+	IAModelo    string
+	IARegion    string
 }
 
 func (c Config) EsDev() bool { return c.Entorno == "dev" }
@@ -55,6 +58,9 @@ func Carga() Config {
 		BucketPrivado:  env("S3_BUCKET_PRIVADO", "vendigo-privado"),
 		MediaPublicURL: strings.TrimRight(env("MEDIA_PUBLIC_URL", "http://localhost:9000/vendigo-publico"), "/"),
 		OTPCanal:       env("OTP_CANAL", "log"),
+		IAProveedor:    env("IA_PROVEEDOR", "simulado"),
+		IAModelo:       env("IA_MODELO", "amazon.nova-lite-v1:0"),
+		IARegion:       env("IA_REGION", "us-east-1"),
 	}
 }
 
