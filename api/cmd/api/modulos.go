@@ -11,6 +11,7 @@ import (
 	"github.com/solanchveliz-dev/vendigo/api/internal/demo"
 	"github.com/solanchveliz-dev/vendigo/api/internal/httpx"
 	"github.com/solanchveliz-dev/vendigo/api/internal/pedidos"
+	"github.com/solanchveliz-dev/vendigo/api/internal/planes"
 	"github.com/solanchveliz-dev/vendigo/api/internal/productos"
 	"github.com/solanchveliz-dev/vendigo/api/internal/tiendas"
 )
@@ -22,8 +23,10 @@ func registrarModulos(app *core.App, api chi.Router) {
 	mProductos := productos.Nuevo(app)
 	mPedidos := pedidos.Nuevo(app)
 	mBilletera := billetera.Nuevo(app)
+	mPlanes := planes.Nuevo(app)
 
 	mAuth.TiendaDe = mTiendas.DeUsuario
+	mPedidos.ValidarCupo = mPlanes.ValidarCupo
 
 	// Públicas
 	api.Route("/auth", mAuth.RutasPublicas)
@@ -31,6 +34,7 @@ func registrarModulos(app *core.App, api chi.Router) {
 		r.Use(httpx.Limite(300, time.Minute))
 		mTiendas.RutasPublicas(r)
 		mProductos.RutasPublicas(r)
+		mPlanes.RutasPublicas(r)
 	})
 
 	// Con sesión
@@ -45,6 +49,7 @@ func registrarModulos(app *core.App, api chi.Router) {
 			mProductos.RutasVendedor(v)
 			mPedidos.RutasVendedor(v)
 			mBilletera.RutasVendedor(v)
+			mPlanes.RutasVendedor(v)
 		})
 
 		if app.Cfg.EsDev() {
