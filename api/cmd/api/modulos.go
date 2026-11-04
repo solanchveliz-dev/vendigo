@@ -7,7 +7,9 @@ import (
 
 	"github.com/solanchveliz-dev/vendigo/api/internal/auth"
 	"github.com/solanchveliz-dev/vendigo/api/internal/core"
+	"github.com/solanchveliz-dev/vendigo/api/internal/demo"
 	"github.com/solanchveliz-dev/vendigo/api/internal/httpx"
+	"github.com/solanchveliz-dev/vendigo/api/internal/pedidos"
 	"github.com/solanchveliz-dev/vendigo/api/internal/productos"
 	"github.com/solanchveliz-dev/vendigo/api/internal/tiendas"
 )
@@ -17,6 +19,7 @@ func registrarModulos(app *core.App, api chi.Router) {
 	mAuth := auth.Nuevo(app)
 	mTiendas := tiendas.Nuevo(app)
 	mProductos := productos.Nuevo(app)
+	mPedidos := pedidos.Nuevo(app)
 
 	mAuth.TiendaDe = mTiendas.DeUsuario
 
@@ -38,6 +41,14 @@ func registrarModulos(app *core.App, api chi.Router) {
 			v.Use(httpx.Rol("vendedor"))
 			mTiendas.RutasVendedor(v)
 			mProductos.RutasVendedor(v)
+			mPedidos.RutasVendedor(v)
 		})
+
+		if app.Cfg.EsDev() {
+			r.Route("/dev", func(d chi.Router) {
+				d.Use(httpx.Rol("vendedor"))
+				demo.Nuevo(app).Rutas(d)
+			})
+		}
 	})
 }

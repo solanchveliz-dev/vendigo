@@ -89,7 +89,9 @@ func (m *Modulo) cargar(ctx context.Context, tiendaID string, ids ...string) ([]
 	}
 	in := strings.Join(ph, ",")
 	rows, err := m.app.DB.QueryContext(ctx, `SELECT p.id, p.nombre, p.descripcion, p.categoria, p.precio_centimos, p.stock, p.activo, p.creado_en,
-		o.descuento_pct, o.termina_en, 0
+		o.descuento_pct, o.termina_en,
+		(SELECT COALESCE(SUM(i.cantidad),0) FROM pedido_items i JOIN pedidos pe ON pe.id=i.pedido_id
+			WHERE i.producto_id=p.id AND pe.estado NOT IN ('rechazado','cancelado'))
 		FROM productos p LEFT JOIN ofertas o ON o.producto_id=p.id AND o.termina_en > now()
 		WHERE p.tienda_id=$1 AND NOT p.eliminado AND p.id::text IN (`+in+`)`, args...)
 	if err != nil {
