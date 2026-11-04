@@ -1,0 +1,93 @@
+"use client";
+
+import Link from "next/link";
+import { Bike, Package, Store } from "lucide-react";
+import { fecha, nombreEntrega, soles } from "@/lib/formato";
+import type { PedidoResumen } from "@/lib/tipos";
+import { Insignia } from "@/components/ui";
+import { EstadoPedido } from "./estado";
+
+export const iconoEntrega = { recojo: Store, agencia: Package, motorizado: Bike };
+
+export function textoPago(p: PedidoResumen) {
+  if (p.pago_estado === "devuelto") return { texto: "Devuelto", tono: "error" as const };
+  if (p.pago_estado === "pendiente") return { texto: "Paga al recibir", tono: "neutro" as const };
+  if (p.liberado) return { texto: "Cobrado", tono: "ok" as const };
+  return { texto: "Pago confirmado", tono: "pino" as const };
+}
+
+const siguiente: Record<string, string> = {
+  por_aceptar: "Aceptar pedido",
+  preparando: "Registrar envío",
+  listo_recojo: "Entregar al cliente",
+};
+
+export function siguientePaso(p: PedidoResumen) {
+  if (p.reclamo === "abierto") return "Ver reclamo";
+  if (p.estado === "preparando" && p.entrega === "recojo") return "Listo para recoger";
+  if (p.estado === "preparando" && p.entrega === "motorizado") return "Salió el motorizado";
+  return siguiente[p.estado];
+}
+
+export function TablaPedidos({ pedidos, compacta }: { pedidos: PedidoResumen[]; compacta?: boolean }) {
+  return (
+    <div className="overflow-x-auto">
+      <table className={compacta ? "w-full text-sm" : "w-full min-w-[720px] text-sm"}>
+        <thead>
+          <tr className="text-left text-xs font-semibold text-gris">
+            <th className="px-4 py-3">Número</th>
+            <th className="px-4 py-3">Cliente</th>
+            <th className="px-4 py-3">Entrega</th>
+            {!compacta && <th className="px-4 py-3">Pago</th>}
+            <th className="px-4 py-3">Estado</th>
+            <th className="px-4 py-3 text-right">Total</th>
+            {!compacta && <th className="px-4 py-3 text-right">Siguiente paso</th>}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-linea">
+          {pedidos.map((p) => {
+            const Icono = iconoEntrega[p.entrega];
+            const pago = textoPago(p);
+            const paso = siguientePaso(p);
+            return (
+              <tr key={p.id} className="hover:bg-crema/60">
+                <td className="px-4 py-3">
+                  <Link href={`/vendedor/pedidos/${p.id}`} className="font-semibold text-tinta hover:underline">
+                    {p.codigo}
+                  </Link>
+                  <span className="block text-xs text-gris">{fecha(p.creado_en, true)}</span>
+                </td>
+                <td className="px-4 py-3">{p.comprador}</td>
+                <td className="px-4 py-3">
+                  <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+                    <Icono className="size-4 text-gris" /> {nombreEntrega[p.entrega]}
+                  </span>
+                </td>
+                {!compacta && (
+                  <td className="px-4 py-3">
+                    <Insignia tono={pago.tono}>{pago.texto}</Insignia>
+                  </td>
+                )}
+                <td className="px-4 py-3">
+                  <EstadoPedido estado={p.estado} texto={p.reclamo && ["abierto", "en_revision"].includes(p.reclamo) ? "Con reclamo" : p.estado_texto} />
+                </td>
+                <td className="whitespace-nowrap px-4 py-3 text-right font-semibold">{soles(p.total_centimos)}</td>
+                {!compacta && (
+                  <td className="px-4 py-3 text-right">
+                    {paso ? (
+                      <Link href={`/vendedor/pedidos/${p.id}`} className="inline-flex h-8 items-center rounded-full bg-pino px-3.5 text-xs font-semibold text-white">
+                        {paso}
+                      </Link>
+                    ) : (
+                      <span className="text-xs text-gris">{p.estado === "enviado" ? "Esperando al cliente" : "—"}</span>
+                    )}
+                  </td>
+                )}
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
