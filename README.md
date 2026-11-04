@@ -65,3 +65,7 @@ Requisitos: Docker Desktop, Go 1.24 o superior y Node.js 20 o superior.
    ```
 
    La web corre en `http://localhost:3000`.
+
+## Versión 0.1
+
+Perfil del vendedor completo: cuenta con código OTP, tienda, productos con IA, pedidos con pago protegido, envíos, reclamos, cobros, retiros, verificación de identidad y planes con cupo de ventas.
