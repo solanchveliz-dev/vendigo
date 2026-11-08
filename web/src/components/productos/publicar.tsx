@@ -104,6 +104,8 @@ export function PublicarProducto({ producto }: { producto?: Producto }) {
     const d = (producto.detalles ?? {}) as Detalles;
     const base = inicial(d.rubro || cat);
     const mismo = d.tipo && d.tipo !== "otro" ? [...(CATALOGO[d.rubro || cat] ?? []), ...leerMisTipos()].find((t) => t.id === d.tipo) : null;
+    const dimsBase = mismo ? mismo.dims : d.borrador?.dims ?? [];
+    const propias = new Set(["Características", ...dimsBase.filter((x) => x.type === "one").map((x) => x.label)]);
     setQ({
       ...base,
       tipo: mismo ? mismo.id : "otro",
@@ -119,8 +121,9 @@ export function PublicarProducto({ producto }: { producto?: Producto }) {
       stock: producto.stock,
       desc: producto.descripcion,
       descTocada: true,
-      ficha: Object.fromEntries(d.ficha ?? []),
-      fichaOn: d.ficha_on ?? (d.ficha ?? []).map(([k]) => k),
+      // La ficha guardada también trae lo que sale de las opciones (Material, Características…): eso no se repite aquí.
+      ficha: Object.fromEntries((d.ficha ?? []).filter(([k]) => !propias.has(k))),
+      fichaOn: (d.ficha_on ?? (d.ficha ?? []).map(([k]) => k)).filter((k) => !propias.has(k)),
     });
     setFotos(producto.imagenes);
   }, [tienda.datos, producto]);
@@ -277,7 +280,7 @@ export function PublicarProducto({ producto }: { producto?: Producto }) {
     ...(t?.dims ?? []).filter((d) => d.type === "one" && (q.sel[d.k] || [])[0]).map((d) => [d.label, q.sel[d.k][0]] as [string, string]),
     ...(q.feats.length ? [["Características", q.feats.join(" · ")] as [string, string]] : []),
     ...Object.entries(q.ficha).filter(([, v]) => v.trim()).map(([k, v]) => [k, v.trim()] as [string, string]),
-  ];
+  ].filter(([k], i, a) => a.findIndex(([x]) => x === k) === i); // sin datos repetidos
   const variante = grupos[0] ?? (coloresSel.length ? { label: "Color", opts: coloresSel } : null);
 
   async function publicar() {
