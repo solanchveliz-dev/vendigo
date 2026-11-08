@@ -34,6 +34,7 @@ func (m *Modulo) RutasVendedor(r chi.Router) {
 
 func (m *Modulo) RutasPublicas(r chi.Router) {
 	r.Method("GET", "/tiendas/{slug}/productos", httpx.Handler(m.catalogoPublico))
+	r.Method("GET", "/tiendas/{slug}/productos/{id}", httpx.Handler(m.productoPublico))
 }
 
 const maxImagenes = 6
@@ -586,5 +587,50 @@ func (m *Modulo) catalogoPublico(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	httpx.OK(w, map[string]any{"productos": l})
+	return nil
+}
+
+// PreguntaPublica es lo que ven los compradores: la pregunta y, si ya hay, la respuesta de la tienda.
+type PreguntaPublica struct {
+	Pregunta     string     `json:"pregunta"`
+	Respuesta    *string    `json:"respuesta"`
+	RespondidaEn *time.Time `json:"respondida_en"`
+	CreadoEn     time.Time  `json:"creado_en"`
+}
+
+// productoPublico devuelve un producto publicado de la tienda y sus preguntas.
+func (m *Modulo) productoPublico(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	var tid string
+	err := m.app.DB.QueryRowContext(ctx, `SELECT t.id FROM tiendas t JOIN productos p ON p.tienda_id = t.id
+		WHERE t.slug=$1 AND t.activa AND p.id::text=$2 AND p.activo AND NOT p.eliminado`, chi.URLParam(r, "slug"), chi.URLParam(r, "id")).Scan(&tid)
+	if core.SinFilas(err) {
+		return httpx.ErrNoEncontrado
+	}
+	if err != nil {
+		return err
+	}
+	l, err := m.cargar(ctx, tid, chi.URLParam(r, "id"))
+	if err != nil {
+		return err
+	}
+	if len(l) == 0 {
+		return httpx.ErrNoEncontrado
+	}
+	rows, err := m.app.DB.QueryContext(ctx, `SELECT pregunta, respuesta, respondida_en, creado_en FROM preguntas
+		WHERE producto_id=$1 ORDER BY (respuesta IS NULL), creado_en DESC LIMIT 30`, l[0].ID)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	preguntas := []PreguntaPublica{}
+	for rows.Next() {
+		var q PreguntaPublica
+		if err := rows.Scan(&q.Pregunta, &q.Respuesta, &q.RespondidaEn, &q.CreadoEn); err != nil {
+			return err
+		}
+		preguntas = append(preguntas, q)
+	}
+	httpx.OK(w, map[string]any{"producto": l[0], "preguntas": preguntas})
 	return nil
 }

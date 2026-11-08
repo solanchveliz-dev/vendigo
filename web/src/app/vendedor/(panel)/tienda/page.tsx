@@ -48,7 +48,7 @@ export default function MiTienda() {
             <Opcion href="/vendedor/tienda/perfil" icono={<Pencil className="size-5" />} titulo="Editar perfil" detalle="Nombre, logo, portada y redes" />
             <Opcion href="/vendedor/tienda/entrega" icono={<Truck className="size-5" />} titulo="Formas de entrega" detalle="Recojo, agencia y motorizado" />
             <Opcion href="/vendedor/tienda/compartir" icono={<QrCode className="size-5" />} titulo="Compartir tienda" detalle="Tu enlace, tu QR y posts para redes" />
-            <Opcion href={`/t/${t.slug}`} externo icono={<Eye className="size-5" />} titulo="Ver mi tienda como cliente" detalle={t.enlace.replace(/^https?:\/\//, "")} />
+            <Opcion href="/vendedor/tienda/vista" icono={<Eye className="size-5" />} titulo="Ver mi tienda como cliente" detalle={t.enlace.replace(/^https?:\/\//, "")} />
           </Tarjeta>
         </section>
         <section>

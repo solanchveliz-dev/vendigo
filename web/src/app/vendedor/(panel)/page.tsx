@@ -61,7 +61,7 @@ export default function Inicio() {
 
       <div className="flex flex-wrap justify-end gap-2">
         {tienda.datos && (
-          <Link href={`/t/${tienda.datos.slug}`} target="_blank">
+          <Link href="/vendedor/tienda/vista">
             <Boton variante="secundario" tamano="sm">
               <Eye className="size-4" /> Ver mi tienda
             </Boton>

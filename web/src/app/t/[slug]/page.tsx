@@ -1,12 +1,17 @@
 import type { Metadata } from "next";
-import Image from "next/image";
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { MapPin, ShieldCheck } from "lucide-react";
+import { Bike, Clock, MapPin, MessageCircle, Package, ShieldCheck, Star, Store } from "lucide-react";
 import { API_URL } from "@/lib/servidor/sesion";
 import { soles } from "@/lib/formato";
 import { rubros } from "@/lib/catalogos";
 import type { Producto, Tienda } from "@/lib/tipos";
+import { CabeceraPublica } from "@/components/tienda/cabecera";
+import { Catalogo } from "@/components/tienda/catalogo";
+import { Destacado } from "@/components/tienda/destacado";
+import { BotonCompartir } from "@/components/tienda/compartir";
+import { BotonSeguir } from "@/components/tienda/seguir";
+import { IconoFacebook, IconoInstagram, IconoTiktok } from "@/components/tienda/iconos-redes";
+import { enlaceRed } from "@/lib/redes";
 
 // Página pública de la tienda. Se genera en el servidor para que Google pueda leerla.
 async function cargar(slug: string) {
@@ -28,54 +33,186 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   };
 }
 
-export default async function TiendaPublica({ params }: { params: Promise<{ slug: string }> }) {
+const reputaciones = {
+  nueva: "Tienda nueva",
+  buena: "Buena reputación",
+  excelente: "Excelente reputación",
+};
+
+const redondo =
+  "grid size-12 place-items-center rounded-full bg-white text-tinta shadow-suave ring-1 ring-linea/60 transition hover:-translate-y-0.5";
+
+export default async function TiendaPublica({ params, searchParams }: { params: Promise<{ slug: string }>; searchParams: Promise<{ vista?: string }> }) {
+  const vista = (await searchParams).vista === "1";
   const d = await cargar((await params).slug).catch(() => null);
   if (!d) notFound();
   const { tienda: t, productos } = d;
 
+  const ventas = productos.reduce((s, p) => s + (p.vendidos || 0), 0);
+  const nuevo = [...productos].sort((a, b) => b.creado_en.localeCompare(a.creado_en))[0];
+  const masVendido = [...productos].filter((p) => p.vendidos > 0).sort((a, b) => b.vendidos - a.vendidos)[0];
+  const destacado = masVendido ?? nuevo;
+  const lugar = t.distrito || t.ciudad;
+  const redes = [
+    { nombre: "Instagram", href: enlaceRed("instagram", t.instagram), icono: <IconoInstagram className="size-[19px]" /> },
+    { nombre: "TikTok", href: enlaceRed("tiktok", t.tiktok), icono: <IconoTiktok className="size-[19px]" /> },
+    { nombre: "Facebook", href: enlaceRed("facebook", t.facebook), icono: <IconoFacebook className="size-5" /> },
+  ].filter((r) => r.href);
+
   return (
-    <div className="min-h-screen">
-      <header className="flex h-16 items-center justify-between px-5">
-        <Link href="/" className="flex items-center gap-2">
-          <Image src="/logo.png" alt="" width={32} height={32} />
-          <span className="font-display text-lg font-extrabold text-pino">VendiGo</span>
-        </Link>
-        <span className="inline-flex items-center gap-1 text-sm font-semibold text-ok">
-          <ShieldCheck className="size-4" /> Pago protegido
-        </span>
-      </header>
-      <div className="mx-auto max-w-5xl px-5 pb-16">
-        <div className="h-44 rounded-2xl bg-pino bg-cover bg-center" style={t.portada_url ? { backgroundImage: `url(${t.portada_url})` } : undefined} />
-        <div className="-mt-12 flex flex-col items-center text-center">
-          <div className="size-24 overflow-hidden rounded-full bg-crema ring-4 ring-crema">
-            {t.logo_url ? <img src={t.logo_url} alt="" className="size-full object-cover" /> : <span className="grid size-full place-items-center bg-white font-display text-3xl font-extrabold text-pino">{t.nombre[0]}</span>}
+    <div className="min-h-screen bg-crema">
+      {!vista && <CabeceraPublica />}
+
+      <main className="mx-auto max-w-[1400px] px-5 pb-16 sm:px-10">
+        {/* Portada */}
+        <div
+          className="relative mt-7 h-56 overflow-hidden rounded-[28px] bg-pino bg-cover bg-center sm:h-80"
+          style={t.portada_url ? { backgroundImage: `url(${t.portada_url})` } : undefined}
+        >
+          {!t.portada_url && <div className="absolute -right-16 -top-20 size-80 rounded-full bg-white/5" />}
+          <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-crema/80 to-transparent" />
+        </div>
+
+        {/* Logo, nombre y datos */}
+        <div className="relative -mt-16 flex flex-col items-center text-center">
+          <div className="size-32 overflow-hidden rounded-full bg-white shadow-suave ring-4 ring-crema">
+            {t.logo_url ? (
+              <img src={t.logo_url} alt={t.nombre} className="size-full object-cover" />
+            ) : (
+              <span className="grid size-full place-items-center font-display text-5xl font-extrabold text-pino">{t.nombre[0]}</span>
+            )}
           </div>
-          <h1 className="mt-3 text-3xl font-extrabold text-pino">{t.nombre}</h1>
-          <p className="text-xs font-semibold uppercase tracking-widest text-gris">
-            {rubros[t.rubro]} · <MapPin className="inline size-3" /> {t.distrito || t.ciudad}
+          <h1 className="mt-4 text-4xl font-extrabold text-tinta">{t.nombre}</h1>
+          <p className="mt-2 text-xs font-semibold uppercase tracking-[0.18em] text-gris">
+            {rubros[t.rubro] ?? t.rubro} · {lugar}
           </p>
-          {t.descripcion && <p className="mt-2 max-w-xl text-gris">{t.descripcion}</p>}
+          {t.descripcion && <p className="mt-3 max-w-xl leading-relaxed text-tinta/80">{t.descripcion}</p>}
+          <p className="mt-3 flex flex-wrap items-center justify-center gap-x-5 gap-y-1 text-sm text-gris">
+            <span className="inline-flex items-center gap-1">
+              <Star className="size-4 fill-aviso text-aviso" /> <b className="text-tinta">{reputaciones[t.reputacion]}</b>
+            </span>
+            <span>
+              <b className="text-tinta">{ventas}</b> {ventas === 1 ? "venta" : "ventas"}
+            </span>
+            <span>
+              <b className="text-tinta">{productos.length}</b> productos
+            </span>
+          </p>
+
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+            <BotonSeguir clase={`${redondo} !bg-coral !text-white !ring-coral`} />
+            {redes.map((r) => (
+              <a key={r.nombre} href={r.href} target="_blank" rel="noopener noreferrer" className={redondo} aria-label={r.nombre} title={r.nombre}>
+                {r.icono}
+              </a>
+            ))}
+            <a
+              href={`https://www.google.com/maps/search/${encodeURIComponent(`${t.entrega.direccion_recojo || lugar}, ${t.ciudad}`)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={redondo}
+              aria-label="Ver ubicación"
+              title="Ver ubicación"
+            >
+              <MapPin className="size-[18px]" />
+            </a>
+            <BotonCompartir nombre={t.nombre} clase={redondo} />
+          </div>
         </div>
-        <div className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-          {productos.map((p) => (
-            <div key={p.id} className="overflow-hidden rounded-xl bg-white shadow-suave ring-1 ring-linea/60">
-              <div className="relative aspect-square bg-arena">
-                {p.imagenes[0] && <img src={p.imagenes[0].url} alt={p.nombre} className="size-full object-cover" />}
-                {p.oferta && <span className="absolute left-2 top-2 rounded-full bg-coral px-2 py-0.5 text-xs font-bold text-white">-{p.oferta.descuento_pct}%</span>}
+
+        <div className="mx-auto max-w-[1296px]">
+          {/* Destacado */}
+          {destacado && (
+            <Destacado
+              producto={destacado}
+              slug={t.slug}
+              etiqueta={masVendido ? "Destacado" : "Lo nuevo"}
+              texto={masVendido ? `El más pedido de ${t.nombre}` : `Lo último de ${t.nombre}`}
+            />
+          )}
+
+          <Catalogo productos={productos} slug={t.slug} />
+
+          {/* Envíos y opiniones */}
+          <div className="mt-12 grid gap-4 lg:grid-cols-2">
+            <section id="envios" className="scroll-mt-6 rounded-[22px] bg-white/70 p-6 ring-1 ring-linea/50">
+              <h2 className="text-2xl font-extrabold text-tinta">Envíos y pagos</h2>
+              <ul className="mt-4 space-y-4">
+                {t.entrega.recojo && (
+                  <Opcion icono={<Store className="size-4" />} titulo="Recojo en tienda" texto={t.entrega.direccion_recojo || "Coordina el recojo con la tienda"} />
+                )}
+                {t.entrega.agencia && (
+                  <Opcion
+                    icono={<Package className="size-4" />}
+                    titulo="Envío por agencia"
+                    texto={`Pagas en la app y recibes tu código de recojo${t.entrega.agencias.length ? ` · ${t.entrega.agencias.join(", ")}` : ""}`}
+                  />
+                )}
+                {t.entrega.motorizado && (
+                  <Opcion
+                    icono={<Bike className="size-4" />}
+                    titulo="Delivery con motorizado"
+                    texto={`${t.entrega.zonas_motorizado || "Zonas cercanas"}${t.entrega.costo_motorizado_centimos ? ` · ${soles(t.entrega.costo_motorizado_centimos)}` : ""}`}
+                  />
+                )}
+              </ul>
+              <div className="mt-5 flex flex-wrap gap-2">
+                {["Yape", "Tarjeta", "PagoEfectivo"].map((m) => (
+                  <span key={m} className="rounded-full bg-arena px-3 py-1.5 text-sm font-semibold text-tinta">
+                    {m}
+                  </span>
+                ))}
               </div>
-              <div className="p-3">
-                <p className="line-clamp-2 text-sm font-semibold">{p.nombre}</p>
-                <p className="mt-1 font-display font-extrabold text-pino">
-                  {soles(p.oferta?.precio_final_centimos ?? p.precio_centimos)}
-                  {p.oferta && <span className="ml-1 text-xs font-normal text-gris line-through">{soles(p.precio_centimos)}</span>}
+              <p className="mt-4 flex items-center gap-2 text-sm text-gris">
+                <ShieldCheck className="size-4 shrink-0 text-pino" /> Pagas dentro de VendiGo y tu dinero queda protegido hasta que recibas tu pedido.
+              </p>
+              {t.entrega.horario_recojo && (
+                <p className="mt-2 flex items-center gap-2 text-sm text-gris">
+                  <Clock className="size-4 shrink-0 text-pino" /> {t.entrega.horario_recojo}
                 </p>
-                {p.stock === 0 && <p className="text-xs font-semibold text-error">Agotado</p>}
+              )}
+            </section>
+
+            <section id="opiniones" className="scroll-mt-6 rounded-[22px] bg-white/70 p-6 ring-1 ring-linea/50">
+              <div className="flex items-center justify-between border-b border-linea pb-3">
+                <h2 className="text-2xl font-extrabold text-tinta">Opiniones</h2>
+                <span className="inline-flex items-center gap-1 text-sm text-gris">
+                  <Star className="size-4 fill-aviso text-aviso" /> {reputaciones[t.reputacion]}
+                </span>
               </div>
+              <div className="grid place-items-center py-10 text-center">
+                <span className="grid size-14 place-items-center rounded-full bg-arena text-pino">
+                  <MessageCircle className="size-6" />
+                </span>
+                <p className="mt-3 font-bold text-tinta">Aún no hay opiniones</p>
+                <p className="mt-1 max-w-xs text-sm text-gris">Aparecen cuando los clientes reciben su pedido y lo califican.</p>
+              </div>
+            </section>
+          </div>
+
+          {/* Pie */}
+          <footer className="mt-14 text-center">
+            <div className="flex items-center justify-center gap-4">
+              <span className="h-px w-20 bg-linea" />
+              <span className="font-display text-lg font-extrabold text-tinta">{t.nombre}</span>
+              <span className="h-px w-20 bg-linea" />
             </div>
-          ))}
+            <p className="mt-2 text-sm text-gris">Tienda en VendiGo · {t.enlace.replace(/^https?:\/\//, "")}</p>
+          </footer>
         </div>
-        {!productos.length && <p className="mt-10 text-center text-gris">Esta tienda aún no publica productos.</p>}
-      </div>
+      </main>
     </div>
+  );
+}
+
+function Opcion({ icono, titulo, texto }: { icono: React.ReactNode; titulo: string; texto: string }) {
+  return (
+    <li className="flex gap-3">
+      <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-arena text-pino">{icono}</span>
+      <div>
+        <p className="font-bold text-tinta">{titulo}</p>
+        <p className="text-sm text-gris">{texto}</p>
+      </div>
+    </li>
   );
 }

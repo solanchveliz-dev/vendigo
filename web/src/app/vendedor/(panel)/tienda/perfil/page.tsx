@@ -97,10 +97,12 @@ export default function PerfilTienda() {
           </Campo>
         </Tarjeta>
         <Tarjeta className="grid gap-4 sm:grid-cols-2">
-          <Campo etiqueta="Instagram"><Entrada value={f.instagram} onChange={c("instagram")} placeholder="@tutienda" /></Campo>
-          <Campo etiqueta="TikTok"><Entrada value={f.tiktok} onChange={c("tiktok")} placeholder="@tutienda" /></Campo>
-          <Campo etiqueta="Facebook"><Entrada value={f.facebook} onChange={c("facebook")} placeholder="tutienda" /></Campo>
-          <Campo etiqueta="WhatsApp"><Entrada value={f.whatsapp} onChange={c("whatsapp")} inputMode="numeric" /></Campo>
+          <Campo etiqueta="Instagram"><Entrada value={f.instagram} onChange={c("instagram")} placeholder="@tutienda o pega tu enlace" /></Campo>
+          <Campo etiqueta="TikTok"><Entrada value={f.tiktok} onChange={c("tiktok")} placeholder="@tutienda o pega tu enlace" /></Campo>
+          <Campo etiqueta="Facebook"><Entrada value={f.facebook} onChange={c("facebook")} placeholder="tutienda o pega tu enlace" /></Campo>
+          <Campo etiqueta="WhatsApp" ayuda="No se muestra a tus clientes. Solo lo usamos para avisarte de tus pedidos.">
+            <Entrada value={f.whatsapp} onChange={c("whatsapp")} inputMode="numeric" placeholder="987 654 321" />
+          </Campo>
         </Tarjeta>
         <Boton variante="acento" tamano="lg" cargando={guardando}>
           Guardar cambios

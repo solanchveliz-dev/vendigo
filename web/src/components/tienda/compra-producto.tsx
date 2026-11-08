@@ -1,0 +1,133 @@
+"use client";
+
+import { useState } from "react";
+import { Heart, Minus, Plus, ShoppingBag, TrendingUp, Zap } from "lucide-react";
+import { soles } from "@/lib/formato";
+import type { Producto } from "@/lib/tipos";
+
+// Galería de fotos del producto (miniaturas a la izquierda y foto grande).
+export function GaleriaProducto({ producto: p }: { producto: Producto }) {
+  const [foto, setFoto] = useState(0);
+
+  return (
+    <div className="flex min-w-0 flex-col-reverse gap-3 self-start sm:flex-row">
+      {p.imagenes.length > 1 && (
+        <div className="flex gap-3 sm:flex-col">
+          {p.imagenes.map((img, i) => (
+            <button
+              key={img.key}
+              onClick={() => setFoto(i)}
+              className={`relative size-[84px] shrink-0 overflow-hidden rounded-2xl bg-white ring-2 transition ${i === foto ? "ring-pino" : "ring-transparent"}`}
+            >
+              <img src={img.url} alt="" className="size-full object-cover" />
+            </button>
+          ))}
+        </div>
+      )}
+      <div className="relative aspect-square min-w-0 flex-1 overflow-hidden rounded-[26px] bg-white shadow-suave">
+        {p.imagenes[foto] && <img src={p.imagenes[foto].url} alt={p.nombre} className="size-full object-cover" />}
+        {p.oferta && <span className="absolute left-2 top-2 rounded-md bg-coral px-2 py-0.5 text-xs font-bold text-white">-{p.oferta.descuento_pct}%</span>}
+        {p.vendidos > 0 && (
+          <span className="absolute bottom-4 left-4 inline-flex items-center gap-1.5 rounded-full bg-white/90 px-3 py-1 text-sm font-semibold text-tinta">
+            <TrendingUp className="size-4" /> {p.vendidos} vendidos
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Precio, opciones, cantidad y botones de compra.
+export function CompraProducto({ producto: p }: { producto: Producto }) {
+  const [opcion, setOpcion] = useState(() => Math.max(0, p.variantes.findIndex((v) => v.stock > 0)));
+  const [cantidad, setCantidad] = useState(1);
+  const [aviso, setAviso] = useState("");
+
+  const variante = p.variantes[opcion];
+  const base = variante?.precio_centimos ?? p.precio_centimos;
+  const precio = p.oferta ? Math.round(base * (1 - p.oferta.descuento_pct / 100)) : base;
+  const stock = variante ? variante.stock : p.stock;
+  const dias = p.oferta ? Math.max(0, Math.ceil((new Date(p.oferta.termina_en).getTime() - Date.now()) / 86400000)) : 0;
+
+  function pronto(texto: string) {
+    setAviso(texto);
+    setTimeout(() => setAviso(""), 2600);
+  }
+
+  return (
+    <>
+      <div className="mt-5 flex flex-wrap items-center gap-3">
+        <span className="font-display text-[44px] font-extrabold leading-none text-tinta">{soles(precio)}</span>
+        {p.oferta && <span className="text-lg text-gris line-through">{soles(base)}</span>}
+        {p.oferta && (
+          <span className="inline-flex items-center gap-1 rounded-full bg-coral-claro px-3 py-1 text-sm font-semibold text-coral">
+            <Zap className="size-3.5" /> -{p.oferta.descuento_pct}% · {dias <= 1 ? "termina hoy" : `termina en ${dias} días`}
+          </span>
+        )}
+        <span className={`rounded-full px-3 py-1 text-sm font-semibold ${stock === 0 ? "bg-error-claro text-error" : stock <= 3 ? "bg-aviso-claro text-aviso" : "bg-pino-claro text-pino"}`}>
+          {stock === 0 ? "Agotado" : stock <= 3 ? `Quedan ${stock}` : "Disponible"}
+        </span>
+      </div>
+
+      {p.variantes.length > 0 && (
+        <div className="mt-6">
+          <p className="mb-2 text-sm font-semibold text-tinta">Opciones</p>
+          <div className="flex flex-wrap gap-2.5">
+            {p.variantes.map((v, i) => (
+              <button
+                key={v.id ?? v.nombre}
+                onClick={() => {
+                  setOpcion(i);
+                  setCantidad(1);
+                }}
+                disabled={v.stock === 0}
+                className={`rounded-xl px-4 py-2.5 text-[15px] font-semibold transition disabled:opacity-40 ${i === opcion ? "bg-pino-claro text-pino ring-2 ring-pino/40" : "bg-white text-tinta ring-1 ring-linea"}`}
+              >
+                {v.nombre}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="mt-5">
+        <p className="mb-2 text-sm font-semibold text-tinta">Cantidad</p>
+        <div className="flex h-11 items-center rounded-full bg-white px-2 ring-1 ring-linea">
+          <button onClick={() => setCantidad((c) => Math.max(1, c - 1))} className="grid size-9 place-items-center rounded-full text-tinta hover:bg-arena" aria-label="Menos">
+            <Minus className="size-4" />
+          </button>
+          <span className="w-10 text-center font-semibold">{cantidad}</span>
+          <button onClick={() => setCantidad((c) => Math.min(Math.max(1, stock), c + 1))} className="grid size-9 place-items-center rounded-full text-tinta hover:bg-arena" aria-label="Más">
+            <Plus className="size-4" />
+          </button>
+        </div>
+      </div>
+
+      <div className="mt-5 flex gap-3">
+        <button
+          onClick={() => pronto("Muy pronto podrás comprar desde aquí.")}
+          disabled={stock === 0}
+          className="inline-flex h-[52px] min-w-0 flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-full bg-pino px-4 font-bold text-white transition hover:bg-pino-2 disabled:opacity-50"
+        >
+          <Zap className="size-5 shrink-0" /> Comprar ahora
+        </button>
+        <button
+          onClick={() => pronto("Muy pronto podrás agregar productos a tu pedido.")}
+          disabled={stock === 0}
+          aria-label="Agregar a mi pedido"
+          className="inline-flex h-[52px] min-w-[52px] items-center justify-center gap-2 whitespace-nowrap rounded-full bg-coral px-4 font-bold sm:px-7 text-white transition hover:opacity-90 disabled:opacity-50"
+        >
+          <ShoppingBag className="size-5 shrink-0" /> <span className="hidden sm:inline">Agregar</span>
+        </button>
+        <button
+          onClick={() => pronto("Pronto podrás guardar favoritos con tu cuenta.")}
+          className="grid size-[52px] shrink-0 place-items-center rounded-full bg-white text-tinta ring-1 ring-linea transition hover:text-coral"
+          aria-label="Guardar en favoritos"
+        >
+          <Heart className="size-5" />
+        </button>
+      </div>
+      {aviso && <p className="mt-2 text-center text-sm font-semibold text-gris">{aviso}</p>}
+    </>
+  );
+}

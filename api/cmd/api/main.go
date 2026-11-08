@@ -47,7 +47,7 @@ func main() {
 		slog.Error("almacenamiento", "err", err)
 		os.Exit(1)
 	}
-		if cfg.S3Endpoint != "" {
+	if cfg.S3Endpoint != "" {
 		if err := almacen.PrepararLocal(ctx); err != nil {
 			slog.Warn("no se pudieron preparar los buckets locales", "err", err)
 		}

@@ -115,9 +115,9 @@ function Lista() {
                     <td className="px-4 py-3">
                       <div className="flex justify-end gap-1.5">
                         {tienda.datos && (
-                          <a href={`/t/${tienda.datos.slug}`} target="_blank" rel="noreferrer" className="grid size-8 place-items-center rounded-full ring-1 ring-linea hover:bg-crema" title="Ver en mi tienda">
+                          <Link href={`/vendedor/productos/${p.id}/vista`} className="grid size-8 place-items-center rounded-full ring-1 ring-linea hover:bg-crema" title="Vista previa">
                             <Eye className="size-4" />
-                          </a>
+                          </Link>
                         )}
                         <Link href={`/vendedor/productos/${p.id}`} className="grid size-8 place-items-center rounded-full ring-1 ring-linea hover:bg-crema" title="Editar">
                           <Pencil className="size-4" />
