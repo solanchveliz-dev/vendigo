@@ -12,6 +12,7 @@ import (
 	"image/png"
 	"log/slog"
 	"os"
+	"strings"
 
 	"github.com/solanchveliz-dev/vendigo/api/internal/archivos"
 	"github.com/solanchveliz-dev/vendigo/api/internal/billetera"
@@ -66,11 +67,19 @@ func main() {
 	}
 	cif, _ := seguridad.NuevoCifrador(cfg.LlaveCifrado)
 	s3, _ := archivos.Nuevo(ctx, cfg)
+	if cfg.S3Endpoint != "" {
+		if err := s3.PrepararLocal(ctx); err != nil {
+			slog.Warn("no se pudieron preparar los buckets locales", "err", err)
+		}
+	}
 	app := &core.App{Cfg: cfg, DB: conexion, Cifrador: cif, Archivos: s3, Avisos: core.NotificadorConsola{}}
 
 	var existe bool
 	conexion.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM usuarios WHERE celular='999888777')`).Scan(&existe)
 	if existe {
+		if n := reponerFotos(ctx, conexion, s3); n > 0 {
+			fmt.Printf("Se volvieron a subir %d fotos de prueba que faltaban.\n", n)
+		}
 		fmt.Println("Los datos de prueba ya existen. Usuario: 999888777 · Contraseña: vendigo123")
 		return
 	}
@@ -143,4 +152,29 @@ func main() {
 		return billetera.MarcarEntregado(ctx, tx, tid, listo, "", "excelente", "comprador")
 	})
 	fmt.Printf("Datos de prueba listos (%d imágenes subidas).\nUsuario: 999888777 · Contraseña: vendigo123\n", subidas)
+}
+
+// reponerFotos vuelve a subir las fotos de prueba que no estén en el almacenamiento
+// (por ejemplo, si el seed corrió antes de que existieran los buckets).
+func reponerFotos(ctx context.Context, conexion *sql.DB, s3 *archivos.S3) int {
+	filas, err := conexion.QueryContext(ctx, `SELECT key FROM producto_imagenes WHERE key LIKE 'producto/%/demo-%.png'`)
+	if err != nil {
+		return 0
+	}
+	defer filas.Close()
+	n := 0
+	for filas.Next() {
+		var key string
+		if filas.Scan(&key) != nil || s3.Existe(ctx, true, key) {
+			continue
+		}
+		var i int
+		if _, err := fmt.Sscanf(key[strings.LastIndex(key, "/")+1:], "demo-%d.png", &i); err != nil || i < 0 || i >= len(catalogo) {
+			continue
+		}
+		if s3.Subir(ctx, true, key, "image/png", imagen(catalogo[i].color)) == nil {
+			n++
+		}
+	}
+	return n
 }
