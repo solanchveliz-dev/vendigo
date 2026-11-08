@@ -47,6 +47,11 @@ func main() {
 		slog.Error("almacenamiento", "err", err)
 		os.Exit(1)
 	}
+		if cfg.S3Endpoint != "" {
+		if err := almacen.PrepararLocal(ctx); err != nil {
+			slog.Warn("no se pudieron preparar los buckets locales", "err", err)
+		}
+	}
 	var notificador core.Notificador = core.NotificadorConsola{}
 	if cfg.OTPCanal == "sms" {
 		if notificador, err = avisos.NuevoSNS(ctx, cfg.S3Region); err != nil {
