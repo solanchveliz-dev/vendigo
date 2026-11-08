@@ -47,6 +47,8 @@ export function CompraProducto({ producto: p }: { producto: Producto }) {
   const base = variante?.precio_centimos ?? p.precio_centimos;
   const precio = p.oferta ? Math.round(base * (1 - p.oferta.descuento_pct / 100)) : base;
   const stock = variante ? variante.stock : p.stock;
+  const det = (p.detalles ?? {}) as { colores?: [string, string][]; grupos?: { label: string }[] };
+  const etiquetaOpciones = det.grupos?.[0]?.label ?? (p.variantes.length && det.colores?.length && !det.grupos?.length ? "Color" : "Opciones");
   const dias = p.oferta ? Math.max(0, Math.ceil((new Date(p.oferta.termina_en).getTime() - Date.now()) / 86400000)) : 0;
 
   function pronto(texto: string) {
@@ -71,7 +73,7 @@ export function CompraProducto({ producto: p }: { producto: Producto }) {
 
       {p.variantes.length > 0 && (
         <div className="mt-6">
-          <p className="mb-2 text-sm font-semibold text-tinta">Opciones</p>
+          <p className="mb-2 text-sm font-semibold text-tinta">{etiquetaOpciones}</p>
           <div className="flex flex-wrap gap-2.5">
             {p.variantes.map((v, i) => (
               <button
@@ -85,6 +87,19 @@ export function CompraProducto({ producto: p }: { producto: Producto }) {
               >
                 {v.nombre}
               </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {det.colores && det.colores.length > 0 && etiquetaOpciones !== "Color" && (
+        <div className="mt-5">
+          <p className="mb-2 text-sm font-semibold text-tinta">Colores</p>
+          <div className="flex flex-wrap gap-2">
+            {det.colores.map(([n, hx]) => (
+              <span key={n} className="inline-flex items-center gap-2 rounded-full bg-white py-1.5 pl-1.5 pr-3 text-sm font-semibold ring-1 ring-linea">
+                <i className="size-5 rounded-full ring-1 ring-black/10" style={{ background: hx }} /> {n}
+              </span>
             ))}
           </div>
         </div>

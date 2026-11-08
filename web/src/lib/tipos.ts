@@ -47,6 +47,7 @@ export type Producto = {
   oferta: { descuento_pct: number; termina_en: string; precio_final_centimos: number } | null;
   vendidos: number;
   creado_en: string;
+  detalles?: Record<string, unknown>;
 };
 
 export type PedidoResumen = {

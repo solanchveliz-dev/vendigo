@@ -3,6 +3,7 @@ package productos
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -58,18 +59,19 @@ type Oferta struct {
 }
 
 type Producto struct {
-	ID          string     `json:"id"`
-	Nombre      string     `json:"nombre"`
-	Descripcion string     `json:"descripcion"`
-	Categoria   string     `json:"categoria"`
-	Precio      int        `json:"precio_centimos"`
-	Stock       int        `json:"stock"`
-	Activo      bool       `json:"activo"`
-	Variantes   []Variante `json:"variantes"`
-	Imagenes    []Imagen   `json:"imagenes"`
-	Oferta      *Oferta    `json:"oferta"`
-	Vendidos    int        `json:"vendidos"`
-	CreadoEn    time.Time  `json:"creado_en"`
+	ID          string          `json:"id"`
+	Nombre      string          `json:"nombre"`
+	Descripcion string          `json:"descripcion"`
+	Categoria   string          `json:"categoria"`
+	Precio      int             `json:"precio_centimos"`
+	Stock       int             `json:"stock"`
+	Activo      bool            `json:"activo"`
+	Variantes   []Variante      `json:"variantes"`
+	Imagenes    []Imagen        `json:"imagenes"`
+	Oferta      *Oferta         `json:"oferta"`
+	Vendidos    int             `json:"vendidos"`
+	Detalles    json.RawMessage `json:"detalles"`
+	CreadoEn    time.Time       `json:"creado_en"`
 }
 
 // PrecioConOferta redondea al sol más cercano hacia abajo en céntimos de 10.
@@ -89,7 +91,7 @@ func (m *Modulo) cargar(ctx context.Context, tiendaID string, ids ...string) ([]
 		args = append(args, id)
 	}
 	in := strings.Join(ph, ",")
-	rows, err := m.app.DB.QueryContext(ctx, `SELECT p.id, p.nombre, p.descripcion, p.categoria, p.precio_centimos, p.stock, p.activo, p.creado_en,
+	rows, err := m.app.DB.QueryContext(ctx, `SELECT p.id, p.nombre, p.descripcion, p.categoria, p.precio_centimos, p.stock, p.activo, p.creado_en, p.detalles,
 		o.descuento_pct, o.termina_en,
 		(SELECT COALESCE(SUM(i.cantidad),0) FROM pedido_items i JOIN pedidos pe ON pe.id=i.pedido_id
 			WHERE i.producto_id=p.id AND pe.estado NOT IN ('rechazado','cancelado'))
@@ -104,7 +106,7 @@ func (m *Modulo) cargar(ctx context.Context, tiendaID string, ids ...string) ([]
 		var p Producto
 		var pct sql.NullInt64
 		var termina sql.NullTime
-		if err := rows.Scan(&p.ID, &p.Nombre, &p.Descripcion, &p.Categoria, &p.Precio, &p.Stock, &p.Activo, &p.CreadoEn, &pct, &termina, &p.Vendidos); err != nil {
+		if err := rows.Scan(&p.ID, &p.Nombre, &p.Descripcion, &p.Categoria, &p.Precio, &p.Stock, &p.Activo, &p.CreadoEn, &p.Detalles, &pct, &termina, &p.Vendidos); err != nil {
 			return nil, err
 		}
 		if pct.Valid {
@@ -241,14 +243,15 @@ func (m *Modulo) obtener(w http.ResponseWriter, r *http.Request) error {
 // ---------- crear y editar ----------
 
 type datosProducto struct {
-	Nombre      string     `json:"nombre"`
-	Descripcion string     `json:"descripcion"`
-	Categoria   string     `json:"categoria"`
-	Precio      int        `json:"precio_centimos"`
-	Stock       int        `json:"stock"`
-	Activo      *bool      `json:"activo"`
-	Variantes   []Variante `json:"variantes"`
-	Imagenes    []string   `json:"imagenes"`
+	Nombre      string          `json:"nombre"`
+	Descripcion string          `json:"descripcion"`
+	Categoria   string          `json:"categoria"`
+	Precio      int             `json:"precio_centimos"`
+	Stock       int             `json:"stock"`
+	Activo      *bool           `json:"activo"`
+	Variantes   []Variante      `json:"variantes"`
+	Imagenes    []string        `json:"imagenes"`
+	Detalles    json.RawMessage `json:"detalles"`
 }
 
 func (d *datosProducto) validar(tiendaID string) error {
@@ -266,6 +269,13 @@ func (d *datosProducto) validar(tiendaID string) error {
 	}
 	if d.Stock < 0 || d.Stock > 100000 {
 		return httpx.Invalido("El stock no es válido.")
+	}
+	if len(d.Detalles) == 0 || string(d.Detalles) == "null" {
+		d.Detalles = json.RawMessage("{}")
+	}
+	var obj map[string]any
+	if len(d.Detalles) > 16000 || json.Unmarshal(d.Detalles, &obj) != nil {
+		return httpx.Invalido("Los detalles del producto no son válidos.")
 	}
 	if len(d.Imagenes) == 0 {
 		return httpx.Invalido("Agrega al menos una foto del producto.")
@@ -344,8 +354,8 @@ func (m *Modulo) crear(w http.ResponseWriter, r *http.Request) error {
 	activo := in.Activo == nil || *in.Activo
 	var pid string
 	err = m.app.EnTransaccion(ctx, func(tx *sql.Tx) error {
-		if err := tx.QueryRowContext(ctx, `INSERT INTO productos (tienda_id, nombre, descripcion, categoria, precio_centimos, stock, activo)
-			VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`, tid, in.Nombre, in.Descripcion, in.Categoria, in.Precio, in.Stock, activo).Scan(&pid); err != nil {
+		if err := tx.QueryRowContext(ctx, `INSERT INTO productos (tienda_id, nombre, descripcion, categoria, precio_centimos, stock, activo, detalles)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`, tid, in.Nombre, in.Descripcion, in.Categoria, in.Precio, in.Stock, activo, []byte(in.Detalles)).Scan(&pid); err != nil {
 			return err
 		}
 		return m.guardarHijos(ctx, tx, pid, in)
@@ -389,8 +399,8 @@ func (m *Modulo) actualizar(w http.ResponseWriter, r *http.Request) error {
 	}
 	err = m.app.EnTransaccion(ctx, func(tx *sql.Tx) error {
 		if _, err := tx.ExecContext(ctx, `UPDATE productos SET nombre=$2, descripcion=$3, categoria=$4, precio_centimos=$5, stock=$6,
-			activo=COALESCE($7, activo), actualizado_en=now() WHERE id=$1`,
-			pid, in.Nombre, in.Descripcion, in.Categoria, in.Precio, in.Stock, in.Activo); err != nil {
+			activo=COALESCE($7, activo), detalles=$8, actualizado_en=now() WHERE id=$1`,
+			pid, in.Nombre, in.Descripcion, in.Categoria, in.Precio, in.Stock, in.Activo, []byte(in.Detalles)); err != nil {
 			return err
 		}
 		return m.guardarHijos(ctx, tx, pid, in)

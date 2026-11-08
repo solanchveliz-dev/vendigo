@@ -1,14 +1,13 @@
 "use client";
 
-import Link from "next/link";
 import { use, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Tag, Trash2 } from "lucide-react";
+import { Eye, EyeOff, Tag, Trash2 } from "lucide-react";
 import { api, ErrorApi, useApi } from "@/lib/api";
 import { fecha, soles } from "@/lib/formato";
 import type { Producto } from "@/lib/tipos";
-import { Boton, Campo, Cargando, Encabezado, Entrada, Modal, Selector, Tarjeta, useAvisar } from "@/components/ui";
-import { FormularioProducto } from "@/components/productos/formulario";
+import { Boton, Campo, Cargando, Modal, Selector, Tarjeta, useAvisar } from "@/components/ui";
+import { PublicarProducto } from "@/components/productos/publicar";
 
 export default function EditarProducto({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -32,6 +31,16 @@ export default function EditarProducto({ params }: { params: Promise<{ id: strin
     setDatos(await api.del<Producto>(`/vendedor/productos/${id}/oferta`));
     avisar("Oferta terminada.");
   }
+  async function cambiarVisible() {
+    if (!p) return;
+    try {
+      await api.patch(`/vendedor/productos/${id}/estado`, { activo: !p.activo });
+      setDatos({ ...p, activo: !p.activo });
+      avisar(p.activo ? "Producto oculto de tu tienda" : "Producto visible en tu tienda");
+    } catch (e) {
+      avisar((e as ErrorApi).message, "error");
+    }
+  }
   async function eliminar() {
     await api.del(`/vendedor/productos/${id}`);
     avisar("Producto eliminado.");
@@ -40,14 +49,7 @@ export default function EditarProducto({ params }: { params: Promise<{ id: strin
 
   return (
     <div className="space-y-5">
-      <Link href="/vendedor/productos" className="inline-flex items-center gap-1 text-sm font-semibold text-pino">
-        <ArrowLeft className="size-4" /> Productos
-      </Link>
-      <Encabezado titulo={p.nombre}>
-        <Boton variante="peligro" onClick={() => setBorrar(true)}>
-          <Trash2 className="size-4" /> Eliminar
-        </Boton>
-      </Encabezado>
+      <PublicarProducto key={p.id} producto={p} />
 
       <Tarjeta className="flex flex-wrap items-center gap-4">
         <span className="grid size-11 place-items-center rounded-xl bg-coral-claro text-coral">
@@ -69,7 +71,7 @@ export default function EditarProducto({ params }: { params: Promise<{ id: strin
           <>
             <div className="min-w-48 flex-1">
               <p className="font-semibold">Ponlo en oferta</p>
-              <p className="text-sm text-gris">Aparece en “Ofertas por tiempo limitado”.</p>
+              <p className="text-sm text-gris">Se ve en tu tienda con el precio rebajado y el tiempo que queda.</p>
             </div>
             <Campo etiqueta="Descuento">
               <Selector value={oferta.pct} onChange={(e) => setOferta({ ...oferta, pct: e.target.value })} className="w-28">
@@ -92,7 +94,14 @@ export default function EditarProducto({ params }: { params: Promise<{ id: strin
         )}
       </Tarjeta>
 
-      <FormularioProducto key={p.id + p.imagenes.length} producto={p} />
+      <div className="flex flex-wrap gap-2">
+        <Boton variante="secundario" onClick={cambiarVisible}>
+          {p.activo ? <EyeOff className="size-4" /> : <Eye className="size-4" />} {p.activo ? "Ocultar de mi tienda" : "Mostrar en mi tienda"}
+        </Boton>
+        <Boton variante="peligro" onClick={() => setBorrar(true)}>
+          <Trash2 className="size-4" /> Eliminar
+        </Boton>
+      </div>
 
       <Modal abierto={borrar} onCerrar={() => setBorrar(false)} titulo="¿Eliminar este producto?">
         <p className="mb-5 text-sm text-gris">Ya no aparecerá en tu tienda. Los pedidos anteriores se mantienen.</p>

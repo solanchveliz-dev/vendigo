@@ -50,12 +50,14 @@ export default async function ProductoPublico({ params, searchParams }: Params &
     { icono: <MessageCircle className="size-5" />, titulo: "Te ayudamos", texto: "Si algo sale mal, VendiGo media" },
   ];
 
+  const det = (p.detalles ?? {}) as { ficha?: [string, string][]; colores?: [string, string][] };
   const ficha = [
     ["Tienda", t.nombre],
     ["Rubro", rubros[t.rubro] ?? t.rubro],
     ["Envía desde", lugar],
     ["Categoría", p.categoria],
-    ["Opciones", p.variantes.map((v) => v.nombre).join(", ")],
+    ...(det.colores?.length ? [["Colores", det.colores.map(([n]) => n).join(", ")]] : []),
+    ...(det.ficha ?? []),
   ].filter(([, v]) => v);
 
   return (
