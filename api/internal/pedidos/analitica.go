@@ -39,7 +39,6 @@ type Pronostico struct {
 	Visitas      int      `json:"visitas"`
 	Conversion   *float64 `json:"conversion_pct"`
 	SinMovimient bool     `json:"sin_movimiento"`
-	NoPublicado  bool     `json:"no_publicado"` // eliminado u oculto, pero con ventas en el periodo
 }
 
 type Analitica struct {
@@ -158,7 +157,7 @@ func Analizar(ctx context.Context, db core.Ejecutor, tid string, dias int) (*Ana
 	rows.Close()
 
 	// Productos: ventas del periodo, del anterior y por semana (8 semanas) para el pronóstico.
-	rows, err = db.QueryContext(ctx, `SELECT pr.id, pr.nombre, pr.stock, pr.precio_centimos, (pr.eliminado OR NOT pr.activo),
+	rows, err = db.QueryContext(ctx, `SELECT pr.id, pr.nombre, pr.stock, pr.precio_centimos,
 		(SELECT key FROM producto_imagenes im WHERE im.producto_id=pr.id ORDER BY orden LIMIT 1),
 		COALESCE(SUM(i.cantidad) FILTER (WHERE p.creado_en > `+desde+`),0),
 		COALESCE(SUM(i.cantidad) FILTER (WHERE p.creado_en <= `+desde+` AND p.creado_en > `+antes+`),0),
@@ -166,8 +165,7 @@ func Analizar(ctx context.Context, db core.Ejecutor, tid string, dias int) (*Ana
 		FROM productos pr
 		LEFT JOIN pedido_items i ON i.producto_id=pr.id
 		LEFT JOIN pedidos p ON p.id=i.pedido_id AND p.`+vendido+`
-		WHERE pr.tienda_id=$1 AND ((NOT pr.eliminado AND pr.activo) OR EXISTS (SELECT 1 FROM pedido_items i2 JOIN pedidos p2 ON p2.id=i2.pedido_id
-			WHERE i2.producto_id=pr.id AND p2.`+vendido+` AND p2.creado_en > `+antes+`))
+		WHERE pr.tienda_id=$1 AND NOT pr.eliminado AND pr.activo
 		GROUP BY pr.id`, tid, dias)
 	if err != nil {
 		return nil, err
@@ -177,7 +175,7 @@ func Analizar(ctx context.Context, db core.Ejecutor, tid string, dias int) (*Ana
 	for rows.Next() {
 		var x Pronostico
 		var img *string
-		rows.Scan(&x.ProductoID, &x.Nombre, &x.Stock, &x.Precio, &x.NoPublicado, &img, &x.Vendidos, &x.Anterior, &x.Visitas)
+		rows.Scan(&x.ProductoID, &x.Nombre, &x.Stock, &x.Precio, &img, &x.Vendidos, &x.Anterior, &x.Visitas)
 		if img != nil {
 			x.ImagenURL = *img // la firma el llamador (necesita el almacenamiento)
 		}
@@ -205,9 +203,6 @@ func Analizar(ctx context.Context, db core.Ejecutor, tid string, dias int) (*Ana
 
 	for i := range a.Productos {
 		pronosticar(&a.Productos[i])
-		if a.Productos[i].NoPublicado {
-			a.Productos[i].DiasAgotar = nil
-		}
 	}
 	sort.SliceStable(a.Productos, func(i, j int) bool {
 		if a.Productos[i].Vendidos != a.Productos[j].Vendidos {

@@ -39,7 +39,6 @@ type Pronostico = {
   dias_para_agotar: number | null;
   tendencia: "sube" | "baja" | "estable" | "pocas" | "sin_datos";
   visitas: number;
-  no_publicado: boolean;
 };
 type Analitica = {
   dias: number;
@@ -629,9 +628,6 @@ export default function AnaliticaPagina() {
                               )}
                             </span>
                             <span className="truncate">{p.nombre}</span>
-                            {p.no_publicado && (
-                              <span className="shrink-0 rounded-full bg-arena px-2 py-0.5 text-[11px] font-semibold text-gris">No publicado</span>
-                            )}
                           </Link>
                         </td>
                         <td className="px-3 py-2.5">

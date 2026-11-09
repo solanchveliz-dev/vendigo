@@ -13,10 +13,19 @@ export default function EditarProducto({ params }: { params: Promise<{ id: strin
   const { id } = use(params);
   const router = useRouter();
   const avisar = useAvisar();
-  const { datos: p, setDatos } = useApi<Producto>(`/vendedor/productos/${id}`);
+  const { datos: p, setDatos, error } = useApi<Producto>(`/vendedor/productos/${id}`);
   const [oferta, setOferta] = useState({ pct: "15", dias: "3" });
   const [borrar, setBorrar] = useState(false);
 
+  if (error && !p) {
+    return (
+      <Tarjeta className="max-w-xl">
+        <p className="font-bold text-tinta">{error.estado === 404 ? "Este producto ya no existe" : "No pudimos abrir este producto"}</p>
+        <p className="mt-1 text-sm text-gris">{error.estado === 404 ? "Puede que lo hayas eliminado." : error.message}</p>
+        <Boton className="mt-4" onClick={() => router.push("/vendedor/productos")}>Ir a mis productos</Boton>
+      </Tarjeta>
+    );
+  }
   if (!p) return <Cargando />;
 
   async function guardarOferta() {

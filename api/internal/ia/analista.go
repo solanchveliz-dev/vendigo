@@ -42,12 +42,7 @@ func reglas(a *pedidos.Analitica, pregunta string) Analisis {
 		out.Resumen = fmt.Sprintf("En los últimos %d días no tuviste pedidos.", a.Dias)
 	}
 
-	p := []pedidos.Pronostico{}
-	for _, x := range a.Productos {
-		if !x.NoPublicado { // lo que ya no está en la tienda no se recomienda
-			p = append(p, x)
-		}
-	}
+	p := append([]pedidos.Pronostico(nil), a.Productos...)
 	// Reponer: lo que se agota pronto.
 	sort.Slice(p, func(i, j int) bool { return dias(p[i]) < dias(p[j]) })
 	usados := map[string]bool{}
