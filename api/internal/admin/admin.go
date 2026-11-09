@@ -59,6 +59,12 @@ func (m *Modulo) Rutas(r chi.Router) {
 	r.Method("POST", "/tiendas/{id}/aprobar", httpx.Handler(m.aprobarTienda))
 	r.Method("POST", "/tiendas/{id}/suspender", httpx.Handler(m.suspenderTienda))
 	r.Method("POST", "/tiendas/{id}/reactivar", httpx.Handler(m.reactivarTienda))
+	r.Method("GET", "/productos", httpx.Handler(m.productos))
+	r.Method("GET", "/productos/{id}", httpx.Handler(m.producto))
+	r.Method("POST", "/productos/{id}/retirar", httpx.Handler(m.retirarProducto))
+	r.Method("POST", "/productos/{id}/restaurar", httpx.Handler(m.restaurarProducto))
+	r.Method("GET", "/pedidos", httpx.Handler(m.pedidosAdmin))
+	r.Method("GET", "/pedidos/{id}", httpx.Handler(m.pedidoAdmin))
 }
 
 func adminID(ctx context.Context) string {

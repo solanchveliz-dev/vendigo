@@ -410,7 +410,7 @@ func (m *Modulo) actualizar(w http.ResponseWriter, r *http.Request) error {
 	}
 	err = m.app.EnTransaccion(ctx, func(tx *sql.Tx) error {
 		if _, err := tx.ExecContext(ctx, `UPDATE productos SET nombre=$2, descripcion=$3, categoria=$4, precio_centimos=$5, stock=$6,
-			activo=COALESCE($7, activo), detalles=$8, actualizado_en=now() WHERE id=$1`,
+			activo=CASE WHEN retirado_motivo<>'' THEN false ELSE COALESCE($7, activo) END, detalles=$8, actualizado_en=now() WHERE id=$1`,
 			pid, in.Nombre, in.Descripcion, in.Categoria, in.Precio, in.Stock, in.Activo, []byte(in.Detalles)); err != nil {
 			return err
 		}
@@ -440,7 +440,11 @@ func (m *Modulo) cambiarEstado(w http.ResponseWriter, r *http.Request) error {
 	}
 	if in.Activo {
 		var yaActivo bool
-		m.app.DB.QueryRowContext(ctx, `SELECT activo FROM productos WHERE id=$1`, pid).Scan(&yaActivo)
+		var retirado string
+		m.app.DB.QueryRowContext(ctx, `SELECT activo, retirado_motivo FROM productos WHERE id=$1`, pid).Scan(&yaActivo, &retirado)
+		if retirado != "" {
+			return httpx.Conflicto("retirado", "VendiGo retiró esta publicación. Motivo: "+strings.TrimRight(retirado, ".")+". Escríbenos a ayuda@vendigo.pe si crees que es un error.")
+		}
 		if !yaActivo {
 			if err := validarLimite(ctx, m.app.DB, tid); err != nil {
 				return err

@@ -52,7 +52,7 @@ const tonos = {
   ok: "bg-pino-claro text-pino",
   aviso: "bg-aviso-claro text-aviso",
   error: "bg-error-claro text-error",
-  neutro: "bg-crema text-tinta",
+  neutro: "bg-[#ebe7df] text-tinta",
 };
 
 export function Estado({ tono, children }: { tono: keyof typeof tonos; children: React.ReactNode }) {

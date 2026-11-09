@@ -46,6 +46,8 @@ export const ACCIONES: Record<string, string> = {
   retiro: "Pidió un retiro",
   devolver_reclamo: "Devolvió el dinero de un reclamo",
   responder_reclamo: "Respondió un reclamo",
+  retirar_producto: "Retiró una publicación",
+  restaurar_producto: "Habilitó una publicación",
 };
 
 export const VERIFICACION: Record<string, { texto: string; tono: "ok" | "aviso" | "error" | "neutro" }> = {
@@ -132,3 +134,80 @@ export const ESTADO_TIENDA: Record<string, { t: string; tono: "neutro" | "aviso"
 };
 
 export const REPUTACION: Record<string, string> = { nueva: "Tienda nueva", buena: "Buena", excelente: "Excelente" };
+
+export type ProductoAdmin = {
+  id: string;
+  nombre: string;
+  categoria: string;
+  precio_centimos: number;
+  stock: number;
+  estado: "publicado" | "agotado" | "pausado" | "retirado";
+  retirado_motivo: string;
+  oferta_pct: number;
+  imagen_url: string;
+  tienda_id: string;
+  tienda: string;
+  slug: string;
+  rubro: string;
+  creado_en: string;
+};
+
+type Tono = "ok" | "aviso" | "error" | "neutro";
+
+export const ESTADO_PRODUCTO: Record<ProductoAdmin["estado"], { t: string; tono: Tono }> = {
+  publicado: { t: "Publicado", tono: "ok" },
+  agotado: { t: "Agotado", tono: "error" },
+  pausado: { t: "Pausado", tono: "neutro" },
+  retirado: { t: "Retirado", tono: "error" },
+};
+
+export type PedidoAdmin = {
+  id: string;
+  codigo: string;
+  tienda_id: string;
+  tienda: string;
+  comprador: string;
+  entrega: "agencia" | "motorizado" | "recojo";
+  agencia: string;
+  estado: string;
+  pago_estado: string;
+  metodo_pago: string;
+  total_centimos: number;
+  reclamo: string | null;
+  creado_en: string;
+};
+
+export const ENTREGA: Record<string, string> = { agencia: "Agencia", motorizado: "Motorizado", recojo: "Recojo" };
+export const METODO_PAGO: Record<string, string> = { yape: "Yape", tarjeta: "Tarjeta", pagoefectivo: "PagoEfectivo", al_recibir: "Paga al recibir" };
+
+// Estado del pedido como lo lee el admin (una sola etiqueta por fila).
+export function estadoPedidoAdmin(p: Pick<PedidoAdmin, "estado" | "entrega" | "agencia" | "pago_estado" | "reclamo">): { t: string; tono: Tono; grupo: string } {
+  if (p.reclamo === "abierto" || p.reclamo === "en_revision") return { t: "Con reclamo", tono: "error", grupo: "reclamo" };
+  switch (p.estado) {
+    case "por_aceptar":
+      return { t: "Por aceptar", tono: "aviso", grupo: "por_aceptar" };
+    case "preparando":
+      return { t: "En preparación", tono: "neutro", grupo: "preparando" };
+    case "listo_recojo":
+      return { t: "Listo para recoger", tono: "aviso", grupo: "preparando" };
+    case "enviado":
+      return p.entrega === "agencia"
+        ? { t: `Enviado por ${p.agencia || "agencia"}`, tono: "ok", grupo: "en_camino" }
+        : { t: p.pago_estado === "pendiente" ? "En camino · paga al recibir" : "En camino", tono: "ok", grupo: "en_camino" };
+    case "entregado":
+      return { t: "Entregado y pagado", tono: "ok", grupo: "entregado" };
+    case "rechazado":
+      return { t: "Rechazado por la tienda", tono: "neutro", grupo: "cancelado" };
+    default:
+      return { t: p.entrega === "recojo" ? "Reserva cancelada" : "Cancelado", tono: "neutro", grupo: "cancelado" };
+  }
+}
+
+export const GRUPOS_PEDIDO: Record<string, string> = {
+  por_aceptar: "Por aceptar",
+  preparando: "En preparación",
+  en_camino: "En camino",
+  entregado: "Entregados",
+  cancelado: "Cancelados",
+  reclamo: "Con reclamo",
+};

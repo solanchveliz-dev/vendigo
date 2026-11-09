@@ -935,3 +935,25 @@ func ResolverReclamo(ctx context.Context, app *core.App, tx *sql.Tx, reclamoID, 
 	app.Auditar(ctx, tx, adminID, "resolver_reclamo", "reclamo", reclamoID, map[string]string{"a_favor": aFavor, "nota": nota, "pedido": codigo})
 	return pid, nil
 }
+
+// CargarComoAdmin arma el detalle de cualquier pedido (por id o por código VG-…) para el panel admin.
+// Solo lectura: sin acciones y con el DNI del comprador enmascarado.
+func CargarComoAdmin(ctx context.Context, app *core.App, ref string) (*Detalle, string, error) {
+	var id, tid string
+	err := app.DB.QueryRowContext(ctx, `SELECT id, tienda_id FROM pedidos WHERE id::text=$1 OR codigo=upper($1)`, ref).Scan(&id, &tid)
+	if core.SinFilas(err) {
+		return nil, "", httpx.ErrNoEncontrado
+	}
+	if err != nil {
+		return nil, "", err
+	}
+	d, err := (&Modulo{app: app}).cargar(ctx, tid, id)
+	if err != nil {
+		return nil, "", err
+	}
+	if n := len(d.DNI); n > 4 {
+		d.DNI = "•••• " + d.DNI[n-4:]
+	}
+	d.Acciones, d.Motorizados, d.Ayuda = []string{}, []Motorizado{}, nil
+	return d, tid, nil
+}
