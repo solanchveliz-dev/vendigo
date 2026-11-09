@@ -154,23 +154,32 @@ func (m *Modulo) registro(w http.ResponseWriter, r *http.Request) error {
 	return m.enviarOTP(w, r, in.Celular, "registro")
 }
 
-func (m *Modulo) enviarOTP(w http.ResponseWriter, r *http.Request, celular, proposito string, extra ...map[string]any) error {
-	ctx := r.Context()
+// GenerarOTP crea un código de 6 dígitos y lo envía por SMS (también lo usa el admin para
+// "Enviar cambio de contraseña"). Devuelve el código solo para el modo de prueba.
+func (m *Modulo) GenerarOTP(ctx context.Context, celular, proposito string) (string, error) {
 	var ultimo time.Time
 	err := m.app.DB.QueryRowContext(ctx, `SELECT creado_en FROM codigos_otp WHERE celular=$1 AND proposito=$2 ORDER BY creado_en DESC LIMIT 1`,
 		celular, proposito).Scan(&ultimo)
 	if err == nil && time.Since(ultimo) < otpEspera {
-		return httpx.NuevoError(http.StatusTooManyRequests, "espera_codigo", "Espera un minuto antes de pedir otro código.")
+		return "", httpx.NuevoError(http.StatusTooManyRequests, "espera_codigo", "Espera un minuto antes de pedir otro código.")
 	}
 	codigo := seguridad.CodigoOTP()
 	if _, err := m.app.DB.ExecContext(ctx, `UPDATE codigos_otp SET usado=true WHERE celular=$1 AND proposito=$2 AND NOT usado`, celular, proposito); err != nil {
-		return err
+		return "", err
 	}
 	if _, err := m.app.DB.ExecContext(ctx, `INSERT INTO codigos_otp (celular, proposito, codigo_hash, expira_en) VALUES ($1,$2,$3,$4)`,
 		celular, proposito, seguridad.HashOTP(m.app.Cfg.JWTSecreto, celular, codigo), time.Now().Add(otpDuracion)); err != nil {
-		return err
+		return "", err
 	}
 	if err := m.app.Avisos.EnviarCodigo(ctx, celular, codigo); err != nil {
+		return "", err
+	}
+	return codigo, nil
+}
+
+func (m *Modulo) enviarOTP(w http.ResponseWriter, r *http.Request, celular, proposito string, extra ...map[string]any) error {
+	codigo, err := m.GenerarOTP(r.Context(), celular, proposito)
+	if err != nil {
 		return err
 	}
 	resp := map[string]any{"mensaje": "Te enviamos un código de 6 dígitos.", "celular": celular}

@@ -27,6 +27,7 @@ func (m *Modulo) panel(w http.ResponseWriter, r *http.Request) error {
 		VendedoresSemana int     `json:"vendedores_semana"`
 		Tiendas          int     `json:"tiendas_activas"`
 		PorRevisar       int     `json:"identidades_por_revisar"`
+		TiendasRevision  int     `json:"tiendas_en_revision"`
 		PedidosMes       int     `json:"pedidos_mes"`
 		PedidosMesAnt    int     `json:"pedidos_mes_anterior"`
 		Pagos            int     `json:"pagos"`
@@ -47,6 +48,7 @@ func (m *Modulo) panel(w http.ResponseWriter, r *http.Request) error {
 		(SELECT count(*) FROM usuarios WHERE rol='vendedor' AND creado_en > now()-interval '7 days'),
 		(SELECT count(*) FROM tiendas WHERE activa),
 		(SELECT count(*) FROM verificaciones WHERE estado='pendiente'),
+		(SELECT count(*) FROM tiendas WHERE activa AND revisada_en IS NULL),
 		(SELECT count(*) FROM pedidos WHERE date_trunc('month', creado_en AT TIME ZONE 'America/Lima') = date_trunc('month', now() AT TIME ZONE 'America/Lima')),
 		(SELECT count(*) FROM pedidos WHERE date_trunc('month', creado_en AT TIME ZONE 'America/Lima') = date_trunc('month', now() AT TIME ZONE 'America/Lima') - interval '1 month'),
 		(SELECT count(*) FROM pedidos WHERE pago_estado IN ('pagado','devuelto')),
@@ -56,7 +58,7 @@ func (m *Modulo) panel(w http.ResponseWriter, r *http.Request) error {
 		(SELECT count(*) FROM suscripciones WHERE activa AND plan_id<>'gratis'),
 		(SELECT count(*) FROM suscripciones WHERE activa AND plan_id='gratis'),
 		(SELECT count(*) FROM reclamos WHERE estado IN ('abierto','en_revision'))`).
-		Scan(&d.Usuarios, &d.UsuariosSemana, &d.Compradores, &d.Vendedores, &d.VendedoresSemana, &d.Tiendas, &d.PorRevisar,
+		Scan(&d.Usuarios, &d.UsuariosSemana, &d.Compradores, &d.Vendedores, &d.VendedoresSemana, &d.Tiendas, &d.PorRevisar, &d.TiendasRevision,
 			&d.PedidosMes, &d.PedidosMesAnt, &d.Pagos, &totalPedidos, &d.Ventas, &d.IngresosPlanes, &d.Pagando, &d.Gratis, &d.Reclamos)
 	if err != nil {
 		return err
@@ -128,18 +130,18 @@ func (m *Modulo) panel(w http.ResponseWriter, r *http.Request) error {
 		rows.Close()
 	}
 	type porRevisar struct {
-		UsuarioID string `json:"usuario_id"`
-		Tienda    string `json:"tienda"`
-		Lugar     string `json:"lugar"`
-		LogoURL   string `json:"logo_url"`
+		TiendaID string `json:"tienda_id"`
+		Tienda   string `json:"tienda"`
+		Lugar    string `json:"lugar"`
+		LogoURL  string `json:"logo_url"`
 	}
 	revisar := []porRevisar{}
-	if rows, err := m.app.DB.QueryContext(ctx, `SELECT t.usuario_id, t.nombre, COALESCE(NULLIF(t.distrito,''), t.ciudad), COALESCE(t.logo_key,'')
-		FROM verificaciones v JOIN tiendas t ON t.id=v.tienda_id WHERE v.estado='pendiente' ORDER BY v.creado_en LIMIT 3`); err == nil {
+	if rows, err := m.app.DB.QueryContext(ctx, `SELECT t.id, t.nombre, t.ciudad, COALESCE(t.logo_key,'')
+		FROM tiendas t WHERE t.activa AND t.revisada_en IS NULL ORDER BY t.creado_en LIMIT 3`); err == nil {
 		for rows.Next() {
 			var x porRevisar
 			var logo string
-			rows.Scan(&x.UsuarioID, &x.Tienda, &x.Lugar, &logo)
+			rows.Scan(&x.TiendaID, &x.Tienda, &x.Lugar, &logo)
 			if logo != "" {
 				x.LogoURL = m.app.Archivos.URLPublica(logo)
 			}

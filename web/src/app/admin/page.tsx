@@ -18,6 +18,7 @@ type Panel = {
     vendedores_semana: number;
     tiendas_activas: number;
     identidades_por_revisar: number;
+    tiendas_en_revision: number;
     pedidos_mes: number;
     pedidos_mes_anterior: number;
     pagos: number;
@@ -32,7 +33,7 @@ type Panel = {
   planes: Parte[];
   entregas: Parte[];
   reclamos: { pedido_id: string; codigo: string; tienda: string; motivo: string; estado: string }[];
-  por_revisar: { usuario_id: string; tienda: string; lugar: string; logo_url: string }[];
+  por_revisar: { tienda_id: string; tienda: string; lugar: string; logo_url: string }[];
 };
 
 const MOTIVOS: Record<string, string> = { no_llego: "Pedido no entregado", danado: "Llegó dañado", distinto: "Producto distinto al publicado", incompleto: "Llegó incompleto", otro: "Otro motivo" };
@@ -104,7 +105,7 @@ export default function PanelAdmin() {
         <Indicador oscuro titulo="Usuarios" valor={num(k.usuarios)} detalle={`+${k.usuarios_semana} esta semana`} icono={<Users className="size-[18px]" />} />
         <Indicador titulo="Compradores" valor={num(k.compradores)} detalle={`${k.usuarios ? Math.round((k.compradores / k.usuarios) * 100) : 0}% del total`} icono={<ShoppingBag className="size-[18px]" />} />
         <Indicador titulo="Vendedores" valor={num(k.vendedores)} detalle={`+${k.vendedores_semana} esta semana`} icono={<Wallet className="size-[18px]" />} />
-        <Indicador titulo="Tiendas activas" valor={num(k.tiendas_activas)} detalle={`${k.identidades_por_revisar} en revisión`} icono={<Store className="size-[18px]" />} />
+        <Indicador titulo="Tiendas activas" valor={num(k.tiendas_activas)} detalle={`${k.tiendas_en_revision} en revisión`} icono={<Store className="size-[18px]" />} />
       </div>
       <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-5">
         <Indicador titulo="Pedidos (mes)" valor={num(k.pedidos_mes)} detalle={variacion === null ? "Primer mes" : `${variacion >= 0 ? "+" : ""}${variacion}% vs. mes pasado`} icono={<Package className="size-[18px]" />} />
@@ -164,12 +165,12 @@ export default function PanelAdmin() {
               ))
             )}
           </Tarjeta>
-          <Tarjeta titulo="Tiendas por revisar" accion={<Link href="/admin/vendedores?estado=pendientes" className="text-sm font-semibold text-tinta hover:text-pino">Ver</Link>}>
+          <Tarjeta titulo="Tiendas por revisar" accion={<Link href="/admin/tiendas" className="text-sm font-semibold text-tinta hover:text-pino">Ver</Link>}>
             {!d.por_revisar.length ? (
-              <p className="text-sm text-gris">Ninguna identidad por revisar.</p>
+              <p className="text-sm text-gris">Ninguna tienda por revisar.</p>
             ) : (
               d.por_revisar.map((t) => (
-                <Link key={t.usuario_id} href={`/admin/vendedores/${t.usuario_id}`} className="flex items-center gap-3 border-b border-linea py-3 last:border-0">
+                <Link key={t.tienda_id} href={`/admin/tiendas/${t.tienda_id}`} className="flex items-center gap-3 border-b border-linea py-3 last:border-0">
                   <span className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-xl bg-crema">
                     {t.logo_url ? <Image src={t.logo_url} alt="" width={44} height={44} className="size-full object-cover" unoptimized /> : <Store className="size-5 text-tinta" />}
                   </span>

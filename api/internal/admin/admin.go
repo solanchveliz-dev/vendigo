@@ -19,7 +19,11 @@ import (
 	"github.com/solanchveliz-dev/vendigo/api/internal/pedidos"
 )
 
-type Modulo struct{ app *core.App }
+type Modulo struct {
+	app *core.App
+	// EnviarCodigo envía un código por SMS (lo pone auth: así el admin no duplica esa lógica).
+	EnviarCodigo func(ctx context.Context, celular, proposito string) (string, error)
+}
 
 func Nuevo(app *core.App) *Modulo { return &Modulo{app: app} }
 
@@ -44,6 +48,17 @@ func (m *Modulo) Rutas(r chi.Router) {
 	r.Method("GET", "/reclamos", httpx.Handler(m.reclamos))
 	r.Method("POST", "/reclamos/{id}/resolver", httpx.Handler(m.resolverReclamo))
 	r.Method("GET", "/auditoria", httpx.Handler(m.auditoria))
+	r.Method("GET", "/usuarios", httpx.Handler(m.usuarios))
+	r.Method("GET", "/usuarios/{id}", httpx.Handler(m.usuario))
+	r.Method("POST", "/usuarios/{id}/suspender", httpx.Handler(m.suspender))
+	r.Method("POST", "/usuarios/{id}/reactivar", httpx.Handler(m.reactivar))
+	r.Method("POST", "/usuarios/{id}/cambio-password", httpx.Handler(m.cambioPassword))
+	r.Method("POST", "/usuarios/{id}/mensaje", httpx.Handler(m.mensaje))
+	r.Method("GET", "/tiendas", httpx.Handler(m.tiendas))
+	r.Method("GET", "/tiendas/{id}", httpx.Handler(m.tienda))
+	r.Method("POST", "/tiendas/{id}/aprobar", httpx.Handler(m.aprobarTienda))
+	r.Method("POST", "/tiendas/{id}/suspender", httpx.Handler(m.suspenderTienda))
+	r.Method("POST", "/tiendas/{id}/reactivar", httpx.Handler(m.reactivarTienda))
 }
 
 func adminID(ctx context.Context) string {
@@ -264,7 +279,7 @@ func (m *Modulo) suspender(w http.ResponseWriter, r *http.Request) error {
 	}
 	id := chi.URLParam(r, "id")
 	err = m.app.EnTransaccion(ctx, func(tx *sql.Tx) error {
-		res, err := tx.ExecContext(ctx, `UPDATE usuarios SET activo=false, suspendido_motivo=$2 WHERE id::text=$1 AND rol='vendedor' AND activo`, id, motivo)
+		res, err := tx.ExecContext(ctx, `UPDATE usuarios SET activo=false, suspendido_motivo=$2 WHERE id::text=$1 AND rol<>'admin' AND activo`, id, motivo)
 		if err != nil {
 			return err
 		}
@@ -292,15 +307,17 @@ func (m *Modulo) suspender(w http.ResponseWriter, r *http.Request) error {
 func (m *Modulo) reactivar(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	id := chi.URLParam(r, "id")
+	// Reactiva una cuenta suspendida o quita el bloqueo temporal por intentos fallidos.
 	res, err := m.app.DB.ExecContext(ctx, `UPDATE usuarios SET activo=true, suspendido_motivo='', intentos_fallidos=0, bloqueado_hasta=NULL
-		WHERE id::text=$1 AND rol='vendedor' AND NOT activo`, id)
+		WHERE id::text=$1 AND rol<>'admin' AND (NOT activo OR bloqueado_hasta > now())`, id)
 	if err != nil {
 		return err
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
 		return httpx.Conflicto("no_aplica", "La cuenta no existe o ya está activa.")
 	}
-	m.app.DB.ExecContext(ctx, `UPDATE tiendas SET activa=true WHERE usuario_id::text=$1`, id)
+	// La tienda vuelve a verse, salvo que el admin la haya suspendido aparte.
+	m.app.DB.ExecContext(ctx, `UPDATE tiendas SET activa=true WHERE usuario_id::text=$1 AND suspendida_motivo=''`, id)
 	m.app.Auditar(ctx, m.app.DB, adminID(ctx), "reactivar_cuenta", "usuario", id, nil)
 	httpx.OK(w, map[string]string{"mensaje": "Cuenta reactivada."})
 	return nil

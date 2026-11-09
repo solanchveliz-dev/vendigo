@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { Bell, Download, Flag, Home, LayoutGrid, LogOut, Search, ShieldCheck, Wallet, Briefcase } from "lucide-react";
+import { Bell, Download, Flag, Home, LayoutGrid, LogOut, Search, ShieldCheck, Wallet, Briefcase, Users, Store } from "lucide-react";
 import { api, sesion, useApi } from "@/lib/api";
 import type { Usuario } from "@/lib/tipos";
 import { Cargando, cn } from "@/components/ui";
@@ -16,7 +16,9 @@ type Aviso = { id: string; titulo: string; cuerpo: string; enlace: string; leida
 // Menú del panel admin (mismo orden e íconos del prototipo). Las secciones restantes se suman en las siguientes fases.
 const menu = [
   { href: "/admin", texto: "Inicio", icono: Home },
+  { href: "/admin/usuarios", texto: "Usuarios", icono: Users },
   { href: "/admin/vendedores", texto: "Vendedores", icono: Briefcase, cuenta: "verificaciones_pendientes" as const },
+  { href: "/admin/tiendas", texto: "Tiendas", icono: Store },
   { href: "/admin/retiros", texto: "Retiros", icono: Wallet, cuenta: "retiros_pendientes" as const },
   { href: "/admin/reclamos", texto: "Reclamos", icono: Flag, cuenta: "reclamos_abiertos" as const },
   { href: "/admin/seguridad", texto: "Seguridad", icono: ShieldCheck },
@@ -121,7 +123,7 @@ export default function LayoutAdmin({ children }: { children: React.ReactNode })
             onSubmit={(e) => {
               e.preventDefault();
               const q = new FormData(e.currentTarget).get("q")?.toString().trim() ?? "";
-              router.push(`/admin/vendedores?q=${encodeURIComponent(q)}`);
+              router.push(`/admin/usuarios?q=${encodeURIComponent(q)}`);
             }}
             className="relative w-full max-w-[490px]"
           >

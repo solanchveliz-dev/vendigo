@@ -79,7 +79,9 @@ func registrarModulos(app *core.App, api chi.Router) {
 		// Panel del administrador: solo cuentas con rol admin (no se pueden crear desde el registro).
 		r.Route("/admin", func(a chi.Router) {
 			a.Use(httpx.Rol("admin"))
-			admin.Nuevo(app).Rutas(a)
+			mAdmin := admin.Nuevo(app)
+			mAdmin.EnviarCodigo = mAuth.GenerarOTP
+			mAdmin.Rutas(a)
 		})
 
 		if app.Cfg.EsDev() {
