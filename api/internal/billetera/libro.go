@@ -72,9 +72,14 @@ func RegistrarDevolucion(ctx context.Context, tx *sql.Tx, tiendaID, pedidoID, co
 	return err
 }
 
-// FechaLiberacion según la reputación de la tienda.
-func FechaLiberacion(entregado time.Time, reputacion string) time.Time {
-	return entregado.AddDate(0, 0, tiendas.DiasLiberacion(reputacion))
+// FechaLiberacion: la entrega más los días de la reputación de la tienda, pero nunca antes
+// de que la pasarela le abone la venta a VendiGo.
+func FechaLiberacion(entregado, venta time.Time, reputacion string) time.Time {
+	f := entregado.AddDate(0, 0, tiendas.DiasLiberacion(reputacion))
+	if a := AbonoPasarela(venta); a.After(f) {
+		return a
+	}
+	return f
 }
 
 // liberar pasa el neto de un pedido de "a liberar" a "disponible".
@@ -176,7 +181,11 @@ func Barrer(ctx context.Context, app *core.App) (confirmados, liberados int, err
 // MarcarEntregado cierra la entrega y programa la liberación del dinero.
 func MarcarEntregado(ctx context.Context, tx *sql.Tx, tiendaID, pedidoID, codigo, reputacion, por string) error {
 	ahora := time.Now()
-	lib := FechaLiberacion(ahora, reputacion)
+	var venta time.Time
+	if err := tx.QueryRowContext(ctx, `SELECT creado_en FROM pedidos WHERE id=$1`, pedidoID).Scan(&venta); err != nil {
+		return err
+	}
+	lib := FechaLiberacion(ahora, venta, reputacion)
 	if _, err := tx.ExecContext(ctx, `UPDATE pedidos SET estado='entregado', entregado_en=$2, liberar_en=$3, confirmado_por=$4 WHERE id=$1`,
 		pedidoID, ahora, lib, por); err != nil {
 		return err

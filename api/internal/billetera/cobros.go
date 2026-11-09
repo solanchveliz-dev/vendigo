@@ -99,6 +99,9 @@ func (m *Modulo) cobros(w http.ResponseWriter, r *http.Request) error {
 			bloqueado += l.Neto
 		case l.Estado == "entregado" && l.LiberarEn != nil:
 			l.Texto = "Se libera el " + l.LiberarEn.In(lima).Format("02/01")
+			if l.LiberarEn.Equal(AbonoPasarela(l.Fecha)) {
+				l.Texto += " · cuando Culqi abona"
+			}
 		default:
 			l.Texto = "Espera la entrega · luego " + textoDias(tiendas.DiasLiberacion(rep))
 		}
@@ -144,12 +147,10 @@ func (m *Modulo) cobros(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-var lima = time.FixedZone("Lima", -5*3600)
-
 func textoDias(d int) string {
 	switch d {
 	case 0:
-		return "al instante"
+		return "apenas Culqi abona (2 días hábiles después del pago)"
 	case 1:
 		return "1 día"
 	}

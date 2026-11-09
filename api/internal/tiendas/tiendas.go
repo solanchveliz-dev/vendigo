@@ -113,7 +113,8 @@ type Entrega struct {
 	DescripcionOtra string   `json:"descripcion_otra"`
 }
 
-// DiasLiberacion: tienda nueva 5 días, buena reputación 2 días, excelente al instante.
+// DiasLiberacion: tienda nueva 5 días, buena reputación 2 días, excelente sin espera extra.
+// En todos los casos el dinero no se libera antes del abono de la pasarela (billetera.AbonoPasarela).
 func DiasLiberacion(reputacion string) int {
 	switch reputacion {
 	case "excelente":

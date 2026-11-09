@@ -30,7 +30,7 @@ type ReclamoFila = { id: string; pedido_id: string; codigo: string; comprador: s
 const NIVELES = [
   { id: "nueva", dias: "5 días", texto: "Tienda nueva" },
   { id: "buena", dias: "2 días", texto: "Buena reputación" },
-  { id: "excelente", dias: "Al instante", texto: "Excelente" },
+  { id: "excelente", dias: "Apenas Culqi abona", texto: "Excelente" },
 ];
 
 const dia = (iso: string) => new Date(iso).toLocaleDateString("es-PE", { day: "numeric", month: "short" }).replace(".", "");
@@ -148,7 +148,7 @@ export default function MisCobros() {
           <div className="min-w-56 flex-1">
             <p className="font-bold text-tinta">{NIVELES.find((n) => n.id === c.reputacion)?.texto}</p>
             <p className="text-sm text-gris">
-              Tu dinero se libera <b className="text-tinta">{c.dias_liberacion === 0 ? "al instante" : `${c.dias_liberacion} días después de la entrega`}</b>. Así protegemos al comprador por si algo llegó mal.
+              Tu dinero se libera <b className="text-tinta">{c.dias_liberacion === 0 ? "apenas Culqi lo abona" : `${c.dias_liberacion} días después de la entrega`}</b>. Así protegemos al comprador por si algo llegó mal. Nunca antes de que Culqi abone la venta (2 días hábiles después del pago).
             </p>
           </div>
           <div className="flex gap-2">
