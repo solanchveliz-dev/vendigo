@@ -108,10 +108,24 @@ export type PedidoDetalle = PedidoResumen & {
   motivo_cancelacion: string;
   confirmado_por: string | null;
   items_detalle: { nombre: string; variante: string; imagen_url: string; precio_centimos: number; cantidad: number }[];
-  envio: { agencia: string; numero_orden: string; clave_recojo: string; boleta_url: string; nota: string; registrado_en: string } | null;
+  envio: {
+    agencia: string;
+    numero_orden: string;
+    clave_recojo: string;
+    boleta_url: string;
+    nota: string;
+    registrado_en: string;
+    motorizado_nombre: string;
+    motorizado_celular: string;
+  } | null;
   eventos: { estado: string; detalle: string; fecha: string }[];
   reclamo_detalle: Reclamo | null;
   acciones: string[];
+  aceptado_en: string | null;
+  enviado_en: string | null;
+  entregado_en: string | null;
+  pedidos_cliente: number;
+  motorizados_guardados: { nombre: string; celular: string }[];
 };
 
 export type Saldos = { a_liberar_centimos: number; disponible_centimos: number; retirado_centimos: number };

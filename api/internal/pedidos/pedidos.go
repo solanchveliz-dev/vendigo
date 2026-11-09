@@ -3,6 +3,7 @@ package pedidos
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -27,6 +28,7 @@ func Nuevo(app *core.App) *Modulo { return &Modulo{app: app} }
 
 func (m *Modulo) RutasVendedor(r chi.Router) {
 	r.Method("GET", "/resumen", httpx.Handler(m.resumen))
+	r.Method("GET", "/inicio", httpx.Handler(m.inicio))
 	r.Method("GET", "/pedidos", httpx.Handler(m.listar))
 	r.Method("GET", "/pedidos/{id}", httpx.Handler(m.obtener))
 	r.Method("POST", "/pedidos/{id}/aceptar", httpx.Handler(m.aceptar))
@@ -160,6 +162,15 @@ type Envio struct {
 	BoletaURL   string    `json:"boleta_url"`
 	Nota        string    `json:"nota"`
 	Registrado  time.Time `json:"registrado_en"`
+	// Solo para delivery con motorizado.
+	MotorizadoNombre  string `json:"motorizado_nombre"`
+	MotorizadoCelular string `json:"motorizado_celular"`
+}
+
+// Motorizado guardado por la tienda para elegirlo rápido al despachar.
+type Motorizado struct {
+	Nombre  string `json:"nombre"`
+	Celular string `json:"celular"`
 }
 
 type Evento struct {
@@ -208,6 +219,12 @@ type Detalle struct {
 	Eventos       []Evento `json:"eventos"`
 	ReclamoDet    *Reclamo `json:"reclamo_detalle"`
 	Acciones      []string `json:"acciones"`
+	// Para la línea de tiempo y la tarjeta del cliente.
+	AceptadoEn     *time.Time   `json:"aceptado_en"`
+	EnviadoEn      *time.Time   `json:"enviado_en"`
+	EntregadoEn    *time.Time   `json:"entregado_en"`
+	PedidosCliente int          `json:"pedidos_cliente"`
+	Motorizados    []Motorizado `json:"motorizados_guardados"`
 }
 
 func (m *Modulo) cargar(ctx context.Context, tid, pid string) (*Detalle, error) {
@@ -216,11 +233,13 @@ func (m *Modulo) cargar(ctx context.Context, tid, pid string) (*Detalle, error) 
 	err := m.app.DB.QueryRowContext(ctx, `SELECT id, codigo, comprador_nombre, comprador_celular, comprador_dni_cifrado, entrega, estado,
 		metodo_pago, pago_estado, subtotal_centimos, envio_centimos, total_centimos, comision_pasarela_centimos,
 		direccion, distrito, ciudad, referencia, agencia, agencia_sede, nota_comprador, motivo_cancelacion, confirmado_por,
-		liberar_en, liberado, creado_en
+		liberar_en, liberado, creado_en, aceptado_en, enviado_en, entregado_en,
+		(SELECT count(*) FROM pedidos x WHERE x.tienda_id=pedidos.tienda_id AND x.comprador_celular=pedidos.comprador_celular)
 		FROM pedidos WHERE id::text=$1 AND tienda_id=$2`, pid, tid).Scan(
 		&d.ID, &d.Codigo, &d.Comprador, &d.Celular, &dni, &d.Entrega, &d.Estado, &d.MetodoPago, &d.PagoEstado,
 		&d.Subtotal, &d.EnvioCosto, &d.Total, &d.Comision, &d.Direccion, &d.Distrito, &d.Ciudad, &d.Referencia,
-		&d.Agencia, &d.AgenciaSede, &d.Nota, &d.Motivo, &d.ConfirmadoPor, &d.LiberarEn, &d.Liberado, &d.CreadoEn)
+		&d.Agencia, &d.AgenciaSede, &d.Nota, &d.Motivo, &d.ConfirmadoPor, &d.LiberarEn, &d.Liberado, &d.CreadoEn,
+		&d.AceptadoEn, &d.EnviadoEn, &d.EntregadoEn, &d.PedidosCliente)
 	if core.SinFilas(err) {
 		return nil, httpx.ErrNoEncontrado
 	}
@@ -254,8 +273,9 @@ func (m *Modulo) cargar(ctx context.Context, tid, pid string) (*Detalle, error) 
 
 	var e Envio
 	var boleta sql.NullString
-	err = m.app.DB.QueryRowContext(ctx, `SELECT agencia, numero_orden, clave_recojo, boleta_key, nota, registrado_en FROM envios WHERE pedido_id=$1`, d.ID).
-		Scan(&e.Agencia, &e.NumeroOrden, &e.ClaveRecojo, &boleta, &e.Nota, &e.Registrado)
+	err = m.app.DB.QueryRowContext(ctx, `SELECT agencia, numero_orden, clave_recojo, boleta_key, nota, registrado_en, motorizado_nombre, motorizado_celular
+		FROM envios WHERE pedido_id=$1`, d.ID).
+		Scan(&e.Agencia, &e.NumeroOrden, &e.ClaveRecojo, &boleta, &e.Nota, &e.Registrado, &e.MotorizadoNombre, &e.MotorizadoCelular)
 	if err == nil {
 		if boleta.Valid {
 			e.BoletaURL, _ = m.app.Archivos.URLLectura(ctx, boleta.String)
@@ -286,6 +306,13 @@ func (m *Modulo) cargar(ctx context.Context, tid, pid string) (*Detalle, error) 
 		d.Reclamo = &rc.Estado
 	}
 	d.Acciones = acciones(d)
+	d.Motorizados = []Motorizado{}
+	if d.Entrega == "motorizado" {
+		var raw []byte
+		if m.app.DB.QueryRowContext(ctx, `SELECT motorizados FROM tiendas WHERE id=$1`, tid).Scan(&raw) == nil {
+			json.Unmarshal(raw, &d.Motorizados)
+		}
+	}
 	return d, nil
 }
 
@@ -439,6 +466,10 @@ type envioReq struct {
 	ClaveRecojo string `json:"clave_recojo"`
 	BoletaKey   string `json:"boleta_key"`
 	Nota        string `json:"nota"`
+	// Motorizado: quién lo lleva y si se guarda en "mis motorizados".
+	MotorizadoNombre  string `json:"motorizado_nombre"`
+	MotorizadoCelular string `json:"motorizado_celular"`
+	Guardar           bool   `json:"guardar"`
 }
 
 func (m *Modulo) enviar(w http.ResponseWriter, r *http.Request) error {
@@ -451,23 +482,47 @@ func (m *Modulo) enviar(w http.ResponseWriter, r *http.Request) error {
 		var detalle string
 		switch entrega {
 		case "agencia":
+			// Como en el prototipo: basta el código de envío o la foto de la boleta.
 			in.NumeroOrden = strings.TrimSpace(in.NumeroOrden)
-			if in.NumeroOrden == "" {
-				return httpx.Invalido("Escribe el número de orden que aparece en la boleta de la agencia.")
+			if in.NumeroOrden == "" && in.BoletaKey == "" {
+				return httpx.Invalido("Escribe el código o sube la foto de la boleta de envío (es tu prueba si hay reclamo).")
 			}
-			if in.BoletaKey == "" {
-				return httpx.Invalido("Sube la foto de la boleta de envío: es tu prueba si hay un reclamo.")
+			if len(in.NumeroOrden) > 40 {
+				return httpx.Invalido("El código de envío es muy largo.")
 			}
-			if !strings.HasPrefix(in.BoletaKey, "boleta/"+tid+"/") {
+			if in.BoletaKey != "" && !strings.HasPrefix(in.BoletaKey, "boleta/"+tid+"/") {
 				return httpx.Invalido("La boleta no pertenece a tu tienda.")
 			}
+			in.Agencia = strings.TrimSpace(in.Agencia)
 			if in.Agencia == "" {
 				tx.QueryRowContext(ctx, `SELECT agencia FROM pedidos WHERE id=$1`, pid).Scan(&in.Agencia)
 			}
-			detalle = fmt.Sprintf("Enviado por %s. Orden %s", in.Agencia, in.NumeroOrden)
+			if in.NumeroOrden != "" {
+				detalle = fmt.Sprintf("Enviado por %s. Código %s", in.Agencia, in.NumeroOrden)
+			} else {
+				detalle = fmt.Sprintf("Enviado por %s. La tienda registró la boleta de envío", in.Agencia)
+			}
+			in.MotorizadoNombre, in.MotorizadoCelular = "", ""
 		case "motorizado":
-			in.Agencia = "Motorizado"
-			detalle = "El motorizado va en camino. Pagas al recibir."
+			in.MotorizadoNombre = strings.TrimSpace(in.MotorizadoNombre)
+			in.MotorizadoCelular = strings.ReplaceAll(strings.TrimSpace(in.MotorizadoCelular), " ", "")
+			if len([]rune(in.MotorizadoNombre)) < 2 || len([]rune(in.MotorizadoNombre)) > 60 {
+				return httpx.Invalido("Escribe el nombre de quien lleva el pedido.")
+			}
+			if !celularValido(in.MotorizadoCelular) {
+				return httpx.Invalido("El celular del motorizado debe tener 9 dígitos y empezar con 9.")
+			}
+			if in.Guardar {
+				nuevo, _ := json.Marshal([]Motorizado{{Nombre: in.MotorizadoNombre, Celular: in.MotorizadoCelular}})
+				if _, err := tx.ExecContext(ctx, `UPDATE tiendas SET motorizados = motorizados || $2::jsonb
+					WHERE id=$1 AND jsonb_array_length(motorizados) < 10
+					AND NOT EXISTS (SELECT 1 FROM jsonb_array_elements(motorizados) e WHERE e->>'celular' = $3)`,
+					tid, string(nuevo), in.MotorizadoCelular); err != nil {
+					return err
+				}
+			}
+			in.Agencia, in.NumeroOrden, in.ClaveRecojo, in.BoletaKey = "Motorizado", "", "", ""
+			detalle = fmt.Sprintf("Tu pedido va en camino con %s (%s). Pagas al recibir.", in.MotorizadoNombre, in.MotorizadoCelular)
 		default:
 			return httpx.Conflicto("estado_invalido", "Los pedidos de recojo no se envían.")
 		}
@@ -475,9 +530,12 @@ func (m *Modulo) enviar(w http.ResponseWriter, r *http.Request) error {
 		if in.BoletaKey != "" {
 			boleta = in.BoletaKey
 		}
-		if _, err := tx.ExecContext(ctx, `INSERT INTO envios (pedido_id, agencia, numero_orden, clave_recojo, boleta_key, nota) VALUES ($1,$2,$3,$4,$5,$6)
-			ON CONFLICT (pedido_id) DO UPDATE SET agencia=$2, numero_orden=$3, clave_recojo=$4, boleta_key=$5, nota=$6, registrado_en=now()`,
-			pid, in.Agencia, in.NumeroOrden, strings.TrimSpace(in.ClaveRecojo), boleta, strings.TrimSpace(in.Nota)); err != nil {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO envios (pedido_id, agencia, numero_orden, clave_recojo, boleta_key, nota, motorizado_nombre, motorizado_celular)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+			ON CONFLICT (pedido_id) DO UPDATE SET agencia=$2, numero_orden=$3, clave_recojo=$4, boleta_key=$5, nota=$6,
+			motorizado_nombre=$7, motorizado_celular=$8, registrado_en=now()`,
+			pid, in.Agencia, in.NumeroOrden, strings.TrimSpace(in.ClaveRecojo), boleta, strings.TrimSpace(in.Nota),
+			in.MotorizadoNombre, in.MotorizadoCelular); err != nil {
 			return err
 		}
 		if _, err := tx.ExecContext(ctx, `UPDATE pedidos SET estado='enviado', enviado_en=now() WHERE id=$1`, pid); err != nil {
@@ -490,6 +548,18 @@ func (m *Modulo) enviar(w http.ResponseWriter, r *http.Request) error {
 	}
 	httpx.OK(w, d)
 	return nil
+}
+
+func celularValido(c string) bool {
+	if len(c) != 9 || c[0] != '9' {
+		return false
+	}
+	for _, r := range c {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 func (m *Modulo) listoRecojo(w http.ResponseWriter, r *http.Request) error {
@@ -671,17 +741,19 @@ func (m *Modulo) resumen(w http.ResponseWriter, r *http.Request) error {
 
 	var hoy, mes, pedidosMes, stockBajo, clientes, publicados int
 	m.app.DB.QueryRowContext(ctx, `SELECT
-		COALESCE(SUM(total_centimos) FILTER (WHERE creado_en >= date_trunc('day', now())), 0),
+		COALESCE(SUM(total_centimos) FILTER (WHERE (creado_en AT TIME ZONE 'America/Lima')::date = (now() AT TIME ZONE 'America/Lima')::date), 0),
 		COALESCE(SUM(total_centimos), 0), count(*)
-		FROM pedidos WHERE tienda_id=$1 AND estado NOT IN ('rechazado','cancelado') AND creado_en >= date_trunc('month', now())`, tid).Scan(&hoy, &mes, &pedidosMes)
+		FROM pedidos WHERE tienda_id=$1 AND estado NOT IN ('rechazado','cancelado')
+		AND (creado_en AT TIME ZONE 'America/Lima') >= date_trunc('month', now() AT TIME ZONE 'America/Lima')`, tid).Scan(&hoy, &mes, &pedidosMes)
 	m.app.DB.QueryRowContext(ctx, `SELECT count(*) FROM productos WHERE tienda_id=$1 AND NOT eliminado AND activo AND stock <= 3`, tid).Scan(&stockBajo)
 	m.app.DB.QueryRowContext(ctx, `SELECT count(DISTINCT comprador_celular) FROM pedidos WHERE tienda_id=$1`, tid).Scan(&clientes)
 	m.app.DB.QueryRowContext(ctx, `SELECT count(*) FROM productos WHERE tienda_id=$1 AND NOT eliminado AND activo`, tid).Scan(&publicados)
 
 	// Ventas de los últimos 7 días para el gráfico del inicio.
+	// Los días se cuentan en hora de Perú.
 	rows, err := m.app.DB.QueryContext(ctx, `SELECT d::date, COALESCE(SUM(p.total_centimos),0)
-		FROM generate_series(date_trunc('day', now()) - interval '6 days', date_trunc('day', now()), interval '1 day') d
-		LEFT JOIN pedidos p ON p.tienda_id=$1 AND date_trunc('day', p.creado_en)=d AND p.estado NOT IN ('rechazado','cancelado')
+		FROM generate_series((now() AT TIME ZONE 'America/Lima')::date - 6, (now() AT TIME ZONE 'America/Lima')::date, interval '1 day') d
+		LEFT JOIN pedidos p ON p.tienda_id=$1 AND (p.creado_en AT TIME ZONE 'America/Lima')::date = d::date AND p.estado NOT IN ('rechazado','cancelado')
 		GROUP BY d ORDER BY d`, tid)
 	if err != nil {
 		return err

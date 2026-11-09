@@ -18,15 +18,21 @@ export function textoPago(p: PedidoResumen) {
 
 const siguiente: Record<string, string> = {
   por_aceptar: "Aceptar pedido",
-  preparando: "Registrar envío",
+  preparando: "Ya lo envié",
   listo_recojo: "Entregar al cliente",
 };
 
 export function siguientePaso(p: PedidoResumen) {
   if (p.reclamo === "abierto") return "Ver reclamo";
-  if (p.estado === "preparando" && p.entrega === "recojo") return "Listo para recoger";
-  if (p.estado === "preparando" && p.entrega === "motorizado") return "Salió el motorizado";
+  if (p.estado === "preparando" && p.entrega === "recojo") return "Ya está listo";
+  if (p.estado === "preparando" && p.entrega === "motorizado") return "Ya salió";
   return siguiente[p.estado];
+}
+
+// El despacho (agencia, motorizado o recojo listo) tiene su propia pantalla, como en el prototipo.
+export function enlacePaso(p: PedidoResumen) {
+  if (p.estado === "preparando" && p.reclamo !== "abierto") return `/vendedor/pedidos/${p.id}/enviar`;
+  return `/vendedor/pedidos/${p.id}`;
 }
 
 export function TablaPedidos({ pedidos, compacta }: { pedidos: PedidoResumen[]; compacta?: boolean }) {
@@ -75,7 +81,7 @@ export function TablaPedidos({ pedidos, compacta }: { pedidos: PedidoResumen[]; 
                 {!compacta && (
                   <td className="px-4 py-3 text-right">
                     {paso ? (
-                      <Link href={`/vendedor/pedidos/${p.id}`} className="inline-flex h-8 items-center rounded-full bg-pino px-3.5 text-xs font-semibold text-white">
+                      <Link href={enlacePaso(p)} className="inline-flex h-8 items-center rounded-full bg-pino px-3.5 text-xs font-semibold text-white">
                         {paso}
                       </Link>
                     ) : (

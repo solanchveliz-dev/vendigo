@@ -80,6 +80,7 @@ func main() {
 		if n := reponerFotos(ctx, conexion, s3); n > 0 {
 			fmt.Printf("Se volvieron a subir %d fotos de prueba que faltaban.\n", n)
 		}
+		visitasDemo(ctx, conexion)
 		fmt.Println("Los datos de prueba ya existen. Usuario: 999888777 · Contraseña: vendigo123")
 		return
 	}
@@ -151,7 +152,28 @@ func main() {
 			creado_en=now() - interval '4 days' WHERE id=$1`, listo)
 		return billetera.MarcarEntregado(ctx, tx, tid, listo, "", "excelente", "comprador")
 	})
+	visitasDemo(ctx, conexion)
 	fmt.Printf("Datos de prueba listos (%d imágenes subidas).\nUsuario: 999888777 · Contraseña: vendigo123\n", subidas)
+}
+
+// visitasDemo agrega visitas de los últimos 30 días a la tienda de prueba (solo si aún no tiene),
+// para que "Rendimiento" y las sugerencias tengan datos en la demo.
+func visitasDemo(ctx context.Context, conexion *sql.DB) {
+	var tid string
+	var hay bool
+	conexion.QueryRowContext(ctx, `SELECT id, EXISTS(SELECT 1 FROM visitas v WHERE v.tienda_id=t.id AND v.dia < current_date)
+		FROM tiendas t WHERE slug='luna-y-sol'`).Scan(&tid, &hay)
+	if tid == "" || hay {
+		return
+	}
+	conexion.ExecContext(ctx, `INSERT INTO visitas (tienda_id, producto_id, dia, cantidad)
+		SELECT $1, NULL, current_date - d, 18 + (d * 7) % 13 FROM generate_series(1, 30) d
+		ON CONFLICT DO NOTHING`, tid)
+	conexion.ExecContext(ctx, `INSERT INTO visitas (tienda_id, producto_id, dia, cantidad)
+		SELECT $1, p.id, current_date - d, 1 + ((d + p.n) * 5) % (CASE WHEN p.n = 3 THEN 9 ELSE 5 END)
+		FROM (SELECT id, row_number() OVER (ORDER BY creado_en, id) AS n FROM productos WHERE tienda_id=$1 AND NOT eliminado) p,
+		generate_series(1, 30) d
+		ON CONFLICT DO NOTHING`, tid)
 }
 
 // reponerFotos vuelve a subir las fotos de prueba que no estén en el almacenamiento

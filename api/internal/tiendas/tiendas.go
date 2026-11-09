@@ -40,6 +40,7 @@ func (m *Modulo) RutasCuenta(r chi.Router) {
 func (m *Modulo) RutasPublicas(r chi.Router) {
 	r.Method("GET", "/tiendas/slug-disponible", httpx.Handler(m.slugDisponible))
 	r.Method("GET", "/tiendas/{slug}", httpx.Handler(m.publica))
+	r.Method("POST", "/tiendas/{slug}/visitas", httpx.Handler(m.registrarVisita))
 	r.Method("GET", "/catalogos", httpx.Handler(m.catalogos))
 }
 
@@ -443,6 +444,33 @@ func (m *Modulo) publica(w http.ResponseWriter, r *http.Request) error {
 	// El WhatsApp y el correo son solo para que VendiGo avise a la tienda: no se muestran a los compradores.
 	t.Whatsapp, t.Correo = "", ""
 	httpx.OK(w, t)
+	return nil
+}
+
+// registrarVisita suma una visita del día a la tienda o a uno de sus productos (para "Rendimiento" y sugerencias).
+func (m *Modulo) registrarVisita(w http.ResponseWriter, r *http.Request) error {
+	var in struct {
+		ProductoID string `json:"producto_id"`
+	}
+	if r.ContentLength > 0 {
+		if err := httpx.Leer(r, &in); err != nil {
+			return err
+		}
+	}
+	var prod any
+	if in.ProductoID != "" {
+		prod = in.ProductoID
+	}
+	_, err := m.app.DB.ExecContext(r.Context(), `INSERT INTO visitas (tienda_id, producto_id, cantidad)
+		SELECT t.id, p.id, 1 FROM tiendas t
+		LEFT JOIN productos p ON p.tienda_id=t.id AND p.id::text=$2 AND NOT p.eliminado
+		WHERE t.slug=$1 AND t.activa AND ($2::text IS NULL OR p.id IS NOT NULL)
+		ON CONFLICT (tienda_id, (COALESCE(producto_id, '00000000-0000-0000-0000-000000000000'::uuid)), dia)
+		DO UPDATE SET cantidad = visitas.cantidad + 1`, chi.URLParam(r, "slug"), prod)
+	if err != nil {
+		return err
+	}
+	w.WriteHeader(http.StatusNoContent)
 	return nil
 }
 

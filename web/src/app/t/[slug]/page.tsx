@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { ContarVisita } from "@/components/tienda/contar-visita";
 import { notFound } from "next/navigation";
 import { Bike, Clock, MapPin, MessageCircle, Package, RefreshCw, ShieldCheck, Star, Store } from "lucide-react";
 import { API_URL } from "@/lib/servidor/sesion";
@@ -61,7 +62,7 @@ export default async function TiendaPublica({ params, searchParams }: { params: 
 
   return (
     <div className="min-h-screen bg-crema">
-      {!vista && <CabeceraPublica />}
+      {!vista && <><CabeceraPublica /><ContarVisita slug={t.slug} /></>}
 
       <main className="mx-auto max-w-[1400px] px-5 pb-16 sm:px-10">
         {/* Portada */}

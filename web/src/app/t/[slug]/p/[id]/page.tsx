@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { ContarVisita } from "@/components/tienda/contar-visita";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Bike, Check, ChevronRight, CircleHelp, MessageCircle, Package, RefreshCw, ShieldCheck, Store } from "lucide-react";
@@ -65,7 +66,7 @@ export default async function ProductoPublico({ params, searchParams }: Params &
 
   return (
     <div className="min-h-screen bg-crema">
-      {!vista && <CabeceraPublica />}
+      {!vista && <><CabeceraPublica /><ContarVisita slug={slug} productoId={p.id} /></>}
 
       <main className="mx-auto max-w-[1400px] px-5 pb-16 sm:px-10">
         <nav className="flex items-center gap-1.5 py-6 text-sm text-gris">
