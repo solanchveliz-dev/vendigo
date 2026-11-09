@@ -287,6 +287,6 @@ func AbrirReclamo(ctx context.Context, tx *sql.Tx, pid, motivo, descripcion stri
 	if err := evento(ctx, tx, pid, "reclamo", "Abriste un reclamo: "+MotivosReclamo[motivo]+". El dinero queda bloqueado hasta resolverlo."); err != nil {
 		return err
 	}
-	billetera.Notificar(ctx, tx, tid, "Reclamo en el pedido "+codigo, "Responde con tu boleta de envío como prueba. El dinero queda bloqueado hasta resolverlo.", "/vendedor/pedidos/"+pid)
+	billetera.Notificar(ctx, tx, tid, "Reclamo en el pedido "+codigo, "Responde con tu boleta de envío como prueba. El dinero queda bloqueado hasta resolverlo.", "/vendedor/cobros/reclamo/"+pid)
 	return nil
 }

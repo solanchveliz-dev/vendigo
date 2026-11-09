@@ -40,6 +40,7 @@ func (m *Modulo) RutasVendedor(r chi.Router) {
 	r.Method("GET", "/pedidos/{id}/etiqueta", httpx.Handler(m.etiqueta))
 	r.Method("GET", "/reclamos", httpx.Handler(m.reclamos))
 	r.Method("POST", "/reclamos/{id}/responder", httpx.Handler(m.responderReclamo))
+	r.Method("POST", "/reclamos/{id}/devolver", httpx.Handler(m.devolverReclamo))
 	r.Method("GET", "/notificaciones", httpx.Handler(m.notificaciones))
 	r.Method("POST", "/notificaciones/leer", httpx.Handler(m.leerNotificaciones))
 	r.Method("POST", "/notificaciones/{id}/leer", httpx.Handler(m.leerNotificacion))
@@ -667,6 +668,53 @@ func (m *Modulo) reclamos(w http.ResponseWriter, r *http.Request) error {
 		out = append(out, f)
 	}
 	httpx.OK(w, map[string]any{"reclamos": out})
+	return nil
+}
+
+// devolverReclamo: la tienda acepta el reclamo y se le devuelve todo el dinero al cliente.
+func (m *Modulo) devolverReclamo(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	tid, err := tiendas.ID(ctx, m.app)
+	if err != nil {
+		return err
+	}
+	var pid string
+	err = m.app.EnTransaccion(ctx, func(tx *sql.Tx) error {
+		var codigo string
+		var liberado bool
+		err := tx.QueryRowContext(ctx, `SELECT p.id, p.codigo, p.liberado FROM reclamos c JOIN pedidos p ON p.id=c.pedido_id
+			WHERE c.id::text=$1 AND p.tienda_id=$2 AND c.estado IN ('abierto','en_revision') FOR UPDATE OF c`, chi.URLParam(r, "id"), tid).Scan(&pid, &codigo, &liberado)
+		if core.SinFilas(err) {
+			return httpx.Conflicto("reclamo_cerrado", "Este reclamo ya se resolvió o no existe.")
+		}
+		if err != nil {
+			return err
+		}
+		if liberado {
+			return httpx.Conflicto("ya_liberado", "El dinero de este pedido ya se liberó. Escríbenos para resolverlo.")
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE reclamos SET estado='a_favor_comprador', respuesta_vendedor=COALESCE(respuesta_vendedor, 'La tienda aceptó devolver el dinero.'),
+			respondido_en=COALESCE(respondido_en, now()), resuelto_en=now() WHERE pedido_id=$1`, pid); err != nil {
+			return err
+		}
+		if err := billetera.RegistrarDevolucion(ctx, tx, tid, pid, codigo); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE pedidos SET estado='cancelado', motivo_cancelacion='La tienda aceptó el reclamo y devolvió el dinero', cerrado_en=now() WHERE id=$1`, pid); err != nil {
+			return err
+		}
+		u, _ := httpx.UsuarioDe(ctx)
+		m.app.Auditar(ctx, tx, u.ID, "devolver_reclamo", "pedido", pid, nil)
+		return evento(ctx, tx, pid, "cancelado", "La tienda aceptó tu reclamo. Te devolvimos todo tu dinero por el mismo medio de pago.")
+	})
+	if err != nil {
+		return err
+	}
+	d, err := m.cargar(ctx, tid, pid)
+	if err != nil {
+		return err
+	}
+	httpx.OK(w, d)
 	return nil
 }
 

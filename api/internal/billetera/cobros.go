@@ -23,6 +23,7 @@ func Nuevo(app *core.App) *Modulo { return &Modulo{app: app} }
 func (m *Modulo) RutasVendedor(r chi.Router) {
 	r.Method("GET", "/cobros", httpx.Handler(m.cobros))
 	r.Method("POST", "/retiros", httpx.Handler(m.retirar))
+	r.Method("GET", "/retiros/{id}", httpx.Handler(m.detalleRetiro))
 	r.Method("GET", "/cuenta-bancaria", httpx.Handler(m.cuenta))
 	r.Method("PUT", "/cuenta-bancaria", httpx.Handler(m.guardarCuenta))
 	r.Method("GET", "/verificacion", httpx.Handler(m.verificacion))
@@ -49,6 +50,7 @@ type lineaCobro struct {
 }
 
 type retiro struct {
+	Pedidos  int        `json:"pedidos"`
 	ID       string     `json:"id"`
 	Monto    int        `json:"monto_centimos"`
 	Banco    string     `json:"banco"`
@@ -101,7 +103,8 @@ func (m *Modulo) cobros(w http.ResponseWriter, r *http.Request) error {
 
 	rows, err = m.app.DB.QueryContext(ctx, `SELECT p.id, p.codigo, p.comprador_nombre, p.total_centimos, p.comision_pasarela_centimos, p.estado,
 		p.liberar_en, COALESCE(p.cerrado_en, p.creado_en)
-		FROM pedidos p WHERE p.tienda_id=$1 AND p.liberado ORDER BY p.cerrado_en DESC LIMIT 50`, tid)
+		FROM pedidos p WHERE p.tienda_id=$1 AND p.liberado AND p.retiro_id IS NULL AND p.pago_estado='pagado'
+		ORDER BY p.cerrado_en DESC LIMIT 100`, tid)
 	if err != nil {
 		return err
 	}
@@ -149,7 +152,8 @@ func textoDias(d int) string {
 }
 
 func (m *Modulo) listarRetiros(r *http.Request, tid string) ([]retiro, error) {
-	rows, err := m.app.DB.QueryContext(r.Context(), `SELECT id, monto_centimos, banco, ultimos4, estado, creado_en, pagado_en FROM retiros
+	rows, err := m.app.DB.QueryContext(r.Context(), `SELECT id, monto_centimos, banco, ultimos4, estado, creado_en, pagado_en,
+		(SELECT count(*) FROM pedidos p WHERE p.retiro_id=retiros.id) FROM retiros
 		WHERE tienda_id=$1 ORDER BY creado_en DESC LIMIT 50`, tid)
 	if err != nil {
 		return nil, err
@@ -158,7 +162,7 @@ func (m *Modulo) listarRetiros(r *http.Request, tid string) ([]retiro, error) {
 	out := []retiro{}
 	for rows.Next() {
 		var x retiro
-		rows.Scan(&x.ID, &x.Monto, &x.Banco, &x.Ultimos4, &x.Estado, &x.CreadoEn, &x.PagadoEn)
+		rows.Scan(&x.ID, &x.Monto, &x.Banco, &x.Ultimos4, &x.Estado, &x.CreadoEn, &x.PagadoEn, &x.Pedidos)
 		out = append(out, x)
 	}
 	return out, nil
@@ -169,15 +173,6 @@ func (m *Modulo) retirar(w http.ResponseWriter, r *http.Request) error {
 	tid, err := tiendas.ID(ctx, m.app)
 	if err != nil {
 		return err
-	}
-	var in struct {
-		Monto int `json:"monto_centimos"`
-	}
-	if err := httpx.Leer(r, &in); err != nil {
-		return err
-	}
-	if in.Monto < retiroMinimo {
-		return httpx.Invalido("El retiro mínimo es S/ 10.")
 	}
 	if m.estadoVerificacion(r, tid) != "aprobada" {
 		return httpx.Conflicto("sin_verificacion", "Para retirar primero verifica tu identidad.")
@@ -196,27 +191,70 @@ func (m *Modulo) retirar(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return err
 		}
-		if in.Monto > s.Disponible {
-			return httpx.Invalido("No tienes ese monto disponible.")
+		// Se retira todo lo disponible, como en el prototipo ("Retirar a mi cuenta").
+		monto := s.Disponible
+		if monto < retiroMinimo {
+			return httpx.Invalido("El retiro mínimo es S/ 10.")
 		}
 		if err := tx.QueryRowContext(ctx, `INSERT INTO retiros (tienda_id, monto_centimos, banco, ultimos4) VALUES ($1,$2,$3,$4) RETURNING id`,
-			tid, in.Monto, banco, u4).Scan(&id); err != nil {
+			tid, monto, banco, u4).Scan(&id); err != nil {
 			return err
 		}
-		if err := mover(ctx, tx, tid, nil, id, "retiro", "disponible", -in.Monto, "Retiro a "+banco+" •••• "+u4); err != nil {
+		if err := mover(ctx, tx, tid, nil, id, "retiro", "disponible", -monto, "Retiro a "+banco+" •••• "+u4); err != nil {
 			return err
 		}
-		if err := mover(ctx, tx, tid, nil, id, "retiro", "retirado", in.Monto, "Retiro a "+banco+" •••• "+u4); err != nil {
+		if err := mover(ctx, tx, tid, nil, id, "retiro", "retirado", monto, "Retiro a "+banco+" •••• "+u4); err != nil {
+			return err
+		}
+		// Los pedidos liberados que entran en este retiro.
+		if _, err := tx.ExecContext(ctx, `UPDATE pedidos SET retiro_id=$2 WHERE tienda_id=$1 AND liberado AND retiro_id IS NULL AND pago_estado='pagado'`, tid, id); err != nil {
 			return err
 		}
 		u, _ := httpx.UsuarioDe(ctx)
-		m.app.Auditar(ctx, tx, u.ID, "retiro", "retiro", id, map[string]int{"monto": in.Monto})
+		m.app.Auditar(ctx, tx, u.ID, "retiro", "retiro", id, map[string]int{"monto": monto})
 		return nil
 	})
 	if err != nil {
 		return err
 	}
 	httpx.JSON(w, http.StatusCreated, map[string]any{"id": id, "mensaje": "Listo. El dinero llega a tu cuenta en 1 día hábil."})
+	return nil
+}
+
+// detalleRetiro: resumen del retiro y los pedidos que incluye.
+func (m *Modulo) detalleRetiro(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	tid, err := tiendas.ID(ctx, m.app)
+	if err != nil {
+		return err
+	}
+	var x retiro
+	err = m.app.DB.QueryRowContext(ctx, `SELECT id, monto_centimos, banco, ultimos4, estado, creado_en, pagado_en FROM retiros WHERE id::text=$1 AND tienda_id=$2`,
+		chi.URLParam(r, "id"), tid).Scan(&x.ID, &x.Monto, &x.Banco, &x.Ultimos4, &x.Estado, &x.CreadoEn, &x.PagadoEn)
+	if core.SinFilas(err) {
+		return httpx.ErrNoEncontrado
+	}
+	if err != nil {
+		return err
+	}
+	rows, err := m.app.DB.QueryContext(ctx, `SELECT id, codigo, comprador_nombre, total_centimos, comision_pasarela_centimos, COALESCE(cerrado_en, creado_en)
+		FROM pedidos WHERE retiro_id=$1 ORDER BY cerrado_en`, x.ID)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	lineas := []lineaCobro{}
+	total, comision := 0, 0
+	for rows.Next() {
+		var l lineaCobro
+		rows.Scan(&l.PedidoID, &l.Codigo, &l.Comprador, &l.Total, &l.Comision, &l.Fecha)
+		l.Neto = l.Total - l.Comision
+		total, comision = total+l.Total, comision+l.Comision
+		lineas = append(lineas, l)
+	}
+	x.Pedidos = len(lineas)
+	httpx.OK(w, map[string]any{"retiro": x, "pedidos": lineas, "pagaron_centimos": total, "culqi_centimos": comision,
+		"operacion": "TRF-" + strings.ToUpper(strings.ReplaceAll(x.ID, "-", "")[:8])})
 	return nil
 }
 

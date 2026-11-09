@@ -108,7 +108,7 @@ export function AvisoAccion({
     icono = <Flag className="size-5" />;
     titulo = "Responde el reclamo";
     texto = <>Envía tu prueba (la boleta de envío se adjunta sola). Mientras tanto, el dinero de este pedido queda bloqueado.</>;
-    botones = <Boton variante="acento" onClick={alResponder}>Responder reclamo</Boton>;
+    botones = <Link href={`/vendedor/cobros/reclamo/${p.id}`}><Boton variante="acento">Responder reclamo</Boton></Link>;
     tono = "bg-error/10 ring-error/30";
   } else if (p.estado === "por_aceptar") {
     icono = <Lock className="size-5" />;

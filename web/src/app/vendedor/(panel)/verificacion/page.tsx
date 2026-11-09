@@ -1,11 +1,12 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
-import { Camera, CheckCircle2, Clock, Lock, ShieldCheck } from "lucide-react";
+import { Camera, ChevronRight, Clock, Lock, ShieldCheck } from "lucide-react";
 import { api, ErrorApi, useApi } from "@/lib/api";
 import { fecha } from "@/lib/formato";
 import { subirImagen } from "@/lib/subir";
-import { Aviso, Boton, Campo, Cargando, Encabezado, Entrada, Selector, Tarjeta, useAvisar } from "@/components/ui";
+import { Aviso, Boton, Campo, Cargando, Entrada, Selector, Tarjeta, useAvisar } from "@/components/ui";
 
 type Estado = { estado: string; tipo_documento?: string; ultimos4?: string; nombre_completo?: string; motivo_rechazo?: string; creado_en?: string };
 
@@ -53,26 +54,33 @@ export default function Verificacion() {
   }
 
   return (
-    <div className="max-w-2xl">
-      <Encabezado titulo="Verificar identidad" detalle="La pedimos una sola vez para que puedas retirar tu dinero. Protege a tus clientes y a ti." />
+    <div className="max-w-3xl space-y-5">
+      <p className="flex items-center gap-1.5 text-sm text-gris">
+        <Link href="/vendedor/cobros" className="hover:text-pino">Mis cobros</Link> <ChevronRight className="size-3.5" /> Identidad
+      </p>
+      <div>
+        <div className="mb-2 h-1 w-8 rounded-full bg-coral" />
+        <h1 className="text-[34px] font-extrabold leading-tight text-pino">Verifica tu identidad</h1>
+        <p className="text-sm text-gris">Necesaria para retirar tu dinero. Así nadie puede usar tu tienda para estafar. Se hace una sola vez.</p>
+      </div>
       {datos.estado === "aprobada" ? (
-        <Tarjeta className="flex items-center gap-4">
-          <CheckCircle2 className="size-10 text-ok" />
+        <div className="flex items-center gap-4 rounded-[22px] bg-white p-6 shadow-suave ring-1 ring-linea/60">
+          <span className="grid size-11 place-items-center rounded-xl bg-pino-claro text-pino"><ShieldCheck className="size-5" /></span>
           <div>
-            <p className="font-semibold">Identidad verificada</p>
+            <p className="font-display text-lg font-extrabold text-tinta">Identidad verificada</p>
             <p className="text-sm text-gris">
-              {datos.nombre_completo} · {datos.tipo_documento?.toUpperCase()} •••• {datos.ultimos4}
+              {datos.nombre_completo} · {datos.tipo_documento?.toUpperCase()} •••• {datos.ultimos4} · desde el {fecha(datos.creado_en)}. Ya puedes retirar tu dinero.
             </p>
           </div>
-        </Tarjeta>
+        </div>
       ) : datos.estado === "pendiente" ? (
-        <Tarjeta className="flex items-center gap-4">
-          <Clock className="size-10 text-aviso" />
+        <div className="flex items-center gap-4 rounded-[22px] bg-white p-6 shadow-suave ring-1 ring-linea/60">
+          <span className="grid size-11 place-items-center rounded-xl bg-aviso-claro text-aviso"><Clock className="size-5" /></span>
           <div>
-            <p className="font-semibold">Estamos revisando tus datos</p>
-            <p className="text-sm text-gris">Enviado el {fecha(datos.creado_en, true)}. Te avisamos en menos de 24 horas.</p>
+            <p className="font-display text-lg font-extrabold text-tinta">Estamos revisando tus datos</p>
+            <p className="text-sm text-gris">Enviado el {fecha(datos.creado_en, true)}. El equipo de VendiGo te avisa en menos de 24 horas.</p>
           </div>
-        </Tarjeta>
+        </div>
       ) : (
         <form onSubmit={enviar} className="space-y-4">
           {datos.estado === "rechazada" && <Aviso tono="error">No pudimos verificar tus datos: {datos.motivo_rechazo}. Inténtalo de nuevo.</Aviso>}

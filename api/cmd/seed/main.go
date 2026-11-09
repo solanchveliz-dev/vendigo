@@ -186,7 +186,16 @@ func historialDemo(ctx context.Context, conexion *sql.DB) {
 	var hay bool
 	conexion.QueryRowContext(ctx, `SELECT id, EXISTS(SELECT 1 FROM pedidos p WHERE p.tienda_id=t.id AND p.creado_en < now() - interval '14 days')
 		FROM tiendas t WHERE slug='luna-y-sol'`).Scan(&tid, &hay)
-	if tid == "" || hay {
+	if tid == "" {
+		return
+	}
+	// Una versión anterior marcaba el historial como retirado sin crear los retiros: se corrige.
+	if res, _ := conexion.ExecContext(ctx, `DELETE FROM movimientos WHERE tienda_id=$1 AND tipo='retiro' AND retiro_id IS NULL AND detalle='Historial de prueba'`, tid); res != nil {
+		if n, _ := res.RowsAffected(); n > 0 {
+			fmt.Println("Se corrigió el historial de prueba: ese dinero ahora figura como disponible para retirar.")
+		}
+	}
+	if hay {
 		return
 	}
 	// unidades por semana (de la más antigua a la actual) para cada producto del catálogo
@@ -257,12 +266,12 @@ func historialDemo(ctx context.Context, conexion *sql.DB) {
 			}
 			conexion.ExecContext(ctx, `INSERT INTO pedido_items (pedido_id, producto_id, nombre, precio_centimos, cantidad) VALUES ($1,$2,$3,$4,$5)`,
 				pid, p.id, p.nombre, p.precio, unidades)
-			// El dinero ya pasó por las tres bolsas: cobrado, liberado y retirado.
+			// El dinero ya se cobró y se liberó: queda disponible para retirar.
 			for _, mv := range []struct {
 				tipo, bolsa string
 				monto       int
 			}{{"cobro", "a_liberar", total}, {"comision_pasarela", "a_liberar", -comision}, {"liberacion", "a_liberar", -neto},
-				{"liberacion", "disponible", neto}, {"retiro", "disponible", -neto}, {"retiro", "retirado", neto}} {
+				{"liberacion", "disponible", neto}} {
 				if mv.monto != 0 {
 					conexion.ExecContext(ctx, `INSERT INTO movimientos (tienda_id, pedido_id, tipo, bolsa, monto_centimos, detalle, creado_en)
 						VALUES ($1,$2,$3,$4,$5,'Historial de prueba', now() - make_interval(days => $6))`, tid, pid, mv.tipo, mv.bolsa, mv.monto, hace)
