@@ -98,6 +98,12 @@ type Tienda struct {
 	TemaColor      string  `json:"tema_color"`
 	TemaFuente     string  `json:"tema_fuente"`
 	Prefijo        string  `json:"prefijo_pedido"`
+	DestacadoID    *string `json:"destacado_id"`
+	Aviso          string  `json:"aviso"`
+	Historia       string  `json:"historia"`
+	HistoriaKey    *string `json:"historia_foto_key"`
+	HistoriaURL    string  `json:"historia_foto_url"`
+	VendeDesde     *int    `json:"vende_desde"`
 }
 
 type Entrega struct {
@@ -132,7 +138,8 @@ func DiasLiberacion(reputacion string) int {
 const columnas = `id, nombre, slug, rubro, descripcion, ciudad, distrito, logo_key, portada_key, instagram, facebook, tiktok, whatsapp,
 	entrega_recojo, direccion_recojo, horario_recojo, entrega_agencia, agencias, entrega_motorizado, costo_motorizado_centimos, zonas_motorizado, reputacion,
 	correo, horario, politicas,
-	instrucciones_recojo, dias_recojo, adelanto_pct, costo_agencia_centimos, entrega_otra, descripcion_otra, pausada, tema_color, tema_fuente, prefijo_pedido`
+	instrucciones_recojo, dias_recojo, adelanto_pct, costo_agencia_centimos, entrega_otra, descripcion_otra, pausada, tema_color, tema_fuente, prefijo_pedido,
+	destacado_id, aviso, historia, historia_foto_key, vende_desde`
 
 func (m *Modulo) leer(ctx context.Context, where string, arg any) (Tienda, error) {
 	var t Tienda
@@ -142,7 +149,8 @@ func (m *Modulo) leer(ctx context.Context, where string, arg any) (Tienda, error
 		&t.Instagram, &t.Facebook, &t.Tiktok, &t.Whatsapp,
 		&e.Recojo, &e.DireccionRecojo, &e.HorarioRecojo, &e.Agencia, pq.Array(&e.Agencias), &e.Motorizado, &e.CostoMotorizado, &e.ZonasMotorizado, &t.Reputacion,
 		&t.Correo, &t.Horario, &t.Politicas,
-		&e.Instrucciones, pq.Array(&e.DiasRecojo), &e.AdelantoPct, &e.CostoAgencia, &e.Otra, &e.DescripcionOtra, &t.Pausada, &t.TemaColor, &t.TemaFuente, &t.Prefijo)
+		&e.Instrucciones, pq.Array(&e.DiasRecojo), &e.AdelantoPct, &e.CostoAgencia, &e.Otra, &e.DescripcionOtra, &t.Pausada, &t.TemaColor, &t.TemaFuente, &t.Prefijo,
+		&t.DestacadoID, &t.Aviso, &t.Historia, &t.HistoriaKey, &t.VendeDesde)
 	if core.SinFilas(err) {
 		return t, httpx.ErrNoEncontrado
 	}
@@ -154,6 +162,9 @@ func (m *Modulo) leer(ctx context.Context, where string, arg any) (Tienda, error
 	}
 	if t.PortadaKey != nil {
 		t.PortadaURL = m.app.Archivos.URLPublica(*t.PortadaKey)
+	}
+	if t.HistoriaKey != nil {
+		t.HistoriaURL = m.app.Archivos.URLPublica(*t.HistoriaKey)
 	}
 	t.DiasLiberacion = DiasLiberacion(t.Reputacion)
 	t.Enlace = m.app.Cfg.WebURL + "/t/" + t.Slug
@@ -490,7 +501,7 @@ func (m *Modulo) catalogos(w http.ResponseWriter, r *http.Request) error {
 
 // ---------- subida de imágenes ----------
 
-var tiposArchivo = map[string]bool{"producto": true, "logo": true, "portada": true, "boleta": false, "dni": false, "reclamo": false}
+var tiposArchivo = map[string]bool{"producto": true, "logo": true, "portada": true, "historia": true, "boleta": false, "dni": false, "reclamo": false}
 var formatos = map[string]string{"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}
 
 const tamanoMaximo = 5 << 20

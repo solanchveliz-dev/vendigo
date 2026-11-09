@@ -2,30 +2,55 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { ArrowLeft, Check, ShoppingBag } from "lucide-react";
+import { ArrowLeft, Camera, Check, ShoppingBag, X } from "lucide-react";
 import { api, ErrorApi, useApi } from "@/lib/api";
 import { FUENTES, TEMAS, estiloTema } from "@/lib/tema";
-import type { Tienda } from "@/lib/tipos";
-import { Boton, Campo, Cargando, Encabezado, Entrada, Tarjeta, cn, useAvisar } from "@/components/ui";
+import type { Producto, Tienda } from "@/lib/tipos";
+import { subirImagen } from "@/lib/subir";
+import { Area, Boton, Campo, Cargando, Encabezado, Entrada, Selector, Tarjeta, cn, useAvisar } from "@/components/ui";
 
 // Personaliza cómo se ve tu tienda: color, letra de los títulos y el código de tus pedidos.
 export default function EstiloTienda() {
   const avisar = useAvisar();
   const { datos: t, recargar } = useApi<Tienda>("/vendedor/tienda");
-  const [f, setF] = useState({ tema_color: "clasico", tema_fuente: "moderna", prefijo_pedido: "" });
+  const productos = useApi<{ productos: Producto[] }>("/vendedor/productos?filtro=activos");
+  const desdeTienda = (x: Tienda) => ({
+    tema_color: x.tema_color, tema_fuente: x.tema_fuente, prefijo_pedido: x.prefijo_pedido,
+    destacado_id: x.destacado_id ?? "", aviso: x.aviso, historia: x.historia,
+    historia_foto_key: x.historia_foto_key ?? "", historia_foto_url: x.historia_foto_url, vende_desde: x.vende_desde ? String(x.vende_desde) : "",
+  });
+  const [f, setF] = useState({ tema_color: "clasico", tema_fuente: "moderna", prefijo_pedido: "", destacado_id: "", aviso: "", historia: "", historia_foto_key: "", historia_foto_url: "", vende_desde: "" });
   const [guardando, setGuardando] = useState(false);
+  const [subiendo, setSubiendo] = useState(false);
   useEffect(() => {
-    if (t) setF({ tema_color: t.tema_color, tema_fuente: t.tema_fuente, prefijo_pedido: t.prefijo_pedido });
+    if (t) setF(desdeTienda(t));
   }, [t]);
   if (!t) return <Cargando />;
 
   const prefijo = f.prefijo_pedido.toUpperCase().replace(/[^A-Z]/g, "").slice(0, 6);
-  const cambiado = f.tema_color !== t.tema_color || f.tema_fuente !== t.tema_fuente || prefijo !== t.prefijo_pedido;
+  const cambiado = JSON.stringify({ ...f, prefijo_pedido: prefijo }) !== JSON.stringify(desdeTienda(t));
+
+  async function subirFoto(archivo?: File) {
+    if (!archivo) return;
+    setSubiendo(true);
+    try {
+      const r = await subirImagen(archivo, "historia");
+      setF((x) => ({ ...x, historia_foto_key: r.key, historia_foto_url: r.url }));
+    } catch (e) {
+      avisar((e as Error).message, "error");
+    } finally {
+      setSubiendo(false);
+    }
+  }
 
   async function guardar() {
     setGuardando(true);
     try {
-      await api.put("/vendedor/tienda/estilo", { ...f, prefijo_pedido: prefijo });
+      await api.put("/vendedor/tienda/estilo", {
+        tema_color: f.tema_color, tema_fuente: f.tema_fuente, prefijo_pedido: prefijo,
+        destacado_id: f.destacado_id || null, aviso: f.aviso, historia: f.historia,
+        historia_foto_key: f.historia_foto_key || null, vende_desde: f.vende_desde ? Number(f.vende_desde) : null,
+      });
       avisar("Estilo guardado. Tu tienda ya se ve así.");
       recargar();
     } catch (e) {
@@ -82,6 +107,47 @@ export default function EstiloTienda() {
                 </button>
               ))}
             </div>
+          </Tarjeta>
+
+          <Tarjeta className="space-y-3">
+            <h3 className="text-lg font-extrabold text-tinta">Producto destacado</h3>
+            <Campo etiqueta="¿Qué producto quieres mostrar en grande?" ayuda="Si no eliges, mostramos el más vendido (o el más nuevo si aún no tienes ventas).">
+              <Selector value={f.destacado_id} onChange={(e) => setF({ ...f, destacado_id: e.target.value })}>
+                <option value="">Automático</option>
+                {(productos.datos?.productos ?? []).map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+              </Selector>
+            </Campo>
+          </Tarjeta>
+
+          <Tarjeta className="space-y-3">
+            <h3 className="text-lg font-extrabold text-tinta">Aviso de tu tienda <span className="text-sm font-normal text-gris">(opcional)</span></h3>
+            <Campo etiqueta="Un mensaje corto arriba de tu tienda" ayuda="Ej. “Envío gratis este fin de semana” o “Volvemos el lunes”. Déjalo vacío para no mostrar nada.">
+              <Entrada value={f.aviso} onChange={(e) => setF({ ...f, aviso: e.target.value })} maxLength={90} placeholder="Escribe tu aviso" />
+            </Campo>
+          </Tarjeta>
+
+          <Tarjeta className="space-y-4">
+            <h3 className="text-lg font-extrabold text-tinta">Conoce a la emprendedora <span className="text-sm font-normal text-gris">(opcional)</span></h3>
+            <p className="-mt-2 text-sm text-gris">A tus clientes les da confianza saber quién está detrás. Si no escribes nada, esta sección no aparece.</p>
+            <div className="flex items-start gap-4">
+              <label className="relative grid size-24 shrink-0 cursor-pointer place-items-center overflow-hidden rounded-2xl bg-crema text-gris ring-1 ring-linea">
+                {f.historia_foto_url ? <img src={f.historia_foto_url} alt="" className="size-full object-cover" /> : <Camera className="size-6" />}
+                <input type="file" accept="image/*" className="hidden" onChange={(e) => subirFoto(e.target.files?.[0])} />
+                {subiendo && <span className="absolute inset-0 grid place-items-center bg-white/70 text-xs font-bold text-tinta">Subiendo…</span>}
+              </label>
+              <div className="min-w-0 flex-1 space-y-2 text-sm text-gris">
+                <p>Tu foto o la de tu taller. Toca el cuadro para subirla.</p>
+                {f.historia_foto_url && (
+                  <button onClick={() => setF({ ...f, historia_foto_key: "", historia_foto_url: "" })} className="inline-flex items-center gap-1 font-semibold text-error"><X className="size-4" /> Quitar foto</button>
+                )}
+              </div>
+            </div>
+            <Campo etiqueta="Tu historia" ayuda="Cuenta en pocas líneas cómo empezaste y qué hace especial lo que vendes.">
+              <Area value={f.historia} onChange={(e) => setF({ ...f, historia: e.target.value })} maxLength={500} rows={4} placeholder="Ej. Empecé haciendo aretes para mis amigas y hoy cada pieza la hago a mano en mi taller de Miraflores." />
+            </Campo>
+            <Campo etiqueta="Vendo desde (año)">
+              <Entrada inputMode="numeric" value={f.vende_desde} onChange={(e) => setF({ ...f, vende_desde: e.target.value.replace(/\D/g, "").slice(0, 4) })} placeholder="Ej. 2021" className="max-w-40" />
+            </Campo>
           </Tarjeta>
 
           <Tarjeta className="space-y-3">

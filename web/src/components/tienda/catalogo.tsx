@@ -7,16 +7,23 @@ import Link from "next/link";
 
 type Filtro = "todos" | "nuevo" | "vendidos";
 
-// Productos de la tienda con filtros: Todos, Lo nuevo y Más vendidos.
+// Productos de la tienda con filtros: Todos, Lo nuevo y Más vendidos, y las categorías propias de la tienda.
 export function Catalogo({ productos, slug }: { productos: Producto[]; slug: string }) {
   const [filtro, setFiltro] = useState<Filtro>("todos");
+  const [categoria, setCategoria] = useState("");
+  // Las categorías salen del tipo de cada producto (Aretes, Collares…). Solo se muestran si hay 2 o más.
+  const categorias = useMemo(() => {
+    const c = new Map<string, number>();
+    productos.forEach((p) => p.categoria && c.set(p.categoria, (c.get(p.categoria) ?? 0) + 1));
+    return [...c.entries()].sort((a, b) => b[1] - a[1]);
+  }, [productos]);
 
   const lista = useMemo(() => {
-    const copia = [...productos];
+    const copia = productos.filter((p) => !categoria || p.categoria === categoria);
     if (filtro === "nuevo") return copia.sort((a, b) => b.creado_en.localeCompare(a.creado_en)).slice(0, 8);
     if (filtro === "vendidos") return copia.filter((p) => p.vendidos > 0).sort((a, b) => b.vendidos - a.vendidos).slice(0, 8);
     return copia;
-  }, [productos, filtro]);
+  }, [productos, filtro, categoria]);
 
   const boton = (k: Filtro, texto: string) => (
     <button
@@ -38,6 +45,20 @@ export function Catalogo({ productos, slug }: { productos: Producto[]; slug: str
           {boton("vendidos", "Más vendidos")}
         </div>
       </div>
+
+      {categorias.length >= 2 && (
+        <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
+          {[["", productos.length] as [string, number], ...categorias].map(([c, n]) => (
+            <button
+              key={c || "todas"}
+              onClick={() => setCategoria(c)}
+              className={`shrink-0 rounded-full px-3.5 py-1.5 text-sm font-semibold transition ${categoria === c ? "bg-coral text-white" : "bg-white/70 text-tinta ring-1 ring-linea hover:bg-arena/60"}`}
+            >
+              {c || "Todas las categorías"} <span className="opacity-70">({n})</span>
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
         {lista.map((p) => (

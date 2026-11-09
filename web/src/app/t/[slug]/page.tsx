@@ -2,7 +2,7 @@ import { estiloTema } from "@/lib/tema";
 import type { Metadata } from "next";
 import { ContarVisita } from "@/components/tienda/contar-visita";
 import { notFound } from "next/navigation";
-import { Bike, Clock, MapPin, MessageCircle, Package, RefreshCw, ShieldCheck, Star, Store } from "lucide-react";
+import { Bike, Clock, MapPin, Megaphone, MessageCircle, Package, RefreshCw, ShieldCheck, Star, Store } from "lucide-react";
 import { API_URL } from "@/lib/servidor/sesion";
 import { soles } from "@/lib/formato";
 import { rubros } from "@/lib/catalogos";
@@ -53,7 +53,8 @@ export default async function TiendaPublica({ params, searchParams }: { params: 
   const ventas = productos.reduce((s, p) => s + (p.vendidos || 0), 0);
   const nuevo = [...productos].sort((a, b) => b.creado_en.localeCompare(a.creado_en))[0];
   const masVendido = [...productos].filter((p) => p.vendidos > 0).sort((a, b) => b.vendidos - a.vendidos)[0];
-  const destacado = masVendido ?? nuevo;
+  const elegido = t.destacado_id ? productos.find((p) => p.id === t.destacado_id) : undefined;
+  const destacado = elegido ?? masVendido ?? nuevo;
   const lugar = t.distrito || t.ciudad;
   const redes = [
     { nombre: "Instagram", href: enlaceRed("instagram", t.instagram), icono: <IconoInstagram className="size-[19px]" /> },
@@ -70,6 +71,11 @@ export default async function TiendaPublica({ params, searchParams }: { params: 
           <div className="mt-5 flex items-center gap-3 rounded-2xl bg-arena px-5 py-3 text-sm text-tinta ring-1 ring-linea">
             <Clock className="size-5 shrink-0" />
             <span><b>Tienda en pausa.</b> Por ahora no está recibiendo pedidos. Puedes ver sus productos y volver pronto.</span>
+          </div>
+        )}
+        {t.aviso && !t.pausada && (
+          <div className="mt-5 flex items-center justify-center gap-2 rounded-2xl bg-pino px-5 py-3 text-center text-sm font-semibold text-white">
+            <Megaphone className="size-4 shrink-0 text-coral" /> {t.aviso}
           </div>
         )}
         {/* Portada */}
@@ -134,12 +140,29 @@ export default async function TiendaPublica({ params, searchParams }: { params: 
             <Destacado
               producto={destacado}
               slug={t.slug}
-              etiqueta={masVendido ? "Destacado" : "Lo nuevo"}
-              texto={masVendido ? `El más pedido de ${t.nombre}` : `Lo último de ${t.nombre}`}
+              etiqueta={elegido || masVendido ? "Destacado" : "Lo nuevo"}
+              texto={elegido ? `Elegido por ${t.nombre}` : masVendido ? `El más pedido de ${t.nombre}` : `Lo último de ${t.nombre}`}
             />
           )}
 
           <Catalogo productos={productos} slug={t.slug} />
+
+          {/* Conoce a la emprendedora (opcional) */}
+          {t.historia && (
+            <section className="mt-12 grid items-center gap-6 overflow-hidden rounded-[26px] bg-white p-6 ring-1 ring-linea/50 sm:grid-cols-[220px_1fr] sm:p-8">
+              {t.historia_foto_url ? (
+                <img src={t.historia_foto_url} alt={`Quien está detrás de ${t.nombre}`} className="aspect-square w-full max-w-[220px] rounded-2xl object-cover" />
+              ) : (
+                <span className="grid aspect-square w-full max-w-[220px] place-items-center rounded-2xl bg-pino-claro font-display text-6xl font-extrabold text-pino">{t.nombre[0]}</span>
+              )}
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.18em] text-coral">Conoce a la emprendedora</p>
+                <h2 className="mt-2 text-2xl font-extrabold text-tinta">La historia detrás de {t.nombre}</h2>
+                <p className="mt-3 whitespace-pre-line text-[15px] leading-relaxed text-tinta/85">{t.historia}</p>
+                {t.vende_desde && <p className="mt-4 text-sm font-semibold text-pino">Vendiendo desde {t.vende_desde}</p>}
+              </div>
+            </section>
+          )}
 
           {/* Envíos y opiniones */}
           <div className="mt-12 grid gap-4 lg:grid-cols-2">

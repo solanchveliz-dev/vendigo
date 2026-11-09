@@ -44,6 +44,12 @@ export type Tienda = {
   tema_color: string;
   tema_fuente: string;
   prefijo_pedido: string;
+  destacado_id: string | null;
+  aviso: string;
+  historia: string;
+  historia_foto_key: string | null;
+  historia_foto_url: string;
+  vende_desde: number | null;
 };
 
 export type Variante = { id?: string; nombre: string; stock: number; precio_centimos: number | null };
