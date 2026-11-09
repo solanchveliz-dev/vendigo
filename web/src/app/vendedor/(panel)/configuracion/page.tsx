@@ -6,6 +6,7 @@ import { CheckCircle2, Eye, EyeOff, Info, XCircle } from "lucide-react";
 import { api, ErrorApi, sesion, useApi } from "@/lib/api";
 import type { Usuario } from "@/lib/tipos";
 import { MedidorClave, claveValida } from "@/components/medidor-clave";
+import { DosPasos } from "@/components/dos-pasos";
 import { Boton, Campo, Cargando, Entrada, Modal, cn, useAvisar } from "@/components/ui";
 
 type Ajustes = { ruc: string; pausada: boolean; avisos: { pedidos: boolean; consultas: boolean; inventario: boolean } };
@@ -180,6 +181,7 @@ function Seguridad() {
       <Fila titulo="Contraseña" detalle={`Cambiada ${haceCuanto(datos.password_cambiado_en)}`}>
         <Boton variante="secundario" tamano="sm" onClick={() => { setError(""); setModal(true); }}>Cambiar</Boton>
       </Fila>
+      <DosPasos Fila={Fila} />
       <Fila
         titulo="Equipos con tu cuenta abierta"
         detalle={otras ? `Este y ${otras} ${otras === 1 ? "equipo más" : "equipos más"}. Si no reconoces alguno, ciérralos.` : "Solo este equipo."}

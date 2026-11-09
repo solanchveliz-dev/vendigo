@@ -34,7 +34,7 @@ export default function DetalleRetiro({ params }: { params: Promise<{ id: string
         <div className="mb-2 h-1 w-8 rounded-full bg-coral" />
         <h1 className="text-[34px] font-extrabold leading-tight text-pino">Retiro del {fecha.toLocaleDateString("es-PE", { day: "numeric", month: "short" }).replace(".", "")}</h1>
         <p className="text-sm text-gris">
-          {r.banco} •••• {r.ultimos4} · {fecha.toLocaleTimeString("es-PE", { hour: "numeric", minute: "2-digit" })} {d.operacion ? ` · operación ${d.operacion}` : ""} · {r.estado === "pagado" ? "depositado" : r.estado === "rechazado" ? `rechazado: ${d.motivo_rechazo}. El dinero volvió a tu saldo disponible` : "en proceso, llega en 1 día hábil"}
+          {r.banco} •••• {r.ultimos4} · {fecha.toLocaleTimeString("es-PE", { hour: "numeric", minute: "2-digit" })} {d.operacion ? ` · operación ${d.operacion}` : ""} · {r.estado === "pagado" ? "depositado" : r.estado === "rechazado" ? `rechazado: ${d.motivo_rechazo}. El dinero volvió a tu saldo disponible` : "en proceso, llega en hasta 2 días hábiles"}
         </p>
       </div>
 
@@ -47,7 +47,7 @@ export default function DetalleRetiro({ params }: { params: Promise<{ id: string
             <div className="flex justify-between"><span className="text-gris">Comisión de VendiGo</span><span>{soles(0)}</span></div>
             <div className="flex justify-between border-t border-linea pt-2 font-bold"><span>Te depositamos</span><span>{soles(r.monto_centimos)}</span></div>
           </div>
-          <p className="mt-3 flex gap-1.5 text-xs text-gris"><Info className="mt-0.5 size-3.5 shrink-0" /> Con transferencia interbancaria (CCI) puede tardar hasta 1 día hábil en verse en tu banco.</p>
+          <p className="mt-3 flex gap-1.5 text-xs text-gris"><Info className="mt-0.5 size-3.5 shrink-0" /> Con transferencia interbancaria (CCI) puede tardar hasta 2 días hábiles en verse en tu banco.</p>
         </section>
 
         <section className="rounded-[22px] bg-white p-6 shadow-suave ring-1 ring-linea/60">

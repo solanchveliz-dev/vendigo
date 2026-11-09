@@ -31,6 +31,7 @@ func (m *Modulo) RutasPublicas(r chi.Router) {
 	r.Method("POST", "/verificar", httpx.Handler(m.verificar))
 	r.Method("POST", "/reenviar", httpx.Handler(m.reenviar))
 	r.Method("POST", "/login", httpx.Handler(m.login))
+	r.Method("POST", "/mfa", httpx.Handler(m.mfa))
 	r.Method("POST", "/refresh", httpx.Handler(m.refresh))
 	r.Method("POST", "/logout", httpx.Handler(m.logout))
 	r.Method("POST", "/recuperar", httpx.Handler(m.recuperar))
@@ -45,6 +46,11 @@ func (m *Modulo) RutasPrivadas(r chi.Router) {
 	r.Method("POST", "/me/cerrar-sesiones", httpx.Handler(m.cerrarSesiones))
 	r.Method("GET", "/me/sesiones", httpx.Handler(m.sesiones))
 	r.Method("GET", "/me/accesos", httpx.Handler(m.accesos))
+	r.Method("GET", "/me/mfa", httpx.Handler(m.estadoMFA))
+	r.Method("POST", "/me/mfa/iniciar", httpx.Handler(m.iniciarMFA))
+	r.Method("POST", "/me/mfa/activar", httpx.Handler(m.activarMFA))
+	r.Method("POST", "/me/mfa/desactivar", httpx.Handler(m.desactivarMFA))
+	r.Method("POST", "/me/confirmar", httpx.Handler(m.pedirConfirmacion))
 }
 
 var (
@@ -73,10 +79,11 @@ type Usuario struct {
 }
 
 type sesion struct {
-	AccessToken  string  `json:"access_token"`
-	RefreshToken string  `json:"refresh_token"`
-	ExpiraEn     int64   `json:"expira_en"`
-	Usuario      Usuario `json:"usuario"`
+	CodigosRespaldo []string `json:"codigos_respaldo,omitempty"`
+	AccessToken     string   `json:"access_token"`
+	RefreshToken    string   `json:"refresh_token"`
+	ExpiraEn        int64    `json:"expira_en"`
+	Usuario         Usuario  `json:"usuario"`
 }
 
 // ---------- registro y código OTP ----------
@@ -147,7 +154,7 @@ func (m *Modulo) registro(w http.ResponseWriter, r *http.Request) error {
 	return m.enviarOTP(w, r, in.Celular, "registro")
 }
 
-func (m *Modulo) enviarOTP(w http.ResponseWriter, r *http.Request, celular, proposito string) error {
+func (m *Modulo) enviarOTP(w http.ResponseWriter, r *http.Request, celular, proposito string, extra ...map[string]any) error {
 	ctx := r.Context()
 	var ultimo time.Time
 	err := m.app.DB.QueryRowContext(ctx, `SELECT creado_en FROM codigos_otp WHERE celular=$1 AND proposito=$2 ORDER BY creado_en DESC LIMIT 1`,
@@ -167,6 +174,11 @@ func (m *Modulo) enviarOTP(w http.ResponseWriter, r *http.Request, celular, prop
 		return err
 	}
 	resp := map[string]any{"mensaje": "Te enviamos un código de 6 dígitos.", "celular": celular}
+	for _, e := range extra {
+		for k, v := range e {
+			resp[k] = v
+		}
+	}
 	if m.app.Cfg.EsDev() {
 		resp["codigo_dev"] = codigo
 	}
@@ -271,8 +283,10 @@ func (m *Modulo) login(w http.ResponseWriter, r *http.Request) error {
 	var id, hash, celular string
 	var verificado, activo bool
 	var bloqueado *time.Time
-	err := m.app.DB.QueryRowContext(ctx, `SELECT id, password_hash, celular, celular_verificado, activo, bloqueado_hasta FROM usuarios
-		WHERE celular=$1 OR email=$1`, u).Scan(&id, &hash, &celular, &verificado, &activo, &bloqueado)
+	var rol string
+	var totpActivo bool
+	err := m.app.DB.QueryRowContext(ctx, `SELECT id, password_hash, celular, celular_verificado, activo, bloqueado_hasta, rol, totp_activo FROM usuarios
+		WHERE celular=$1 OR email=$1`, u).Scan(&id, &hash, &celular, &verificado, &activo, &bloqueado, &rol, &totpActivo)
 	if core.SinFilas(err) {
 		return httpx.NuevoError(http.StatusUnauthorized, "credenciales", "El celular o la contraseña no son correctos.")
 	}
@@ -310,33 +324,52 @@ func (m *Modulo) login(w http.ResponseWriter, r *http.Request) error {
 		return httpx.NuevoError(http.StatusForbidden, "celular_no_verificado", "Primero verifica tu celular con el código que te enviamos.")
 	}
 	m.app.DB.ExecContext(ctx, `UPDATE usuarios SET intentos_fallidos=0, bloqueado_hasta=NULL WHERE id=$1`, id)
+	if rol == "admin" {
+		// Los administradores entran con su correo de la empresa y siempre con el código de su app.
+		if !strings.Contains(u, "@") {
+			m.registrarAcceso(r, id, false, "admin intentó entrar con celular")
+			return httpx.NuevoError(http.StatusForbidden, "admin_con_correo", "Las cuentas de administrador ingresan con su correo de la empresa.")
+		}
+		return m.desafioMFA(w, r, id)
+	}
+	if totpActivo {
+		// Vendedora que activó la verificación en dos pasos.
+		return m.desafioMFA(w, r, id)
+	}
 	m.avisarEquipoNuevo(r, id)
 	m.registrarAcceso(r, id, true, "")
 	return m.responderSesion(w, r, id)
 }
 
 func (m *Modulo) responderSesion(w http.ResponseWriter, r *http.Request, usuarioID string) error {
-	ctx := r.Context()
-	u, err := m.cargarUsuario(ctx, usuarioID)
+	s, err := m.crearSesion(r.Context(), usuarioID)
 	if err != nil {
 		return err
 	}
+	httpx.OK(w, s)
+	return nil
+}
+
+func (m *Modulo) crearSesion(ctx context.Context, usuarioID string) (sesion, error) {
+	u, err := m.cargarUsuario(ctx, usuarioID)
+	if err != nil {
+		return sesion{}, err
+	}
 	acceso, err := seguridad.FirmarAcceso(m.app.Cfg.JWTSecreto, u.ID, u.Rol, m.app.Cfg.AccesoDuracion)
 	if err != nil {
-		return err
+		return sesion{}, err
 	}
 	refresh := seguridad.TokenAleatorio()
 	if _, err := m.app.DB.ExecContext(ctx, `INSERT INTO refresh_tokens (usuario_id, token_hash, expira_en) VALUES ($1,$2,$3)`,
 		u.ID, seguridad.HashSHA256(refresh), time.Now().AddDate(0, 0, m.app.Cfg.RefreshDias)); err != nil {
-		return err
+		return sesion{}, err
 	}
-	httpx.OK(w, sesion{
+	return sesion{
 		AccessToken:  acceso,
 		RefreshToken: refresh,
 		ExpiraEn:     time.Now().Add(m.app.Cfg.AccesoDuracion).Unix(),
 		Usuario:      u,
-	})
-	return nil
+	}, nil
 }
 
 func (m *Modulo) cargarUsuario(ctx context.Context, id string) (Usuario, error) {
@@ -362,9 +395,10 @@ func (m *Modulo) refresh(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	var uid string
+	var creado time.Time
 	err := m.app.DB.QueryRowContext(r.Context(), `UPDATE refresh_tokens SET revocado=true
-		WHERE token_hash=$1 AND NOT revocado AND expira_en > now() RETURNING usuario_id`,
-		seguridad.HashSHA256(in.RefreshToken)).Scan(&uid)
+		WHERE token_hash=$1 AND NOT revocado AND expira_en > now() RETURNING usuario_id, creado_en`,
+		seguridad.HashSHA256(in.RefreshToken)).Scan(&uid, &creado)
 	if core.SinFilas(err) {
 		return httpx.ErrNoAutorizado
 	}
@@ -372,7 +406,12 @@ func (m *Modulo) refresh(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	var activo bool
-	m.app.DB.QueryRowContext(r.Context(), `SELECT activo FROM usuarios WHERE id=$1`, uid).Scan(&activo)
+	var rol string
+	m.app.DB.QueryRowContext(r.Context(), `SELECT activo, rol FROM usuarios WHERE id=$1`, uid).Scan(&activo, &rol)
+	// Las sesiones de administrador se cierran tras 30 minutos sin uso.
+	if rol == "admin" && time.Since(creado) > inactividadAdmin {
+		return httpx.NuevoError(http.StatusUnauthorized, "sesion_inactiva", "Cerramos tu sesión por inactividad. Vuelve a ingresar.")
+	}
 	if !activo {
 		return httpx.NuevoError(http.StatusForbidden, "cuenta_suspendida", "Tu cuenta está suspendida. Escríbenos a ayuda@vendigo.pe.")
 	}

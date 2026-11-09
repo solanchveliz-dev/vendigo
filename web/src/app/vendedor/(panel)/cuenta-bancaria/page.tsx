@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { ConfirmarIdentidad } from "@/components/confirmar-identidad";
 import { useEffect, useState } from "react";
 import { Check, ChevronRight, Landmark, Lock, ShieldCheck, Wallet } from "lucide-react";
 import { api, ErrorApi, useApi } from "@/lib/api";
@@ -17,6 +18,7 @@ export default function CuentaBancaria() {
   const [f, setF] = useState({ banco: "BCP", titular: "", tipo: "ahorros", numero: "", cci: "" });
   const [error, setError] = useState("");
   const [guardando, setGuardando] = useState(false);
+  const [confirmar, setConfirmar] = useState(false);
 
   useEffect(() => {
     if (datos && !datos.cuenta) setEditar(true);
@@ -30,12 +32,36 @@ export default function CuentaBancaria() {
     setError("");
     setGuardando(true);
     try {
+      // La API revisa primero los datos; si están bien, pide confirmar con un código (app o SMS).
       setDatos(await api.put("/vendedor/cuenta-bancaria", f));
+      setEditar(false);
+      avisar("Cuenta guardada.");
+    } catch (err) {
+      const x = err as ErrorApi;
+      if (x.codigo === "confirmacion_requerida") setConfirmar(true);
+      else setError(x.message);
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  async function guardarConCodigo(codigo: string) {
+    setGuardando(true);
+    try {
+      setDatos(await api.put("/vendedor/cuenta-bancaria", { ...f, codigo }));
+      setConfirmar(false);
       setEditar(false);
       setF({ ...f, numero: "", cci: "" });
       avisar("Cuenta guardada.");
     } catch (err) {
-      setError((err as ErrorApi).message);
+      const x = err as ErrorApi;
+      // Si el error es de los datos (no del código), se cierra la confirmación y se muestra en el formulario.
+      if (x.codigo === "datos_invalidos" && !/c[oó]digo/i.test(x.message)) {
+        setConfirmar(false);
+        setError(x.message);
+        return;
+      }
+      throw err;
     } finally {
       setGuardando(false);
     }
@@ -146,6 +172,7 @@ export default function CuentaBancaria() {
           ))}
         </section>
       </div>
+      <ConfirmarIdentidad abierto={confirmar} onCerrar={() => setConfirmar(false)} accion="guardar tu cuenta bancaria" onConfirmar={guardarConCodigo} />
     </div>
   );
 }

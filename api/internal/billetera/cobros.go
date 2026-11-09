@@ -1,6 +1,7 @@
 package billetera
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"net/http"
@@ -16,7 +17,11 @@ import (
 	"github.com/solanchveliz-dev/vendigo/api/internal/tiendas"
 )
 
-type Modulo struct{ app *core.App }
+type Modulo struct {
+	app *core.App
+	// Confirmar pide el código de la app o de un SMS antes de mover dinero o cambiar la cuenta bancaria.
+	Confirmar func(ctx context.Context, usuarioID, codigo string) error
+}
 
 func Nuevo(app *core.App) *Modulo { return &Modulo{app: app} }
 
@@ -177,6 +182,17 @@ func (m *Modulo) retirar(w http.ResponseWriter, r *http.Request) error {
 	if m.estadoVerificacion(r, tid) != "aprobada" {
 		return httpx.Conflicto("sin_verificacion", "Para retirar primero verifica tu identidad.")
 	}
+	var in struct {
+		Codigo string `json:"codigo"`
+	}
+	if r.ContentLength > 0 {
+		if err := httpx.Leer(r, &in); err != nil {
+			return err
+		}
+	}
+	if err := m.confirmar(ctx, in.Codigo); err != nil {
+		return err
+	}
 	var id string
 	err = m.app.EnTransaccion(ctx, func(tx *sql.Tx) error {
 		// Bloquea la tienda para que dos retiros a la vez no usen el mismo saldo.
@@ -217,7 +233,7 @@ func (m *Modulo) retirar(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	httpx.JSON(w, http.StatusCreated, map[string]any{"id": id, "mensaje": "Listo. El dinero llega a tu cuenta en 1 día hábil."})
+	httpx.JSON(w, http.StatusCreated, map[string]any{"id": id, "mensaje": "Listo. El dinero llega a tu cuenta en hasta 2 días hábiles."})
 	return nil
 }
 
@@ -304,6 +320,7 @@ func (m *Modulo) guardarCuenta(w http.ResponseWriter, r *http.Request) error {
 		Tipo    string `json:"tipo"`
 		Numero  string `json:"numero"`
 		CCI     string `json:"cci"`
+		Codigo  string `json:"codigo"`
 	}
 	if err := httpx.Leer(r, &in); err != nil {
 		return err
@@ -325,6 +342,10 @@ func (m *Modulo) guardarCuenta(w http.ResponseWriter, r *http.Request) error {
 	if !reCCI.MatchString(in.CCI) {
 		return httpx.Invalido("El CCI tiene 20 dígitos.")
 	}
+	// Cambiar a dónde llega el dinero es delicado: se confirma con un código.
+	if err := m.confirmar(ctx, in.Codigo); err != nil {
+		return err
+	}
 	num, err := m.app.Cifrador.Cifrar(in.Numero)
 	if err != nil {
 		return err
@@ -341,6 +362,7 @@ func (m *Modulo) guardarCuenta(w http.ResponseWriter, r *http.Request) error {
 	}
 	u, _ := httpx.UsuarioDe(ctx)
 	m.app.Auditar(ctx, m.app.DB, u.ID, "cuenta_bancaria", "tienda", tid, map[string]string{"banco": in.Banco, "ultimos4": u4})
+	Notificar(ctx, m.app.DB, tid, "Se guardó tu cuenta bancaria", "Tus retiros llegarán a "+in.Banco+" •••• "+u4+". Si no fuiste tú, escríbenos de inmediato.", "/vendedor/cuenta-bancaria")
 	return m.cuenta(w, r)
 }
 
@@ -433,4 +455,12 @@ func (m *Modulo) enviarVerificacion(w http.ResponseWriter, r *http.Request) erro
 	u, _ := httpx.UsuarioDe(ctx)
 	m.app.Auditar(ctx, m.app.DB, u.ID, "enviar_verificacion", "tienda", tid, nil)
 	return m.verificacion(w, r)
+}
+
+func (m *Modulo) confirmar(ctx context.Context, codigo string) error {
+	if m.Confirmar == nil {
+		return nil
+	}
+	u, _ := httpx.UsuarioDe(ctx)
+	return m.Confirmar(ctx, u.ID, codigo)
 }

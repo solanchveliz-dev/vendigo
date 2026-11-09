@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { ConfirmarIdentidad } from "@/components/confirmar-identidad";
 import { useState } from "react";
 import { Check, Clock, Flag, Info, Landmark, Lock, ReceiptText, ShieldCheck, Star, Wallet } from "lucide-react";
 import { api, ErrorApi, useApi } from "@/lib/api";
@@ -58,7 +59,8 @@ export default function MisCobros() {
   const { recargarResumen } = usePanel();
   const avisar = useAvisar();
   const [retirar, setRetirar] = useState(false);
-  const [enviando, setEnviando] = useState(false);
+  const [enviando] = useState(false);
+  const [confirmarCodigo, setConfirmarCodigo] = useState(false);
   const [verTodo, setVerTodo] = useState(false);
 
   if (!c) return <Cargando />;
@@ -67,19 +69,18 @@ export default function MisCobros() {
   const poco = c.saldos.disponible_centimos < c.retiro_minimo_centimos;
   const liberados = verTodo ? c.liberados : c.liberados.slice(0, 6);
 
-  async function confirmarRetiro() {
-    setEnviando(true);
-    try {
-      const r = await api.post<{ mensaje: string }>("/vendedor/retiros", {});
-      avisar(r.mensaje);
-      setRetirar(false);
-      recargar();
-      recargarResumen();
-    } catch (e) {
-      avisar((e as ErrorApi).message, "error");
-    } finally {
-      setEnviando(false);
-    }
+  // Primero el resumen del retiro; luego se confirma con un código (app o SMS).
+  function confirmarRetiro() {
+    setRetirar(false);
+    setConfirmarCodigo(true);
+  }
+
+  async function retirarConCodigo(codigo: string) {
+    const r = await api.post<{ mensaje: string }>("/vendedor/retiros", { codigo });
+    avisar(r.mensaje);
+    setConfirmarCodigo(false);
+    recargar();
+    recargarResumen();
   }
 
   return (
@@ -227,7 +228,7 @@ export default function MisCobros() {
                   <span className="grid size-10 place-items-center rounded-xl bg-crema text-tinta"><ReceiptText className="size-4" /></span>
                   <span className="flex-1 text-sm">
                     <b className="block text-tinta">{dia(r.creado_en)}</b>
-                    <span className="text-xs text-gris">{r.pedidos} {r.pedidos === 1 ? "pedido" : "pedidos"} · {r.estado === "pagado" ? "depositado" : r.estado === "rechazado" ? "rechazado, volvió a tu saldo" : "en proceso, llega en 1 día hábil"} · ver detalle</span>
+                    <span className="text-xs text-gris">{r.pedidos} {r.pedidos === 1 ? "pedido" : "pedidos"} · {r.estado === "pagado" ? "depositado" : r.estado === "rechazado" ? "rechazado, volvió a tu saldo" : "en proceso, llega en hasta 2 días hábiles"} · ver detalle</span>
                   </span>
                   <span className="text-right">
                     <span className="block text-[10px] font-semibold uppercase tracking-wide text-gris">Retiraste</span>
@@ -264,11 +265,12 @@ export default function MisCobros() {
               <p className="font-display text-3xl font-extrabold text-pino">{soles(c.saldos.disponible_centimos)}</p>
               <p className="text-sm text-gris">en {c.cuenta}</p>
             </div>
-            <p className="text-xs text-gris">Retiras todo lo disponible ({c.liberados.length} {c.liberados.length === 1 ? "pago" : "pagos"}). Llega en 1 día hábil. VendiGo no cobra por retirar.</p>
+            <p className="text-xs text-gris">Retiras todo lo disponible ({c.liberados.length} {c.liberados.length === 1 ? "pago" : "pagos"}). Llega en hasta 2 días hábiles. VendiGo no cobra por retirar.</p>
             <Boton bloque variante="acento" cargando={enviando} onClick={confirmarRetiro}>Confirmar retiro</Boton>
           </div>
         )}
       </Modal>
+      <ConfirmarIdentidad abierto={confirmarCodigo} onCerrar={() => setConfirmarCodigo(false)} accion="retirar tu dinero" onConfirmar={retirarConCodigo} />
     </div>
   );
 }

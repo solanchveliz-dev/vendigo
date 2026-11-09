@@ -42,6 +42,7 @@ func registrarModulos(app *core.App, api chi.Router) {
 
 	mAuth.TiendaDe = mTiendas.DeUsuario
 	mPedidos.ValidarCupo = mPlanes.ValidarCupo
+	mBilletera.Confirmar = mAuth.ConfirmarPaso
 
 	// Públicas
 	api.Route("/auth", mAuth.RutasPublicas)
