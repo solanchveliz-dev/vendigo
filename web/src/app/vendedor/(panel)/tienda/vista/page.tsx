@@ -15,7 +15,7 @@ export default function VistaTienda() {
   return (
     <div>
       <Encabezado titulo="Así verá tu tienda un comprador" detalle="Esta es una vista previa. Los botones de compra no funcionan aquí.">
-        <Link href="/vendedor/tienda/perfil">
+        <Link href="/vendedor/tienda">
           <Boton variante="secundario"><Pencil className="size-4" /> Editar tienda</Boton>
         </Link>
         <Link href="/vendedor/tienda/compartir">

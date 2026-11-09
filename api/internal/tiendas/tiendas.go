@@ -82,6 +82,9 @@ type Tienda struct {
 	Facebook       string  `json:"facebook"`
 	Tiktok         string  `json:"tiktok"`
 	Whatsapp       string  `json:"whatsapp"`
+	Correo         string  `json:"correo"`
+	Horario        string  `json:"horario"`
+	Politicas      string  `json:"politicas"`
 	Entrega        Entrega `json:"entrega"`
 	Reputacion     string  `json:"reputacion"`
 	DiasLiberacion int     `json:"dias_liberacion"`
@@ -111,7 +114,8 @@ func DiasLiberacion(reputacion string) int {
 }
 
 const columnas = `id, nombre, slug, rubro, descripcion, ciudad, distrito, logo_key, portada_key, instagram, facebook, tiktok, whatsapp,
-	entrega_recojo, direccion_recojo, horario_recojo, entrega_agencia, agencias, entrega_motorizado, costo_motorizado_centimos, zonas_motorizado, reputacion`
+	entrega_recojo, direccion_recojo, horario_recojo, entrega_agencia, agencias, entrega_motorizado, costo_motorizado_centimos, zonas_motorizado, reputacion,
+	correo, horario, politicas`
 
 func (m *Modulo) leer(ctx context.Context, where string, arg any) (Tienda, error) {
 	var t Tienda
@@ -119,7 +123,8 @@ func (m *Modulo) leer(ctx context.Context, where string, arg any) (Tienda, error
 	err := m.app.DB.QueryRowContext(ctx, `SELECT `+columnas+` FROM tiendas WHERE `+where, arg).Scan(
 		&t.ID, &t.Nombre, &t.Slug, &t.Rubro, &t.Descripcion, &t.Ciudad, &t.Distrito, &t.LogoKey, &t.PortadaKey,
 		&t.Instagram, &t.Facebook, &t.Tiktok, &t.Whatsapp,
-		&e.Recojo, &e.DireccionRecojo, &e.HorarioRecojo, &e.Agencia, pq.Array(&e.Agencias), &e.Motorizado, &e.CostoMotorizado, &e.ZonasMotorizado, &t.Reputacion)
+		&e.Recojo, &e.DireccionRecojo, &e.HorarioRecojo, &e.Agencia, pq.Array(&e.Agencias), &e.Motorizado, &e.CostoMotorizado, &e.ZonasMotorizado, &t.Reputacion,
+		&t.Correo, &t.Horario, &t.Politicas)
 	if core.SinFilas(err) {
 		return t, httpx.ErrNoEncontrado
 	}
@@ -152,6 +157,9 @@ type datosTienda struct {
 	Facebook    string  `json:"facebook"`
 	Tiktok      string  `json:"tiktok"`
 	Whatsapp    string  `json:"whatsapp"`
+	Correo      string  `json:"correo"`
+	Horario     string  `json:"horario"`
+	Politicas   string  `json:"politicas"`
 }
 
 func (d *datosTienda) validar() error {
@@ -167,6 +175,15 @@ func (d *datosTienda) validar() error {
 	}
 	if d.Ciudad == "" {
 		return httpx.Invalido("Indica la ciudad de tu tienda.")
+	}
+	d.Correo = strings.TrimSpace(d.Correo)
+	d.Horario = strings.TrimSpace(d.Horario)
+	d.Politicas = strings.TrimSpace(d.Politicas)
+	if d.Correo != "" && !regexp.MustCompile(`^[^@\s]+@[^@\s]+\.[^@\s]+$`).MatchString(d.Correo) {
+		return httpx.Invalido("El correo de contacto no es válido.")
+	}
+	if len([]rune(d.Horario)) > 80 || len([]rune(d.Politicas)) > 600 {
+		return httpx.Invalido("El horario o la política de cambios son muy largos.")
 	}
 	if len([]rune(d.Descripcion)) > 300 {
 		return httpx.Invalido("La descripción puede tener hasta 300 caracteres.")
@@ -323,9 +340,9 @@ func (m *Modulo) actualizar(w http.ResponseWriter, r *http.Request) error {
 	}
 	_, err = m.app.DB.ExecContext(ctx, `UPDATE tiendas SET nombre=$2, rubro=$3, descripcion=$4, ciudad=$5, distrito=$6,
 		logo_key=COALESCE(NULLIF($7,''), logo_key), portada_key=COALESCE(NULLIF($8,''), portada_key),
-		instagram=$9, facebook=$10, tiktok=$11, whatsapp=$12, actualizado_en=now() WHERE id=$1`,
+		instagram=$9, facebook=$10, tiktok=$11, whatsapp=$12, correo=$13, horario=$14, politicas=$15, actualizado_en=now() WHERE id=$1`,
 		id, in.Nombre, in.Rubro, in.Descripcion, in.Ciudad, in.Distrito, valor(in.LogoKey), valor(in.PortadaKey),
-		in.Instagram, in.Facebook, in.Tiktok, in.Whatsapp)
+		in.Instagram, in.Facebook, in.Tiktok, in.Whatsapp, in.Correo, in.Horario, in.Politicas)
 	if err != nil {
 		return err
 	}
@@ -389,6 +406,8 @@ func (m *Modulo) publica(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
+	// El WhatsApp y el correo son solo para que VendiGo avise a la tienda: no se muestran a los compradores.
+	t.Whatsapp, t.Correo = "", ""
 	httpx.OK(w, t)
 	return nil
 }

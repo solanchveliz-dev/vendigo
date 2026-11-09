@@ -27,6 +27,9 @@ export type Tienda = {
   facebook: string;
   tiktok: string;
   whatsapp: string;
+  correo: string;
+  horario: string;
+  politicas: string;
   entrega: Entrega;
   reputacion: "nueva" | "buena" | "excelente";
   dias_liberacion: number;

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Bike, Check, ChevronRight, CircleHelp, MessageCircle, Package, ShieldCheck, Store } from "lucide-react";
+import { Bike, Check, ChevronRight, CircleHelp, MessageCircle, Package, RefreshCw, ShieldCheck, Store } from "lucide-react";
 import { API_URL } from "@/lib/servidor/sesion";
 import { hace, soles } from "@/lib/formato";
 import { rubros } from "@/lib/catalogos";
@@ -47,7 +47,9 @@ export default async function ProductoPublico({ params, searchParams }: Params &
   const confianza = [
     { icono: <ShieldCheck className="size-5" />, titulo: "Pago protegido", texto: "Yape o tarjeta en la app" },
     { icono: <Check className="size-5" />, titulo: "Ves cada paso", texto: "Te avisamos cómo va tu pedido" },
-    { icono: <MessageCircle className="size-5" />, titulo: "Te ayudamos", texto: "Si algo sale mal, VendiGo media" },
+    t.politicas
+      ? { icono: <RefreshCw className="size-5" />, titulo: "Cambios", texto: t.politicas.length > 40 ? t.politicas.slice(0, 40) + "…" : t.politicas }
+      : { icono: <MessageCircle className="size-5" />, titulo: "Te ayudamos", texto: "Si algo sale mal, VendiGo media" },
   ];
 
   const det = (p.detalles ?? {}) as { ficha?: [string, string][]; colores?: [string, string][] };
@@ -58,6 +60,7 @@ export default async function ProductoPublico({ params, searchParams }: Params &
     ["Categoría", p.categoria],
     ...(det.colores?.length ? [["Colores", det.colores.map(([n]) => n).join(", ")]] : []),
     ...(det.ficha ?? []),
+    ["Cambios", t.politicas],
   ].filter(([, v]) => v);
 
   return (

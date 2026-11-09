@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { Bike, Clock, MapPin, MessageCircle, Package, ShieldCheck, Star, Store } from "lucide-react";
+import { Bike, Clock, MapPin, MessageCircle, Package, RefreshCw, ShieldCheck, Star, Store } from "lucide-react";
 import { API_URL } from "@/lib/servidor/sesion";
 import { soles } from "@/lib/formato";
 import { rubros } from "@/lib/catalogos";
@@ -166,9 +166,14 @@ export default async function TiendaPublica({ params, searchParams }: { params: 
               <p className="mt-4 flex items-center gap-2 text-sm text-gris">
                 <ShieldCheck className="size-4 shrink-0 text-pino" /> Pagas dentro de VendiGo y tu dinero queda protegido hasta que recibas tu pedido.
               </p>
-              {t.entrega.horario_recojo && (
+              {(t.horario || t.entrega.horario_recojo) && (
                 <p className="mt-2 flex items-center gap-2 text-sm text-gris">
-                  <Clock className="size-4 shrink-0 text-pino" /> {t.entrega.horario_recojo}
+                  <Clock className="size-4 shrink-0 text-pino" /> {t.horario || t.entrega.horario_recojo}
+                </p>
+              )}
+              {t.politicas && (
+                <p className="mt-2 flex items-start gap-2 text-sm text-gris">
+                  <RefreshCw className="mt-0.5 size-4 shrink-0 text-pino" /> {t.politicas}
                 </p>
               )}
             </section>
