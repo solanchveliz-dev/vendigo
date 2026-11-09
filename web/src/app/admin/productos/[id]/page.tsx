@@ -26,15 +26,14 @@ export default function DetalleProducto({ params }: { params: Promise<{ id: stri
   const imgs = d.info.imagenes;
   const precioFinal = p.oferta_pct ? Math.floor((p.precio_centimos * (100 - p.oferta_pct)) / 100 / 10) * 10 : p.precio_centimos;
 
+  // Mismos datos que el prototipo. "Denuncias" = reclamos de compradores sobre pedidos con este producto.
   const filas: [string, React.ReactNode][] = [
-    ["Precio", p.oferta_pct ? <>{soles(precioFinal)} <s className="ml-1 text-gris">{soles(p.precio_centimos)}</s></> : soles(p.precio_centimos)],
+    ["Precio", soles(precioFinal)],
     ["Stock", p.stock],
-    ["Categoría", `${RUBROS[p.rubro] ?? p.rubro}${p.categoria ? ` · ${p.categoria}` : ""}`],
-    ["Variantes", d.info.variantes.join(", ") || "—"],
+    ["Categoría", RUBROS[p.rubro] ?? p.rubro],
     ["Vendidos", d.info.vendidos.toLocaleString("es-PE")],
     ["Visitas", d.info.visitas.toLocaleString("es-PE")],
-    ["Reclamos", d.info.reclamos],
-    ["Publicado", fecha(p.creado_en)],
+    ["Denuncias", d.info.reclamos],
     ["Descripción", d.info.descripcion || "—"],
   ];
 
@@ -62,11 +61,11 @@ export default function DetalleProducto({ params }: { params: Promise<{ id: stri
         </p>
       )}
 
-      <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,420px)_1fr]">
+      <div className="grid items-start gap-5 lg:grid-cols-2">
         <div>
           <div className="relative grid aspect-square place-items-center overflow-hidden rounded-[22px] bg-white ring-1 ring-linea/70">
             <Package className="size-12 text-tinta/20" />
-            {imgs[foto] && <img src={imgs[foto]} alt={p.nombre} onError={(e) => (e.currentTarget.style.display = "none")} className="absolute inset-0 size-full object-contain p-4" />}
+            {imgs[foto] && <img src={imgs[foto]} alt={p.nombre} onError={(e) => (e.currentTarget.style.display = "none")} className="absolute inset-0 size-full object-contain p-8" />}
             {p.oferta_pct > 0 && <span className="absolute left-3 top-3 rounded-full bg-coral px-2.5 py-1 text-xs font-bold text-white">-{p.oferta_pct}%</span>}
           </div>
           {imgs.length > 1 && (
@@ -80,9 +79,9 @@ export default function DetalleProducto({ params }: { params: Promise<{ id: stri
           )}
         </div>
         <Tarjeta>
-          <dl className="space-y-3 text-[15px]">
+          <dl className="space-y-4 py-2 text-[15px]">
             {filas.map(([k, v]) => (
-              <div key={k} className="grid grid-cols-[130px_1fr] gap-3">
+              <div key={k} className="grid grid-cols-[150px_1fr] gap-3">
                 <dt className="text-gris">{k}</dt>
                 <dd className="text-tinta">{v}</dd>
               </div>

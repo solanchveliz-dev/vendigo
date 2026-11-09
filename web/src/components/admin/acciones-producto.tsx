@@ -32,7 +32,7 @@ export function AccionProducto({ p, alTerminar }: { p: ProductoAdmin; alTerminar
       {p.estado === "retirado" ? (
         <Boton onClick={() => hacer("restaurar")} cargando={enviando}>Habilitar publicación</Boton>
       ) : (
-        <Boton variante="peligro" onClick={() => setModal(true)}>Retirar publicación</Boton>
+        <Boton variante="peligro" className="!bg-error !text-white !ring-0 hover:!bg-error/90" onClick={() => setModal(true)}>Retirar publicación</Boton>
       )}
       <Modal abierto={modal} onCerrar={() => setModal(false)} titulo="Retirar publicación">
         <p className="mb-3 text-sm text-gris">
