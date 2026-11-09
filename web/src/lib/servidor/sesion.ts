@@ -36,12 +36,25 @@ export async function tokens() {
   return { acceso: c.get(COOKIE_ACCESO)?.value, refresh: c.get(COOKIE_REFRESH)?.value, recordar: c.get(COOKIE_RECORDAR)?.value !== "0" };
 }
 
-export async function renovar(refresh: string): Promise<Sesion | null> {
-  const r = await fetch(`${API_URL}/api/v1/auth/refresh`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ refresh_token: refresh }),
-    cache: "no-store",
-  });
-  return r.ok ? ((await r.json()) as Sesion) : null;
+// Cuando el acceso vence, una página suele pedir varias cosas a la vez (por ejemplo, Editar producto).
+// Cada refresh token sirve una sola vez, así que si todas lo renovaban al mismo tiempo solo la primera
+// lo lograba y las demás sacaban a la persona al ingreso. Ahora comparten la misma renovación.
+const renovando = new Map<string, Promise<Sesion | null>>();
+
+export function renovar(refresh: string): Promise<Sesion | null> {
+  const enCurso = renovando.get(refresh);
+  if (enCurso) return enCurso;
+  const p = (async () => {
+    const r = await fetch(`${API_URL}/api/v1/auth/refresh`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh_token: refresh }),
+      cache: "no-store",
+    });
+    return r.ok ? ((await r.json()) as Sesion) : null;
+  })();
+  renovando.set(refresh, p);
+  // Se recuerda unos segundos para las peticiones que llegan un poco después con la cookie anterior.
+  p.finally(() => setTimeout(() => renovando.delete(refresh), 15_000));
+  return p;
 }
