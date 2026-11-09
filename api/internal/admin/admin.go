@@ -65,6 +65,8 @@ func (m *Modulo) Rutas(r chi.Router) {
 	r.Method("POST", "/productos/{id}/restaurar", httpx.Handler(m.restaurarProducto))
 	r.Method("GET", "/pedidos", httpx.Handler(m.pedidosAdmin))
 	r.Method("GET", "/pedidos/{id}", httpx.Handler(m.pedidoAdmin))
+	r.Method("GET", "/pagos", httpx.Handler(m.pagos))
+	r.Method("GET", "/suscripciones", httpx.Handler(m.suscripciones))
 }
 
 func adminID(ctx context.Context) string {
