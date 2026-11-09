@@ -158,10 +158,10 @@ function Dona({
   return (
     <div className="flex flex-wrap items-center gap-6">
       <div className="relative size-36 shrink-0">
-        <svg viewBox="0 0 36 36" className="size-full -rotate-90">
+        <svg viewBox="0 0 40 40" className="size-full -rotate-90">
           <circle
-            cx="18"
-            cy="18"
+            cx="20"
+            cy="20"
             r={r}
             fill="none"
             strokeWidth="5"
@@ -173,8 +173,8 @@ function Dona({
               const el = (
                 <circle
                   key={i}
-                  cx="18"
-                  cy="18"
+                  cx="20"
+                  cy="20"
                   r={r}
                   fill="none"
                   strokeWidth="5"
