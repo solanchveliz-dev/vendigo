@@ -139,13 +139,22 @@ export default async function TiendaPublica({ params, searchParams }: { params: 
               <h2 className="text-2xl font-extrabold text-tinta">Envíos y pagos</h2>
               <ul className="mt-4 space-y-4">
                 {t.entrega.recojo && (
-                  <Opcion icono={<Store className="size-4" />} titulo="Recojo en tienda" texto={t.entrega.direccion_recojo || "Coordina el recojo con la tienda"} />
+                  <Opcion
+                    icono={<Store className="size-4" />}
+                    titulo="Recojo en tienda"
+                    texto={[
+                      t.entrega.direccion_recojo || "Coordina el recojo con la tienda",
+                      diasTexto(t.entrega.dias_recojo),
+                      t.entrega.adelanto_pct ? `Reservas con ${t.entrega.adelanto_pct}% de adelanto` : "",
+                      t.entrega.instrucciones_recojo,
+                    ].filter(Boolean).join(" · ")}
+                  />
                 )}
                 {t.entrega.agencia && (
                   <Opcion
                     icono={<Package className="size-4" />}
                     titulo="Envío por agencia"
-                    texto={`Pagas en la app y recibes tu código de recojo${t.entrega.agencias.length ? ` · ${t.entrega.agencias.join(", ")}` : ""}`}
+                    texto={`Pagas en la app y recibes tu código de recojo${t.entrega.agencias.length ? ` · ${t.entrega.agencias.join(", ")}` : ""}${t.entrega.costo_agencia_centimos ? ` · desde ${soles(t.entrega.costo_agencia_centimos)}` : ""}`}
                   />
                 )}
                 {t.entrega.motorizado && (
@@ -154,6 +163,9 @@ export default async function TiendaPublica({ params, searchParams }: { params: 
                     titulo="Delivery con motorizado"
                     texto={`${t.entrega.zonas_motorizado || "Zonas cercanas"}${t.entrega.costo_motorizado_centimos ? ` · ${soles(t.entrega.costo_motorizado_centimos)}` : ""}`}
                   />
+                )}
+                {t.entrega.otra && (
+                  <Opcion icono={<MapPin className="size-4" />} titulo="Otra modalidad" texto={t.entrega.descripcion_otra || "Coordina con la tienda"} />
                 )}
               </ul>
               <div className="mt-5 flex flex-wrap gap-2">
@@ -220,4 +232,10 @@ function Opcion({ icono, titulo, texto }: { icono: React.ReactNode; titulo: stri
       </div>
     </li>
   );
+}
+
+const DIAS_CORTOS = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
+function diasTexto(d?: number[]) {
+  if (!d || d.length === 0 || d.length === 7) return d?.length === 7 ? "Todos los días" : "";
+  return "Atiende " + [...d].sort().map((i) => DIAS_CORTOS[i]).join(", ");
 }

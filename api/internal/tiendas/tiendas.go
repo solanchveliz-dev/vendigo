@@ -100,6 +100,12 @@ type Entrega struct {
 	Motorizado      bool     `json:"motorizado"`
 	CostoMotorizado int      `json:"costo_motorizado_centimos"`
 	ZonasMotorizado string   `json:"zonas_motorizado"`
+	Instrucciones   string   `json:"instrucciones_recojo"`
+	DiasRecojo      []int64  `json:"dias_recojo"`
+	AdelantoPct     int      `json:"adelanto_pct"`
+	CostoAgencia    int      `json:"costo_agencia_centimos"`
+	Otra            bool     `json:"otra"`
+	DescripcionOtra string   `json:"descripcion_otra"`
 }
 
 // DiasLiberacion: tienda nueva 5 días, buena reputación 2 días, excelente al instante.
@@ -115,7 +121,8 @@ func DiasLiberacion(reputacion string) int {
 
 const columnas = `id, nombre, slug, rubro, descripcion, ciudad, distrito, logo_key, portada_key, instagram, facebook, tiktok, whatsapp,
 	entrega_recojo, direccion_recojo, horario_recojo, entrega_agencia, agencias, entrega_motorizado, costo_motorizado_centimos, zonas_motorizado, reputacion,
-	correo, horario, politicas`
+	correo, horario, politicas,
+	instrucciones_recojo, dias_recojo, adelanto_pct, costo_agencia_centimos, entrega_otra, descripcion_otra`
 
 func (m *Modulo) leer(ctx context.Context, where string, arg any) (Tienda, error) {
 	var t Tienda
@@ -124,7 +131,8 @@ func (m *Modulo) leer(ctx context.Context, where string, arg any) (Tienda, error
 		&t.ID, &t.Nombre, &t.Slug, &t.Rubro, &t.Descripcion, &t.Ciudad, &t.Distrito, &t.LogoKey, &t.PortadaKey,
 		&t.Instagram, &t.Facebook, &t.Tiktok, &t.Whatsapp,
 		&e.Recojo, &e.DireccionRecojo, &e.HorarioRecojo, &e.Agencia, pq.Array(&e.Agencias), &e.Motorizado, &e.CostoMotorizado, &e.ZonasMotorizado, &t.Reputacion,
-		&t.Correo, &t.Horario, &t.Politicas)
+		&t.Correo, &t.Horario, &t.Politicas,
+		&e.Instrucciones, pq.Array(&e.DiasRecojo), &e.AdelantoPct, &e.CostoAgencia, &e.Otra, &e.DescripcionOtra)
 	if core.SinFilas(err) {
 		return t, httpx.ErrNoEncontrado
 	}
@@ -366,7 +374,31 @@ func (m *Modulo) actualizarEntrega(w http.ResponseWriter, r *http.Request) error
 	if err := httpx.Leer(r, &in); err != nil {
 		return err
 	}
-	if !in.Recojo && !in.Agencia && !in.Motorizado {
+	in.DescripcionOtra = strings.TrimSpace(in.DescripcionOtra)
+	in.Instrucciones = strings.TrimSpace(in.Instrucciones)
+	if in.Otra && in.DescripcionOtra == "" {
+		return httpx.Invalido("Describe cómo entregas en la otra modalidad.")
+	}
+	if !slices.Contains([]int{0, 20, 30, 50}, in.AdelantoPct) {
+		return httpx.Invalido("El adelanto puede ser 20 %, 30 % o 50 %.")
+	}
+	dias := []int64{}
+	for _, d := range in.DiasRecojo {
+		if d >= 0 && d <= 6 && !slices.Contains(dias, d) {
+			dias = append(dias, d)
+		}
+	}
+	slices.Sort(dias)
+	if in.Recojo && len(dias) == 0 {
+		return httpx.Invalido("Elige al menos un día en que atiendes.")
+	}
+	if in.CostoAgencia < 0 || in.CostoAgencia > 20000 {
+		return httpx.Invalido("El costo de agencia debe estar entre S/ 0 y S/ 200.")
+	}
+	if len([]rune(in.Instrucciones)) > 200 || len([]rune(in.DescripcionOtra)) > 200 {
+		return httpx.Invalido("Las instrucciones son muy largas.")
+	}
+	if !in.Recojo && !in.Agencia && !in.Motorizado && !in.Otra {
 		return httpx.Invalido("Activa al menos una forma de entrega.")
 	}
 	in.DireccionRecojo = strings.TrimSpace(in.DireccionRecojo)
@@ -390,9 +422,11 @@ func (m *Modulo) actualizarEntrega(w http.ResponseWriter, r *http.Request) error
 		return httpx.Invalido("El costo del motorizado debe estar entre S/ 0 y S/ 100.")
 	}
 	_, err = m.app.DB.ExecContext(ctx, `UPDATE tiendas SET entrega_recojo=$2, direccion_recojo=$3, horario_recojo=CASE WHEN horario<>'' THEN horario ELSE $4 END, entrega_agencia=$5,
-		agencias=$6, entrega_motorizado=$7, costo_motorizado_centimos=$8, zonas_motorizado=$9, actualizado_en=now() WHERE id=$1`,
+		agencias=$6, entrega_motorizado=$7, costo_motorizado_centimos=$8, zonas_motorizado=$9,
+		instrucciones_recojo=$10, dias_recojo=$11, adelanto_pct=$12, costo_agencia_centimos=$13, entrega_otra=$14, descripcion_otra=$15, actualizado_en=now() WHERE id=$1`,
 		id, in.Recojo, in.DireccionRecojo, strings.TrimSpace(in.HorarioRecojo), in.Agencia, pq.Array(in.Agencias), in.Motorizado,
-		in.CostoMotorizado, strings.TrimSpace(in.ZonasMotorizado))
+		in.CostoMotorizado, strings.TrimSpace(in.ZonasMotorizado),
+		in.Instrucciones, pq.Array(dias), in.AdelantoPct, in.CostoAgencia, in.Otra, in.DescripcionOtra)
 	if err != nil {
 		return err
 	}

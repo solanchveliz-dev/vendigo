@@ -9,6 +9,12 @@ export type Entrega = {
   motorizado: boolean;
   costo_motorizado_centimos: number;
   zonas_motorizado: string;
+  instrucciones_recojo: string;
+  dias_recojo: number[];
+  adelanto_pct: number;
+  costo_agencia_centimos: number;
+  otra: boolean;
+  descripcion_otra: string;
 };
 
 export type Tienda = {
