@@ -25,7 +25,7 @@ export default function EntregaYPagos() {
 
   useEffect(() => {
     if (t && !e) {
-      setE(t.entrega);
+      setE(completar(t.entrega));
       setCostos({
         agencia: t.entrega.costo_agencia_centimos ? (t.entrega.costo_agencia_centimos / 100).toFixed(2) : "",
         moto: t.entrega.costo_motorizado_centimos ? (t.entrega.costo_motorizado_centimos / 100).toFixed(2) : "",
@@ -50,7 +50,7 @@ export default function EntregaYPagos() {
         costo_motorizado_centimos: aCentimos(costos.moto || "0"),
       });
       setDatos(nueva);
-      setE(nueva.entrega);
+      setE(completar(nueva.entrega));
       avisar("Entrega y pagos guardados");
     } catch (err) {
       setError((err as ErrorApi).message);
@@ -223,6 +223,20 @@ export default function EntregaYPagos() {
       </Modal>
     </div>
   );
+}
+
+// Si la API todavía no manda los campos nuevos, usamos valores por defecto.
+function completar(x: Partial<Entrega>): Entrega {
+  return {
+    ...x,
+    agencias: x.agencias ?? [],
+    dias_recojo: x.dias_recojo ?? [1, 2, 3, 4, 5, 6],
+    instrucciones_recojo: x.instrucciones_recojo ?? "",
+    adelanto_pct: x.adelanto_pct ?? 0,
+    costo_agencia_centimos: x.costo_agencia_centimos ?? 0,
+    otra: x.otra ?? false,
+    descripcion_otra: x.descripcion_otra ?? "",
+  } as Entrega;
 }
 
 function Opcion({ activo, onCambiar, icono, titulo, texto, children }: {
