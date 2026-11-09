@@ -241,29 +241,69 @@ func (m *Modulo) crearPost(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	red := map[string]string{"instagram": "Instagram", "tiktok": "TikTok", "facebook": "Facebook"}[in.Red]
-	if red == "" {
-		red = "Instagram"
-	}
 	oferta := ""
 	if pct.Valid {
 		oferta = fmt.Sprintf(" Tiene %d %% de descuento por tiempo limitado.", pct.Int64)
 	}
-	instr := fmt.Sprintf(`Escribe un POST corto para %s de la tienda "%s" sobre el producto "%s" (S/ %.2f). %s%s
-Máximo 4 líneas, tono cercano y peruano, 2 o 3 emojis, termina invitando a comprar desde el link de la tienda con pago seguro.
-Responde solo con el texto del post, sin comillas.`, red, tienda, nombre, float64(precio)/100, desc, oferta)
+	enlace := m.app.Cfg.WebURL + "/t/" + slug
+	instr := fmt.Sprintf(`Escribe tres versiones de un POST para redes de la tienda "%s" sobre el producto "%s" (S/ %.2f). %s%s
+Tono cercano y peruano, 2 o 3 emojis, invita a comprar desde el link de la tienda con pago seguro. No inventes datos.
+Usa exactamente este formato, sin comillas:
+[INSTAGRAM]
+(máximo 4 líneas)
+[TIKTOK]
+(una o dos líneas estilo TikTok con 2 hashtags)
+[WHATSAPP]
+(mensaje corto para el estado de WhatsApp)`, tienda, nombre, float64(precio)/100, desc, oferta)
 	res, c, err := m.usar(ctx, tid, "crear_post", func() (any, error) {
 		txt, err := m.proveedor.Preguntar(ctx, instr, nil, "")
 		if err != nil {
 			return nil, err
 		}
-		return strings.TrimSpace(txt) + "\n\n🛍️ " + m.app.Cfg.WebURL + "/t/" + slug, nil
+		return separarPosts(txt, enlace), nil
 	})
 	if err != nil {
 		return err
 	}
-	httpx.OK(w, map[string]any{"texto": res, "creditos": c})
+	textos, _ := res.(map[string]string)
+	red := in.Red
+	if textos[red] == "" {
+		red = "instagram"
+	}
+	httpx.OK(w, map[string]any{"texto": textos[red], "textos": textos, "creditos": c})
 	return nil
+}
+
+// separarPosts divide la respuesta en las versiones por red y agrega el link de la tienda.
+func separarPosts(txt, enlace string) map[string]string {
+	redes := []string{"instagram", "tiktok", "whatsapp"}
+	out := map[string]string{}
+	for i, r := range redes {
+		marca := "[" + strings.ToUpper(r) + "]"
+		a := strings.Index(txt, marca)
+		if a < 0 {
+			continue
+		}
+		parte := txt[a+len(marca):]
+		if i+1 < len(redes) {
+			if b := strings.Index(parte, "["+strings.ToUpper(redes[i+1])+"]"); b >= 0 {
+				parte = parte[:b]
+			}
+		}
+		out[r] = strings.TrimSpace(parte)
+	}
+	base := strings.TrimSpace(txt)
+	if out["instagram"] != "" {
+		base = out["instagram"]
+	}
+	for _, r := range redes {
+		if out[r] == "" {
+			out[r] = base
+		}
+		out[r] += "\n\n🛍️ " + enlace
+	}
+	out["facebook"] = out["instagram"]
+	return out
 }
 
 func (m *Modulo) comprarCreditos(w http.ResponseWriter, r *http.Request) error {
