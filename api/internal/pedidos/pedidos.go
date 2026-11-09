@@ -45,6 +45,9 @@ func (m *Modulo) RutasVendedor(r chi.Router) {
 	r.Method("POST", "/notificaciones/leer", httpx.Handler(m.leerNotificaciones))
 	r.Method("POST", "/notificaciones/{id}/leer", httpx.Handler(m.leerNotificacion))
 	r.Method("GET", "/ayudas", httpx.Handler(m.ayudas))
+	r.Method("GET", "/clientes", httpx.Handler(m.clientes))
+	r.Method("GET", "/clientes/{id}", httpx.Handler(m.cliente))
+	r.Method("PUT", "/clientes/{id}/nota", httpx.Handler(m.guardarNota))
 	r.Method("POST", "/ayudas/{id}/responder", httpx.Handler(m.responderAyuda))
 }
 

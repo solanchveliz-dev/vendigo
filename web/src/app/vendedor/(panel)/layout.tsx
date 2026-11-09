@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { BarChart3, Bell, ClipboardList, Crown, Home, LogOut, MessageCircleQuestion, Package, ShieldCheck, Sparkles, Store, Wallet, Landmark, Search, Share2, Plus } from "lucide-react";
+import { BarChart3, Bell, ClipboardList, Crown, Home, LogOut, MessageCircleQuestion, Package, ShieldCheck, Sparkles, Store, Wallet, Landmark, Search, Share2, Plus, Users, Settings } from "lucide-react";
 import { api, sesion, useApi } from "@/lib/api";
 import type { Usuario } from "@/lib/tipos";
 import { cn, Cargando } from "@/components/ui";
@@ -15,12 +15,14 @@ const menu = [
   { href: "/vendedor", texto: "Inicio", icono: Home },
   { href: "/vendedor/pedidos", texto: "Pedidos", icono: ClipboardList, cuenta: "pedidos" },
   { href: "/vendedor/productos", texto: "Productos", icono: Package },
+  { href: "/vendedor/clientes", texto: "Clientes", icono: Users },
   { href: "/vendedor/consultas", texto: "Consultas", icono: MessageCircleQuestion, cuenta: "consultas" },
   { href: "/vendedor/cobros", texto: "Mis cobros", icono: Wallet, cuenta: "reclamos" },
   { href: "/vendedor/analitica", texto: "Analítica", icono: BarChart3 },
   { href: "/vendedor/ia", texto: "Herramientas IA", icono: Sparkles },
   { href: "/vendedor/tienda", texto: "Mi tienda", icono: Store },
   { href: "/vendedor/plan", texto: "Plan y ventas", icono: Crown },
+  { href: "/vendedor/configuracion", texto: "Configuración", icono: Settings },
 ];
 
 function iniciales(n: string) {
@@ -143,6 +145,9 @@ export default function LayoutPanel({ children }: { children: React.ReactNode })
                   </Link>
                   <Link href="/vendedor/verificacion" className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-crema">
                     <ShieldCheck className="size-4" /> Verificar identidad
+                  </Link>
+                  <Link href="/vendedor/configuracion" className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-crema">
+                    <Settings className="size-4" /> Configuración
                   </Link>
                   <button onClick={salir} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-error hover:bg-error-claro">
                     <LogOut className="size-4" /> Cerrar sesión

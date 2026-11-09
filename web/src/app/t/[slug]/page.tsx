@@ -65,6 +65,12 @@ export default async function TiendaPublica({ params, searchParams }: { params: 
       {!vista && <><CabeceraPublica /><ContarVisita slug={t.slug} /></>}
 
       <main className="mx-auto max-w-[1400px] px-5 pb-16 sm:px-10">
+        {t.pausada && (
+          <div className="mt-5 flex items-center gap-3 rounded-2xl bg-arena px-5 py-3 text-sm text-tinta ring-1 ring-linea">
+            <Clock className="size-5 shrink-0" />
+            <span><b>Tienda en pausa.</b> Por ahora no está recibiendo pedidos. Puedes ver sus productos y volver pronto.</span>
+          </div>
+        )}
         {/* Portada */}
         <div
           className="relative mt-7 h-56 overflow-hidden rounded-[28px] bg-pino bg-cover bg-center sm:h-80"

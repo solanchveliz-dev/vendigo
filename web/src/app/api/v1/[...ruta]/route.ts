@@ -6,9 +6,18 @@ import { API_URL, guardarSesion, renovar, tokens, type Sesion } from "@/lib/serv
 async function reenviar(req: NextRequest, ruta: string[]) {
   const destino = `${API_URL}/api/v1/${ruta.map(encodeURIComponent).join("/")}${req.nextUrl.search}`;
   const cuerpo = ["GET", "HEAD"].includes(req.method) ? undefined : await req.text();
-  const { acceso, refresh } = await tokens();
+  const { acceso, refresh, recordar } = await tokens();
+  // Cambiar la contraseña o cerrar las otras sesiones necesita saber cuál es la sesión de este equipo,
+  // para no cerrarla. El refresh token vive en una cookie que el navegador no puede leer, así que se agrega aquí.
+  const conSesion = ruta.join("/") === "me/password" || ruta.join("/") === "me/cerrar-sesiones";
+  const cuerpoCon = (r?: string) => {
+    if (!conSesion) return cuerpo;
+    let d: Record<string, unknown> = {};
+    try { d = cuerpo ? JSON.parse(cuerpo) : {}; } catch { d = {}; }
+    return JSON.stringify({ ...d, refresh_token: r ?? "" });
+  };
 
-  const llamar = (token?: string) =>
+  const llamar = (token?: string, r: string | undefined = refresh) =>
     fetch(destino, {
       method: req.method,
       headers: {
@@ -16,7 +25,7 @@ async function reenviar(req: NextRequest, ruta: string[]) {
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
         "X-Forwarded-For": req.headers.get("x-forwarded-for") ?? "",
       },
-      body: cuerpo,
+      body: cuerpoCon(r),
       cache: "no-store",
     });
 
@@ -24,13 +33,13 @@ async function reenviar(req: NextRequest, ruta: string[]) {
   let nueva: Sesion | null = null;
   if (r.status === 401 && refresh) {
     nueva = await renovar(refresh);
-    if (nueva) r = await llamar(nueva.access_token);
+    if (nueva) r = await llamar(nueva.access_token, nueva.refresh_token);
   }
   const res = new NextResponse(r.status === 204 ? null : await r.text(), {
     status: r.status,
     headers: { "Content-Type": r.headers.get("Content-Type") ?? "application/json" },
   });
-  if (nueva) guardarSesion(res, nueva);
+  if (nueva) guardarSesion(res, nueva, recordar);
   return res;
 }
 

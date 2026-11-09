@@ -40,6 +40,7 @@ export type Tienda = {
   reputacion: "nueva" | "buena" | "excelente";
   dias_liberacion: number;
   enlace: string;
+  pausada: boolean;
 };
 
 export type Variante = { id?: string; nombre: string; stock: number; precio_centimos: number | null };

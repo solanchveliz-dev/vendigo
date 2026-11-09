@@ -1,15 +1,22 @@
 "use client";
 
+import Link from "next/link";
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { ArrowLeft } from "lucide-react";
 import { Aviso, Boton, Entrada } from "@/components/ui";
 import { api, ErrorApi, sesion } from "@/lib/api";
 import type { Usuario } from "@/lib/tipos";
+
+function bonito(c: string) {
+  return c.length === 9 ? `${c.slice(0, 3)} ${c.slice(3, 6)} ${c.slice(6)}` : c;
+}
 
 function Formulario() {
   const router = useRouter();
   const params = useSearchParams();
   const celular = params.get("celular") ?? "";
+  const rubro = params.get("rubro") ?? "";
   const [codigo, setCodigo] = useState(params.get("dev") ?? "");
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
@@ -22,13 +29,24 @@ function Formulario() {
     return () => clearTimeout(t);
   }, [espera]);
 
+  if (!celular)
+    return (
+      <div className="space-y-5">
+        <h1 className="text-[31px] font-extrabold leading-tight tracking-[-0.02em] text-pino">Primero crea tu cuenta</h1>
+        <Link href="/registro" className="block">
+          <Boton bloque tamano="lg">Crear cuenta</Boton>
+        </Link>
+      </div>
+    );
+
   async function enviar(e: React.FormEvent) {
     e.preventDefault();
     setError("");
     setCargando(true);
     try {
       const r = await sesion<{ usuario: Usuario }>("verificar", { celular, codigo });
-      router.replace(r.usuario.tienda_id ? "/vendedor" : "/vendedor/crear-tienda");
+      if (r.usuario.rol === "comprador") router.replace("/");
+      else router.replace(r.usuario.tienda_id ? "/vendedor" : `/vendedor/crear-tienda${rubro ? `?rubro=${rubro}` : ""}`);
     } catch (err) {
       setError((err as ErrorApi).message);
     } finally {
@@ -50,21 +68,25 @@ function Formulario() {
 
   return (
     <form onSubmit={enviar} className="space-y-5">
+      <Link href="/registro" className="inline-flex items-center gap-2 text-sm font-semibold text-pino hover:underline">
+        <ArrowLeft className="size-4" /> Cambiar mis datos
+      </Link>
       <div>
-        <h1 className="text-3xl font-extrabold text-pino">Confirma tu celular</h1>
-        <p className="mt-1 text-gris">
-          Escribe el código de 6 dígitos que enviamos al <b className="text-tinta">{celular}</b>.
+        <h1 className="text-[31px] font-extrabold leading-tight tracking-[-0.02em] text-pino">Confirma tu celular</h1>
+        <p className="mt-1.5 text-gris">
+          Escribe el código de 6 dígitos que te enviamos por SMS al <b className="text-tinta">{bonito(celular)}</b>.
         </p>
       </div>
       {error && <Aviso tono="error">{error}</Aviso>}
       {info && <Aviso tono="ok">{info}</Aviso>}
-      {params.get("dev") && <Aviso>Modo de prueba: el código se completó solo.</Aviso>}
+      {params.get("dev") && <Aviso>Modo de prueba: el SMS no se envía y el código se completó solo.</Aviso>}
       <Entrada
         value={codigo}
         onChange={(e) => setCodigo(e.target.value.replace(/\D/g, "").slice(0, 6))}
         inputMode="numeric"
         autoComplete="one-time-code"
-        className="h-14 text-center font-display text-2xl tracking-[0.5em]"
+        aria-label="Código de 6 dígitos"
+        className="h-16 text-center font-display text-3xl tracking-[0.6em]"
         placeholder="••••••"
         required
       />

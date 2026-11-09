@@ -7,6 +7,7 @@ export const rubros: Record<string, string> = {
   tecnologia: "Tecnología",
   artesania: "Artesanía",
   mascotas: "Mascotas",
+  deportes: "Deportes",
   otros: "Otros",
 };
 

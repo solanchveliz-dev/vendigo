@@ -13,6 +13,11 @@ export default function CrearTienda() {
   const [slug, setSlug] = useState<{ slug: string; disponible: boolean; sugerido: string } | null>(null);
   const [error, setError] = useState("");
   const [cargando, setCargando] = useState(false);
+  // Si en el registro eligió qué vende, el rubro llega ya marcado.
+  useEffect(() => {
+    const r = new URLSearchParams(window.location.search).get("rubro");
+    if (r && r in rubros) setF((x) => ({ ...x, rubro: r }));
+  }, []);
   const cambiar = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => setF({ ...f, [k]: e.target.value });
 
   useEffect(() => {

@@ -3,6 +3,7 @@ package tiendas
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -21,7 +22,7 @@ type Modulo struct{ app *core.App }
 
 func Nuevo(app *core.App) *Modulo { return &Modulo{app: app} }
 
-var Rubros = []string{"moda", "accesorios", "belleza", "comida", "hogar", "tecnologia", "artesania", "mascotas", "otros"}
+var Rubros = []string{"moda", "accesorios", "belleza", "comida", "hogar", "tecnologia", "artesania", "mascotas", "deportes", "otros"}
 var Agencias = []string{"Shalom", "Olva Courier", "Marvisur", "Flores", "Otra"}
 
 // RutasVendedor se montan en /vendedor (requieren sesión de vendedor).
@@ -29,6 +30,8 @@ func (m *Modulo) RutasVendedor(r chi.Router) {
 	r.Method("GET", "/tienda", httpx.Handler(m.obtener))
 	r.Method("PUT", "/tienda", httpx.Handler(m.actualizar))
 	r.Method("PUT", "/tienda/entrega", httpx.Handler(m.actualizarEntrega))
+	r.Method("GET", "/tienda/ajustes", httpx.Handler(m.ajustes))
+	r.Method("PUT", "/tienda/ajustes", httpx.Handler(m.guardarAjustes))
 	r.Method("POST", "/archivos", httpx.Handler(m.pedirSubida))
 }
 
@@ -90,6 +93,7 @@ type Tienda struct {
 	Reputacion     string  `json:"reputacion"`
 	DiasLiberacion int     `json:"dias_liberacion"`
 	Enlace         string  `json:"enlace"`
+	Pausada        bool    `json:"pausada"`
 }
 
 type Entrega struct {
@@ -123,7 +127,7 @@ func DiasLiberacion(reputacion string) int {
 const columnas = `id, nombre, slug, rubro, descripcion, ciudad, distrito, logo_key, portada_key, instagram, facebook, tiktok, whatsapp,
 	entrega_recojo, direccion_recojo, horario_recojo, entrega_agencia, agencias, entrega_motorizado, costo_motorizado_centimos, zonas_motorizado, reputacion,
 	correo, horario, politicas,
-	instrucciones_recojo, dias_recojo, adelanto_pct, costo_agencia_centimos, entrega_otra, descripcion_otra`
+	instrucciones_recojo, dias_recojo, adelanto_pct, costo_agencia_centimos, entrega_otra, descripcion_otra, pausada`
 
 func (m *Modulo) leer(ctx context.Context, where string, arg any) (Tienda, error) {
 	var t Tienda
@@ -133,7 +137,7 @@ func (m *Modulo) leer(ctx context.Context, where string, arg any) (Tienda, error
 		&t.Instagram, &t.Facebook, &t.Tiktok, &t.Whatsapp,
 		&e.Recojo, &e.DireccionRecojo, &e.HorarioRecojo, &e.Agencia, pq.Array(&e.Agencias), &e.Motorizado, &e.CostoMotorizado, &e.ZonasMotorizado, &t.Reputacion,
 		&t.Correo, &t.Horario, &t.Politicas,
-		&e.Instrucciones, pq.Array(&e.DiasRecojo), &e.AdelantoPct, &e.CostoAgencia, &e.Otra, &e.DescripcionOtra)
+		&e.Instrucciones, pq.Array(&e.DiasRecojo), &e.AdelantoPct, &e.CostoAgencia, &e.Otra, &e.DescripcionOtra, &t.Pausada)
 	if core.SinFilas(err) {
 		return t, httpx.ErrNoEncontrado
 	}
@@ -524,4 +528,81 @@ func (m *Modulo) pedirSubida(w http.ResponseWriter, r *http.Request) error {
 	}
 	httpx.OK(w, resp)
 	return nil
+}
+
+// ---------- ajustes (Configuración) ----------
+
+// Ajustes son las opciones de Configuración que viven en la tienda:
+// RUC para comprobantes, pausar la tienda y qué avisos quiere recibir.
+type Ajustes struct {
+	RUC     string          `json:"ruc"`
+	Pausada bool            `json:"pausada"`
+	Avisos  map[string]bool `json:"avisos"`
+}
+
+func (m *Modulo) ajustes(w http.ResponseWriter, r *http.Request) error {
+	id, err := ID(r.Context(), m.app)
+	if err != nil {
+		return err
+	}
+	var a Ajustes
+	var avisos []byte
+	if err := m.app.DB.QueryRowContext(r.Context(), `SELECT ruc, pausada, avisos FROM tiendas WHERE id=$1`, id).Scan(&a.RUC, &a.Pausada, &avisos); err != nil {
+		return err
+	}
+	a.Avisos = map[string]bool{"pedidos": true, "consultas": true, "inventario": true}
+	var guardados map[string]bool
+	if json.Unmarshal(avisos, &guardados) == nil {
+		for k, v := range guardados {
+			if _, ok := a.Avisos[k]; ok {
+				a.Avisos[k] = v
+			}
+		}
+	}
+	httpx.OK(w, a)
+	return nil
+}
+
+var reRUC = regexp.MustCompile(`^(10|15|17|20)\d{9}$`)
+
+func (m *Modulo) guardarAjustes(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	id, err := ID(ctx, m.app)
+	if err != nil {
+		return err
+	}
+	var in struct {
+		RUC     *string         `json:"ruc"`
+		Pausada *bool           `json:"pausada"`
+		Avisos  map[string]bool `json:"avisos"`
+	}
+	if err := httpx.Leer(r, &in); err != nil {
+		return err
+	}
+	if in.RUC != nil {
+		ruc := strings.TrimSpace(*in.RUC)
+		if ruc != "" && !reRUC.MatchString(ruc) {
+			return httpx.Invalido("El RUC debe tener 11 dígitos y empezar con 10, 15, 17 o 20.")
+		}
+		if _, err := m.app.DB.ExecContext(ctx, `UPDATE tiendas SET ruc=$2, actualizado_en=now() WHERE id=$1`, id, ruc); err != nil {
+			return err
+		}
+	}
+	if in.Pausada != nil {
+		if _, err := m.app.DB.ExecContext(ctx, `UPDATE tiendas SET pausada=$2, actualizado_en=now() WHERE id=$1`, id, *in.Pausada); err != nil {
+			return err
+		}
+	}
+	if in.Avisos != nil {
+		limpio := map[string]bool{}
+		for _, k := range []string{"pedidos", "consultas", "inventario"} {
+			v, ok := in.Avisos[k]
+			limpio[k] = !ok || v
+		}
+		b, _ := json.Marshal(limpio)
+		if _, err := m.app.DB.ExecContext(ctx, `UPDATE tiendas SET avisos=$2, actualizado_en=now() WHERE id=$1`, id, b); err != nil {
+			return err
+		}
+	}
+	return m.ajustes(w, r)
 }

@@ -40,6 +40,9 @@ func (m *Modulo) RutasPublicas(r chi.Router) {
 func (m *Modulo) RutasPrivadas(r chi.Router) {
 	r.Method("GET", "/me", httpx.Handler(m.yo))
 	r.Method("PUT", "/me", httpx.Handler(m.actualizarYo))
+	r.Method("PUT", "/me/password", httpx.Handler(m.cambiarPassword))
+	r.Method("POST", "/me/cerrar-sesiones", httpx.Handler(m.cerrarSesiones))
+	r.Method("GET", "/me/sesiones", httpx.Handler(m.sesiones))
 }
 
 var (
@@ -398,7 +401,7 @@ func (m *Modulo) restablecer(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 		var uid string
-		if err := tx.QueryRowContext(ctx, `UPDATE usuarios SET password_hash=$2 WHERE celular=$1 RETURNING id`, cel, hash).Scan(&uid); err != nil {
+		if err := tx.QueryRowContext(ctx, `UPDATE usuarios SET password_hash=$2, password_cambiado_en=now() WHERE celular=$1 RETURNING id`, cel, hash).Scan(&uid); err != nil {
 			return err
 		}
 		_, err := tx.ExecContext(ctx, `UPDATE refresh_tokens SET revocado=true WHERE usuario_id=$1`, uid)
@@ -451,4 +454,86 @@ func (m *Modulo) actualizarYo(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	return m.yo(w, r)
+}
+
+// cambiarPassword pide la contraseña actual y cierra las demás sesiones (deja abierta la de este equipo).
+func (m *Modulo) cambiarPassword(w http.ResponseWriter, r *http.Request) error {
+	var in struct {
+		Actual       string `json:"actual"`
+		Nueva        string `json:"nueva"`
+		RefreshToken string `json:"refresh_token"`
+	}
+	if err := httpx.Leer(r, &in); err != nil {
+		return err
+	}
+	if len(in.Nueva) < 8 {
+		return httpx.Invalido("La contraseña nueva debe tener al menos 8 caracteres.")
+	}
+	if in.Nueva == in.Actual {
+		return httpx.Invalido("La contraseña nueva debe ser distinta a la actual.")
+	}
+	ctx := r.Context()
+	u, _ := httpx.UsuarioDe(ctx)
+	var hash string
+	if err := m.app.DB.QueryRowContext(ctx, `SELECT password_hash FROM usuarios WHERE id=$1`, u.ID).Scan(&hash); err != nil {
+		return err
+	}
+	if !seguridad.VerificarPassword(in.Actual, hash) {
+		return httpx.Invalido("Tu contraseña actual no es correcta.")
+	}
+	nuevo, err := seguridad.HashPassword(in.Nueva)
+	if err != nil {
+		return err
+	}
+	err = m.app.EnTransaccion(ctx, func(tx *sql.Tx) error {
+		if _, err := tx.ExecContext(ctx, `UPDATE usuarios SET password_hash=$2, password_cambiado_en=now() WHERE id=$1`, u.ID, nuevo); err != nil {
+			return err
+		}
+		_, err := tx.ExecContext(ctx, `UPDATE refresh_tokens SET revocado=true WHERE usuario_id=$1 AND NOT revocado AND token_hash<>$2`,
+			u.ID, seguridad.HashSHA256(in.RefreshToken))
+		return err
+	})
+	if err != nil {
+		return err
+	}
+	httpx.OK(w, map[string]string{"mensaje": "Listo, cambiaste tu contraseña."})
+	return nil
+}
+
+// cerrarSesiones cierra la cuenta en los otros equipos; este sigue abierto.
+func (m *Modulo) cerrarSesiones(w http.ResponseWriter, r *http.Request) error {
+	var in refreshReq
+	if r.ContentLength > 0 {
+		if err := httpx.Leer(r, &in); err != nil {
+			return err
+		}
+	}
+	u, _ := httpx.UsuarioDe(r.Context())
+	res, err := m.app.DB.ExecContext(r.Context(), `UPDATE refresh_tokens SET revocado=true
+		WHERE usuario_id=$1 AND NOT revocado AND expira_en > now() AND token_hash<>$2`, u.ID, seguridad.HashSHA256(in.RefreshToken))
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	httpx.OK(w, map[string]any{"cerradas": n})
+	return nil
+}
+
+// sesiones dice en cuántos equipos está abierta la cuenta (incluye este).
+func (m *Modulo) sesiones(w http.ResponseWriter, r *http.Request) error {
+	u, _ := httpx.UsuarioDe(r.Context())
+	var n int
+	var cambiada, creada time.Time
+	var pc *time.Time
+	if err := m.app.DB.QueryRowContext(r.Context(), `SELECT (SELECT count(*) FROM refresh_tokens
+		WHERE usuario_id=$1 AND NOT revocado AND expira_en > now()), password_cambiado_en, creado_en FROM usuarios WHERE id=$1`, u.ID).Scan(&n, &pc, &creada); err != nil {
+		return err
+	}
+	// Si nunca la cambió, cuenta desde que creó la cuenta.
+	cambiada = creada
+	if pc != nil {
+		cambiada = *pc
+	}
+	httpx.OK(w, map[string]any{"abiertas": n, "password_cambiado_en": cambiada})
+	return nil
 }

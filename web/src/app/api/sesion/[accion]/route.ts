@@ -25,27 +25,35 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ acc
   }
 
   if (accion === "renovar") {
-    const { refresh } = await tokens();
+    const { refresh, recordar } = await tokens();
     const s = refresh ? await renovar(refresh) : null;
     if (!s) return NextResponse.json({ codigo: "no_autorizado", mensaje: "Inicia sesión para continuar." }, { status: 401 });
     const res = NextResponse.json({ usuario: s.usuario });
-    guardarSesion(res, s);
+    guardarSesion(res, s, recordar);
     return res;
   }
 
   const destino = destinos[accion];
   if (!destino) return NextResponse.json({ mensaje: "No encontrado." }, { status: 404 });
 
+  // "recordar" solo lo usa esta capa (duración de las cookies); a la API no se le envía.
+  let cuerpo = await req.text();
+  let recordar = true;
+  try {
+    const { recordar: r, ...resto } = JSON.parse(cuerpo);
+    recordar = r !== false;
+    cuerpo = JSON.stringify(resto);
+  } catch {}
   const r = await fetch(API_URL + destino, {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Forwarded-For": req.headers.get("x-forwarded-for") ?? "" },
-    body: await req.text(),
+    body: cuerpo,
     cache: "no-store",
   });
   const datos = await r.json().catch(() => ({}));
   if (!r.ok) return NextResponse.json(datos, { status: r.status });
   const s = datos as Sesion;
   const res = NextResponse.json({ usuario: s.usuario });
-  guardarSesion(res, s);
+  guardarSesion(res, s, recordar);
   return res;
 }

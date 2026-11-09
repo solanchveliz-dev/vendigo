@@ -111,7 +111,7 @@ export default async function ProductoPublico({ params, searchParams }: Params &
               )}
             </p>
 
-            <CompraProducto producto={p} />
+            <CompraProducto producto={p} pausada={t.pausada} />
 
             <div className="mt-6 grid gap-3 sm:grid-cols-3">
               {confianza.map((c) => (

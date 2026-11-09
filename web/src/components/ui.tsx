@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
-import { Loader2, X, CheckCircle2, AlertCircle } from "lucide-react";
+import { Loader2, X, CheckCircle2, AlertCircle, Eye, EyeOff } from "lucide-react";
 
 export function cn(...c: (string | false | null | undefined)[]) {
   return c.filter(Boolean).join(" ");
@@ -123,6 +123,24 @@ const base = "w-full rounded-xl border border-linea bg-white px-3.5 text-[15px] 
 
 export function Entrada(p: React.InputHTMLAttributes<HTMLInputElement>) {
   return <input {...p} className={cn(base, "h-11", p.className)} />;
+}
+
+// Campo de contraseña con el ojito para verla mientras se escribe.
+export function EntradaClave(p: Omit<React.InputHTMLAttributes<HTMLInputElement>, "type">) {
+  const [ver, setVer] = useState(false);
+  return (
+    <span className="relative block">
+      <input {...p} type={ver ? "text" : "password"} className={cn(base, "h-11 pr-11", p.className)} />
+      <button
+        type="button"
+        onClick={() => setVer(!ver)}
+        className="absolute right-3 top-1/2 grid size-7 -translate-y-1/2 place-items-center rounded-lg text-gris hover:text-tinta"
+        aria-label={ver ? "Ocultar contraseña" : "Ver contraseña"}
+      >
+        {ver ? <EyeOff className="size-[18px]" /> : <Eye className="size-[18px]" />}
+      </button>
+    </span>
+  );
 }
 
 export function Area(p: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {

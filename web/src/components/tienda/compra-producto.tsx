@@ -38,7 +38,7 @@ export function GaleriaProducto({ producto: p }: { producto: Producto }) {
 }
 
 // Precio, opciones, cantidad y botones de compra.
-export function CompraProducto({ producto: p }: { producto: Producto }) {
+export function CompraProducto({ producto: p, pausada = false }: { producto: Producto; pausada?: boolean }) {
   const [opcion, setOpcion] = useState(() => Math.max(0, p.variantes.findIndex((v) => v.stock > 0)));
   const [cantidad, setCantidad] = useState(1);
   const [aviso, setAviso] = useState("");
@@ -118,17 +118,20 @@ export function CompraProducto({ producto: p }: { producto: Producto }) {
         </div>
       </div>
 
+      {pausada && (
+        <p className="mt-5 rounded-2xl bg-arena px-4 py-3 text-sm font-semibold text-tinta">Esta tienda está en pausa y no recibe pedidos por ahora.</p>
+      )}
       <div className="mt-5 flex gap-3">
         <button
           onClick={() => pronto("Muy pronto podrás comprar desde aquí.")}
-          disabled={stock === 0}
+          disabled={stock === 0 || pausada}
           className="inline-flex h-[52px] min-w-0 flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-full bg-pino px-4 font-bold text-white transition hover:bg-pino-2 disabled:opacity-50"
         >
           <Zap className="size-5 shrink-0" /> Comprar ahora
         </button>
         <button
           onClick={() => pronto("Muy pronto podrás agregar productos a tu pedido.")}
-          disabled={stock === 0}
+          disabled={stock === 0 || pausada}
           aria-label="Agregar a mi pedido"
           className="inline-flex h-[52px] min-w-[52px] items-center justify-center gap-2 whitespace-nowrap rounded-full bg-coral px-4 font-bold sm:px-7 text-white transition hover:opacity-90 disabled:opacity-50"
         >

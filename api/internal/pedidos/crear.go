@@ -52,14 +52,17 @@ func Crear(ctx context.Context, app *core.App, tx *sql.Tx, in PedidoNuevo) (stri
 	if len(in.Items) == 0 {
 		return "", "", httpx.Invalido("El pedido no tiene productos.")
 	}
-	var recojo, agencia, moto bool
+	var recojo, agencia, moto, pausada bool
 	var costoMoto int
-	if err := tx.QueryRowContext(ctx, `SELECT entrega_recojo, entrega_agencia, entrega_motorizado, costo_motorizado_centimos FROM tiendas WHERE id=$1 AND activa`,
-		in.TiendaID).Scan(&recojo, &agencia, &moto, &costoMoto); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT entrega_recojo, entrega_agencia, entrega_motorizado, costo_motorizado_centimos, pausada FROM tiendas WHERE id=$1 AND activa`,
+		in.TiendaID).Scan(&recojo, &agencia, &moto, &costoMoto, &pausada); err != nil {
 		if core.SinFilas(err) {
 			return "", "", httpx.ErrNoEncontrado
 		}
 		return "", "", err
+	}
+	if pausada {
+		return "", "", httpx.Conflicto("tienda_pausada", "Esta tienda no está recibiendo pedidos por ahora.")
 	}
 	envio := 0
 	switch in.Entrega {

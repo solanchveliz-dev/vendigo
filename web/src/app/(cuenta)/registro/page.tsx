@@ -1,18 +1,35 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { Aviso, Boton, Campo, Entrada } from "@/components/ui";
+import { Suspense, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Apple, Armchair, Dumbbell, Gem, Headphones, Palette, Shirt, Sparkles, type LucideIcon } from "lucide-react";
+import { Aviso, Boton, Campo, Entrada, EntradaClave, cn } from "@/components/ui";
 import { api, ErrorApi } from "@/lib/api";
 
-export default function Registro() {
+// Lo que elige aquí se usa para dejar listo el rubro al crear su tienda.
+const QUE_VENDES: { id: string; texto: string; icono: LucideIcon }[] = [
+  { id: "moda", texto: "Moda", icono: Shirt },
+  { id: "belleza", texto: "Belleza", icono: Sparkles },
+  { id: "hogar", texto: "Hogar", icono: Armchair },
+  { id: "tecnologia", texto: "Tecnología", icono: Headphones },
+  { id: "comida", texto: "Alimentos", icono: Apple },
+  { id: "artesania", texto: "Artesanías", icono: Palette },
+  { id: "accesorios", texto: "Accesorios", icono: Gem },
+  { id: "deportes", texto: "Deportes", icono: Dumbbell },
+];
+
+function Formulario() {
   const router = useRouter();
-  const [f, setF] = useState({ nombre: "", celular: "", email: "", password: "" });
+  const params = useSearchParams();
+  const [rol, setRol] = useState<"vendedor" | "comprador">(params.get("tipo") === "comprar" ? "comprador" : "vendedor");
+  const [f, setF] = useState({ nombre: "", email: "", celular: "", password: "" });
+  const [rubro, setRubro] = useState("");
   const [acepto, setAcepto] = useState(false);
   const [error, setError] = useState("");
   const [cargando, setCargando] = useState(false);
   const cambiar = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement>) => setF({ ...f, [k]: e.target.value });
+  const vende = rol === "vendedor";
 
   async function enviar(e: React.FormEvent) {
     e.preventDefault();
@@ -20,9 +37,10 @@ export default function Registro() {
     setError("");
     setCargando(true);
     try {
-      const r = await api.post<{ celular: string; codigo_dev?: string }>("/auth/registro", { ...f, rol: "vendedor" });
+      const r = await api.post<{ celular: string; codigo_dev?: string }>("/auth/registro", { ...f, celular: f.celular.replace(/\s/g, ""), rol });
       const q = new URLSearchParams({ celular: r.celular });
       if (r.codigo_dev) q.set("dev", r.codigo_dev);
+      if (vende && rubro) q.set("rubro", rubro);
       router.push(`/verificar?${q}`);
     } catch (err) {
       setError((err as ErrorApi).message);
@@ -32,37 +50,90 @@ export default function Registro() {
   }
 
   return (
-    <form onSubmit={enviar} className="space-y-5">
+    <form onSubmit={enviar} className="space-y-4">
       <div>
-        <h1 className="text-3xl font-extrabold text-pino">Crea tu cuenta de vendedor</h1>
-        <p className="mt-1 text-gris">Es gratis. El primer mes de cualquier plan también.</p>
+        <h1 className="text-[31px] font-extrabold leading-tight tracking-[-0.02em] text-pino">{vende ? "Crea tu cuenta de vendedor" : "Crea tu cuenta"}</h1>
+        <p className="mt-1.5 text-gris">{vende ? "Solo necesitamos unos datos. Lo demás lo completas después." : "Para seguir tus pedidos y comprar más rápido."}</p>
       </div>
+
+      <div className="grid grid-cols-2 rounded-full bg-white p-1 ring-1 ring-linea">
+        {(["comprador", "vendedor"] as const).map((r) => (
+          <button
+            key={r}
+            type="button"
+            onClick={() => setRol(r)}
+            className={cn("h-10 rounded-full text-sm font-semibold transition", rol === r ? "bg-pino text-white" : "text-tinta hover:text-pino")}
+          >
+            {r === "comprador" ? "Quiero comprar" : "Quiero vender"}
+          </button>
+        ))}
+      </div>
+
       {error && <Aviso tono="error">{error}</Aviso>}
-      <Campo etiqueta="Tu nombre completo">
-        <Entrada value={f.nombre} onChange={cambiar("nombre")} placeholder="Camila Rojas" autoComplete="name" required />
+      <Campo etiqueta="Nombre y apellido">
+        <Entrada value={f.nombre} onChange={cambiar("nombre")} placeholder="Ej. Camila Rojas" autoComplete="name" required minLength={3} />
       </Campo>
-      <Campo etiqueta="Celular" ayuda="Te enviaremos un código para confirmar que es tuyo.">
+      <Campo etiqueta="Correo">
+        <Entrada type="email" value={f.email} onChange={cambiar("email")} placeholder="nombre@correo.pe" autoComplete="email" required />
+      </Campo>
+      <Campo etiqueta="Celular" ayuda="Te enviaremos un código por SMS para confirmar que es tuyo.">
         <Entrada value={f.celular} onChange={cambiar("celular")} placeholder="987 654 321" inputMode="numeric" autoComplete="tel" required />
       </Campo>
-      <Campo etiqueta="Correo (opcional)">
-        <Entrada type="email" value={f.email} onChange={cambiar("email")} placeholder="tu@correo.com" autoComplete="email" />
+      <Campo etiqueta="Contraseña">
+        <EntradaClave value={f.password} onChange={cambiar("password")} placeholder="Mínimo 8 caracteres" autoComplete="new-password" minLength={8} required />
       </Campo>
-      <Campo etiqueta="Contraseña" ayuda="Mínimo 8 caracteres.">
-        <Entrada type="password" value={f.password} onChange={cambiar("password")} autoComplete="new-password" minLength={8} required />
-      </Campo>
-      <label className="flex items-start gap-3 text-sm text-gris">
-        <input type="checkbox" checked={acepto} onChange={(e) => setAcepto(e.target.checked)} className="mt-1 size-4 accent-pino" />
-        <span>Acepto los términos y condiciones y la política de privacidad de VendiGo (Ley N.° 29733).</span>
+
+      {vende && (
+        <div>
+          <p className="mb-2 text-sm text-gris">
+            <b className="text-tinta">¿Qué vendes?</b> · así dejamos lista tu tienda
+          </p>
+          <div className="grid grid-cols-2 gap-2.5">
+            {QUE_VENDES.map(({ id, texto, icono: I }) => {
+              const activo = rubro === id;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setRubro(activo ? "" : id)}
+                  aria-pressed={activo}
+                  className={cn(
+                    "flex h-14 items-center gap-3 rounded-2xl bg-white px-2.5 text-left text-sm font-bold text-tinta ring-1 transition",
+                    activo ? "ring-2 ring-pino" : "ring-linea hover:ring-pino/40",
+                  )}
+                >
+                  <span className={cn("grid size-9 place-items-center rounded-xl", activo ? "bg-pino text-white" : "bg-coral-claro text-tinta")}>
+                    <I className="size-[18px]" />
+                  </span>
+                  {texto}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      <label className="flex items-center gap-3 pt-1 text-sm text-tinta">
+        <input type="checkbox" checked={acepto} onChange={(e) => setAcepto(e.target.checked)} className="size-[18px] accent-pino" />
+        <span>Acepto los términos y la política de privacidad</span>
       </label>
-      <Boton bloque tamano="lg" cargando={cargando}>
-        Continuar
+      <Boton bloque tamano="lg" variante="acento" cargando={cargando}>
+        {vende ? "Crear cuenta y configurar mi tienda" : "Crear cuenta"}
       </Boton>
       <p className="text-center text-sm text-gris">
         ¿Ya tienes cuenta?{" "}
-        <Link href="/ingresar" className="font-semibold text-pino hover:underline">
+        <Link href="/ingresar" className="font-bold text-pino hover:underline">
           Ingresa
         </Link>
       </p>
     </form>
+  );
+}
+
+export default function Registro() {
+  return (
+    <Suspense>
+      <Formulario />
+    </Suspense>
   );
 }
