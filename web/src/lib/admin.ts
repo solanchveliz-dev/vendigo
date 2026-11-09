@@ -48,6 +48,8 @@ export const ACCIONES: Record<string, string> = {
   responder_reclamo: "Respondió un reclamo",
   retirar_producto: "Retiró una publicación",
   restaurar_producto: "Habilitó una publicación",
+  editar_plan: "Editó un plan",
+  descargar_reporte: "Descargó un reporte",
 };
 
 export const VERIFICACION: Record<string, { texto: string; tono: "ok" | "aviso" | "error" | "neutro" }> = {

@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { Bell, Download, Flag, Home, LayoutGrid, LogOut, Search, ShieldCheck, Wallet, Briefcase, Users, Store, Package, ShoppingBag, CreditCard, Crown } from "lucide-react";
+import { Bell, Download, Flag, Home, LayoutGrid, LogOut, Search, ShieldCheck, Wallet, Briefcase, Users, Store, Package, ShoppingBag, CreditCard, Crown, BarChart3 } from "lucide-react";
 import { api, sesion, useApi } from "@/lib/api";
 import type { Usuario } from "@/lib/tipos";
 import { Cargando, cn } from "@/components/ui";
@@ -24,6 +24,7 @@ const menu = [
   { href: "/admin/pagos", texto: "Pagos", icono: CreditCard },
   { href: "/admin/retiros", texto: "Retiros", icono: Wallet, cuenta: "retiros_pendientes" as const },
   { href: "/admin/suscripciones", texto: "Suscripciones", icono: Crown },
+  { href: "/admin/reportes", texto: "Reportes", icono: BarChart3 },
   { href: "/admin/reclamos", texto: "Reclamos", icono: Flag, cuenta: "reclamos_abiertos" as const },
   { href: "/admin/seguridad", texto: "Seguridad", icono: ShieldCheck },
 ];

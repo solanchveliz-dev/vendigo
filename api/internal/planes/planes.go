@@ -44,7 +44,7 @@ type Plan struct {
 }
 
 func (m *Modulo) leerPlanes(ctx context.Context) ([]Plan, error) {
-	rows, err := m.app.DB.QueryContext(ctx, `SELECT id, nombre, precio_centimos, ventas_mes, creditos_ia, productos_max FROM planes ORDER BY orden`)
+	rows, err := m.app.DB.QueryContext(ctx, `SELECT id, nombre, precio_centimos, ventas_mes, creditos_ia, productos_max FROM planes WHERE disponible ORDER BY orden`)
 	if err != nil {
 		return nil, err
 	}
@@ -159,8 +159,8 @@ func (m *Modulo) cambiar(w http.ResponseWriter, r *http.Request) error {
 	}
 	var precio int
 	var nombre string
-	if err := m.app.DB.QueryRowContext(ctx, `SELECT nombre, precio_centimos FROM planes WHERE id=$1`, in.PlanID).Scan(&nombre, &precio); err != nil {
-		return httpx.Invalido("Elige un plan válido.")
+	if err := m.app.DB.QueryRowContext(ctx, `SELECT nombre, precio_centimos FROM planes WHERE id=$1 AND disponible`, in.PlanID).Scan(&nombre, &precio); err != nil {
+		return httpx.Invalido("Ese plan no está disponible por ahora. Elige otro.")
 	}
 	err = m.app.EnTransaccion(ctx, func(tx *sql.Tx) error {
 		u, err := LeerUso(ctx, tx, tid)

@@ -55,7 +55,15 @@ export default function Suscripciones() {
 
   return (
     <>
-      <Titulo titulo="Suscripciones" detalle="Planes de las tiendas." />
+      <Titulo
+        titulo="Suscripciones"
+        detalle="Planes de las tiendas."
+        accion={
+          <Link href="/admin/planes" className="inline-flex h-11 items-center gap-2 rounded-full bg-pino px-5 text-sm font-bold text-white">
+            <Crown className="size-4" /> Gestionar planes
+          </Link>
+        }
+      />
       {!datos ? (
         <Cargando />
       ) : (
