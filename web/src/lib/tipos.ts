@@ -142,7 +142,7 @@ export type Ayuda = {
 
 export type Saldos = { a_liberar_centimos: number; disponible_centimos: number; retirado_centimos: number };
 
-export type Plan = { id: string; nombre: string; precio_centimos: number; ventas_mes: number | null; creditos_ia: number };
+export type Plan = { id: string; nombre: string; precio_centimos: number; ventas_mes: number | null; creditos_ia: number; productos_max: number | null };
 export type UsoPlan = {
   plan: Plan;
   mes_gratis: boolean;
@@ -153,6 +153,7 @@ export type UsoPlan = {
   ventas_limite: number | null;
   ventas_quedan: number | null;
   puede_mes_gratis: boolean;
+  productos_publicados: number;
 };
 
 export type Creditos = { del_plan: number; extra: number; usados: number; quedan: number; costos: Record<string, number> };

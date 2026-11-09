@@ -35,15 +35,16 @@ func (m *Modulo) RutasVendedor(r chi.Router) {
 }
 
 type Plan struct {
-	ID         string `json:"id"`
-	Nombre     string `json:"nombre"`
-	Precio     int    `json:"precio_centimos"`
-	VentasMes  *int   `json:"ventas_mes"`
-	CreditosIA int    `json:"creditos_ia"`
+	ID           string `json:"id"`
+	Nombre       string `json:"nombre"`
+	Precio       int    `json:"precio_centimos"`
+	VentasMes    *int   `json:"ventas_mes"`
+	CreditosIA   int    `json:"creditos_ia"`
+	ProductosMax *int   `json:"productos_max"`
 }
 
 func (m *Modulo) leerPlanes(ctx context.Context) ([]Plan, error) {
-	rows, err := m.app.DB.QueryContext(ctx, `SELECT id, nombre, precio_centimos, ventas_mes, creditos_ia FROM planes ORDER BY orden`)
+	rows, err := m.app.DB.QueryContext(ctx, `SELECT id, nombre, precio_centimos, ventas_mes, creditos_ia, productos_max FROM planes ORDER BY orden`)
 	if err != nil {
 		return nil, err
 	}
@@ -51,7 +52,7 @@ func (m *Modulo) leerPlanes(ctx context.Context) ([]Plan, error) {
 	out := []Plan{}
 	for rows.Next() {
 		var p Plan
-		rows.Scan(&p.ID, &p.Nombre, &p.Precio, &p.VentasMes, &p.CreditosIA)
+		rows.Scan(&p.ID, &p.Nombre, &p.Precio, &p.VentasMes, &p.CreditosIA, &p.ProductosMax)
 		out = append(out, p)
 	}
 	return out, nil
@@ -67,15 +68,16 @@ func (m *Modulo) listar(w http.ResponseWriter, r *http.Request) error {
 }
 
 type Uso struct {
-	Plan           Plan       `json:"plan"`
-	MesGratis      bool       `json:"mes_gratis"`
-	Desde          time.Time  `json:"desde"`
-	ProximoCobro   *time.Time `json:"proximo_cobro"`
-	VentasUsadas   int        `json:"ventas_usadas"`
-	VentasExtra    int        `json:"ventas_extra"`
-	VentasLimite   *int       `json:"ventas_limite"`
-	VentasQuedan   *int       `json:"ventas_quedan"`
-	PuedeMesGratis bool       `json:"puede_mes_gratis"`
+	Plan            Plan       `json:"plan"`
+	MesGratis       bool       `json:"mes_gratis"`
+	Desde           time.Time  `json:"desde"`
+	ProximoCobro    *time.Time `json:"proximo_cobro"`
+	VentasUsadas    int        `json:"ventas_usadas"`
+	VentasExtra     int        `json:"ventas_extra"`
+	VentasLimite    *int       `json:"ventas_limite"`
+	VentasQuedan    *int       `json:"ventas_quedan"`
+	PuedeMesGratis  bool       `json:"puede_mes_gratis"`
+	ProductosUsados int        `json:"productos_publicados"`
 }
 
 func inicioMes() time.Time {
@@ -90,9 +92,10 @@ var lima = time.FixedZone("Lima", -5*3600)
 func LeerUso(ctx context.Context, q core.Ejecutor, tiendaID string) (Uso, error) {
 	var u Uso
 	var fin sql.NullTime
-	err := q.QueryRowContext(ctx, `SELECT p.id, p.nombre, p.precio_centimos, p.ventas_mes, p.creditos_ia, s.mes_gratis, s.inicio, s.fin
+	err := q.QueryRowContext(ctx, `SELECT p.id, p.nombre, p.precio_centimos, p.ventas_mes, p.creditos_ia, p.productos_max, s.mes_gratis, s.inicio, s.fin,
+		(SELECT count(*) FROM productos WHERE tienda_id=s.tienda_id AND activo AND NOT eliminado)
 		FROM suscripciones s JOIN planes p ON p.id=s.plan_id WHERE s.tienda_id=$1 AND s.activa`, tiendaID).
-		Scan(&u.Plan.ID, &u.Plan.Nombre, &u.Plan.Precio, &u.Plan.VentasMes, &u.Plan.CreditosIA, &u.MesGratis, &u.Desde, &fin)
+		Scan(&u.Plan.ID, &u.Plan.Nombre, &u.Plan.Precio, &u.Plan.VentasMes, &u.Plan.CreditosIA, &u.Plan.ProductosMax, &u.MesGratis, &u.Desde, &fin, &u.ProductosUsados)
 	if err != nil {
 		return u, err
 	}

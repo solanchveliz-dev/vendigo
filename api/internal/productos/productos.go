@@ -360,6 +360,11 @@ func (m *Modulo) crear(w http.ResponseWriter, r *http.Request) error {
 	activo := in.Activo == nil || *in.Activo
 	var pid string
 	err = m.app.EnTransaccion(ctx, func(tx *sql.Tx) error {
+		if activo {
+			if err := validarLimite(ctx, tx, tid); err != nil {
+				return err
+			}
+		}
 		if err := tx.QueryRowContext(ctx, `INSERT INTO productos (tienda_id, nombre, descripcion, categoria, precio_centimos, stock, activo, detalles)
 			VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`, tid, in.Nombre, in.Descripcion, in.Categoria, in.Precio, in.Stock, activo, []byte(in.Detalles)).Scan(&pid); err != nil {
 			return err
@@ -432,6 +437,15 @@ func (m *Modulo) cambiarEstado(w http.ResponseWriter, r *http.Request) error {
 	}
 	if err := httpx.Leer(r, &in); err != nil {
 		return err
+	}
+	if in.Activo {
+		var yaActivo bool
+		m.app.DB.QueryRowContext(ctx, `SELECT activo FROM productos WHERE id=$1`, pid).Scan(&yaActivo)
+		if !yaActivo {
+			if err := validarLimite(ctx, m.app.DB, tid); err != nil {
+				return err
+			}
+		}
 	}
 	if _, err := m.app.DB.ExecContext(ctx, `UPDATE productos SET activo=$2, actualizado_en=now() WHERE id=$1`, pid, in.Activo); err != nil {
 		return err
@@ -661,5 +675,18 @@ func (m *Modulo) productoPublico(w http.ResponseWriter, r *http.Request) error {
 		preguntas = append(preguntas, q)
 	}
 	httpx.OK(w, map[string]any{"producto": l[0], "preguntas": preguntas})
+	return nil
+}
+
+// validarLimite revisa que el plan permita publicar un producto más (Gratis 15, Emprende 100, Crece y Pro sin límite).
+func validarLimite(ctx context.Context, q core.Ejecutor, tid string) error {
+	var max sql.NullInt64
+	var plan string
+	var usados int
+	q.QueryRowContext(ctx, `SELECT p.nombre, p.productos_max, (SELECT count(*) FROM productos WHERE tienda_id=$1 AND activo AND NOT eliminado)
+		FROM suscripciones s JOIN planes p ON p.id=s.plan_id WHERE s.tienda_id=$1 AND s.activa`, tid).Scan(&plan, &max, &usados)
+	if max.Valid && int64(usados) >= max.Int64 {
+		return httpx.Conflicto("limite_productos", fmt.Sprintf("Tu plan %s permite %d productos publicados. Oculta o elimina uno, o mejora tu plan para publicar más.", plan, max.Int64))
+	}
 	return nil
 }
