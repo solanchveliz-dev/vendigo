@@ -11,7 +11,7 @@ import { CabeceraPublica } from "@/components/tienda/cabecera";
 import { CompraProducto, GaleriaProducto } from "@/components/tienda/compra-producto";
 import { BotonPregunta } from "@/components/tienda/pregunta";
 
-type Pregunta = { pregunta: string; respuesta: string | null; respondida_en: string | null; creado_en: string };
+type Pregunta = { pregunta: string; respuesta: string | null; respondida_en: string | null; creado_en: string; automatica?: boolean };
 
 // Página pública de un producto. Se genera en el servidor para que Google pueda leerla.
 async function cargar(slug: string, id: string) {
@@ -202,7 +202,7 @@ export default async function ProductoPublico({ params, searchParams }: Params &
                           <>
                             <p className="text-gris">{q.respuesta}</p>
                             <p className="mt-1 text-xs text-gris">
-                              {t.nombre} respondió · {hace(q.respondida_en ?? q.creado_en)}
+                              {q.automatica ? "Respuesta automática de la tienda" : `${t.nombre} respondió`} · {hace(q.respondida_en ?? q.creado_en)}
                             </p>
                           </>
                         ) : (

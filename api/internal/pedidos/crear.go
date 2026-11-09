@@ -138,6 +138,12 @@ func Crear(ctx context.Context, app *core.App, tx *sql.Tx, in PedidoNuevo) (stri
 		if _, err := tx.ExecContext(ctx, `UPDATE productos SET stock=stock-$2 WHERE id=$1`, l.prod, it.Cantidad); err != nil {
 			return "", "", err
 		}
+		// Aviso de inventario cuando el stock baja de 4 o se agota.
+		if quedan := stock - it.Cantidad; quedan == 0 {
+			billetera.Notificar(ctx, tx, in.TiendaID, "Agotado: "+l.nombre, "Se vendió la última unidad. Repón stock para seguir vendiendo.", "/vendedor/productos/"+l.prod)
+		} else if quedan <= 3 && stock > 3 {
+			billetera.Notificar(ctx, tx, in.TiendaID, "Stock bajo: "+l.nombre, fmt.Sprintf("Quedan %d unidades.", quedan), "/vendedor/productos/"+l.prod)
+		}
 		if pct.Valid {
 			l.precio = productos.PrecioConOferta(l.precio, int(pct.Int64))
 		}

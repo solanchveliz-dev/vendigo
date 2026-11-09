@@ -7,6 +7,7 @@ export type Resumen = {
   pedidos: { por_aceptar: number; por_enviar: number; recogen: number; en_camino: number };
   reclamos_abiertos: number;
   preguntas_pendientes: number;
+  ayudas_abiertas: number;
   notificaciones_no_leidas: number;
   vendido_hoy_centimos: number;
   vendido_mes_centimos: number;

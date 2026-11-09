@@ -13,6 +13,7 @@ import (
 	"github.com/solanchveliz-dev/vendigo/api/internal/core"
 	"github.com/solanchveliz-dev/vendigo/api/internal/httpx"
 	"github.com/solanchveliz-dev/vendigo/api/internal/pedidos"
+	"github.com/solanchveliz-dev/vendigo/api/internal/productos"
 	"github.com/solanchveliz-dev/vendigo/api/internal/tiendas"
 )
 
@@ -24,6 +25,7 @@ func (m *Modulo) Rutas(r chi.Router) {
 	r.Method("POST", "/pedido", httpx.Handler(m.pedido))
 	r.Method("POST", "/pedidos/{id}/confirmar", httpx.Handler(m.confirmar))
 	r.Method("POST", "/pedidos/{id}/reclamo", httpx.Handler(m.reclamo))
+	r.Method("POST", "/pedidos/{id}/ayuda", httpx.Handler(m.ayuda))
 	r.Method("POST", "/pregunta", httpx.Handler(m.pregunta))
 	r.Method("POST", "/barrer", httpx.Handler(m.barrer))
 	r.Method("POST", "/verificacion/aprobar", httpx.Handler(m.aprobarVerificacion))
@@ -162,7 +164,7 @@ func (m *Modulo) reclamo(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-var preguntas = []string{"¿Tienen en otro color?", "¿Hacen envíos a Arequipa?", "¿Cuánto demora en llegar?", "¿Es original?", "¿Tiene garantía?"}
+var preguntas = []string{"¿Tienen en otro color?", "¿Hacen envíos a Arequipa?", "¿Cuánto demora en llegar?", "¿Es original?", "¿Tiene garantía?", "¿Hasta qué hora atienden?", "¿Cuánto cuesta?", "¿Viene en caja de regalo?"}
 
 func (m *Modulo) pregunta(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
@@ -170,14 +172,13 @@ func (m *Modulo) pregunta(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	res, err := m.app.DB.ExecContext(ctx, `INSERT INTO preguntas (producto_id, autor_nombre, pregunta)
-		SELECT id, $2, $3 FROM productos WHERE tienda_id=$1 AND NOT eliminado ORDER BY random() LIMIT 1`,
-		tid, nombres[rand.IntN(len(nombres))], preguntas[rand.IntN(len(preguntas))])
-	if err != nil {
-		return err
-	}
-	if n, _ := res.RowsAffected(); n == 0 {
+	var pid string
+	m.app.DB.QueryRowContext(ctx, `SELECT id FROM productos WHERE tienda_id=$1 AND NOT eliminado ORDER BY random() LIMIT 1`, tid).Scan(&pid)
+	if pid == "" {
 		return httpx.Invalido("Primero publica al menos un producto.")
+	}
+	if err := productos.NuevaPregunta(ctx, m.app, pid, nombres[rand.IntN(len(nombres))], preguntas[rand.IntN(len(preguntas))]); err != nil {
+		return err
 	}
 	httpx.OK(w, map[string]string{"mensaje": "Llegó una pregunta nueva."})
 	return nil
@@ -206,5 +207,27 @@ func (m *Modulo) aprobarVerificacion(w http.ResponseWriter, r *http.Request) err
 		return httpx.Invalido("No hay una verificación pendiente.")
 	}
 	httpx.OK(w, map[string]string{"mensaje": "Identidad verificada."})
+	return nil
+}
+
+// ayuda simula que el comprador pide ayuda dentro de su pedido.
+func (m *Modulo) ayuda(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	tid, err := tiendas.ID(ctx, m.app)
+	if err != nil {
+		return err
+	}
+	var pid string
+	m.app.DB.QueryRowContext(ctx, `SELECT id FROM pedidos WHERE id::text=$1 AND tienda_id=$2`, chi.URLParam(r, "id"), tid).Scan(&pid)
+	if pid == "" {
+		return httpx.ErrNoEncontrado
+	}
+	err = m.app.EnTransaccion(ctx, func(tx *sql.Tx) error {
+		return pedidos.AbrirAyuda(ctx, tx, pid, pedidos.MotivosAyuda[1], "¿Pueden enviarlo a la Shalom de Surco en vez de Arequipa?")
+	})
+	if err != nil {
+		return err
+	}
+	httpx.OK(w, map[string]string{"mensaje": "El comprador pidió ayuda con su pedido."})
 	return nil
 }

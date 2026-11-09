@@ -126,6 +126,18 @@ export type PedidoDetalle = PedidoResumen & {
   entregado_en: string | null;
   pedidos_cliente: number;
   motorizados_guardados: { nombre: string; celular: string }[];
+  ayuda: Ayuda | null;
+};
+
+export type Ayuda = {
+  id: string;
+  pedido_id: string;
+  codigo: string;
+  comprador: string;
+  motivo: string;
+  abierta: boolean;
+  mensajes: { autor: "cliente" | "tienda"; texto: string; creado_en: string }[];
+  creado_en: string;
 };
 
 export type Saldos = { a_liberar_centimos: number; disponible_centimos: number; retirado_centimos: number };

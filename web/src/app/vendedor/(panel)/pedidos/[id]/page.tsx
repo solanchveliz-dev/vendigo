@@ -11,6 +11,7 @@ import { Aviso, Boton, Campo, Cargando, Entrada, Area, Modal, Tarjeta, useAvisar
 import { EstadoPedido } from "@/components/pedidos/estado";
 import { AvisoAccion, LineaTiempo } from "@/components/pedidos/pasos";
 import { iconoEntrega } from "@/components/pedidos/tabla";
+import { TarjetaAyuda } from "@/components/pedidos/ayuda";
 import { usePanel } from "@/components/panel/contexto";
 
 function Dato({ k, v }: { k: string; v?: React.ReactNode }) {
@@ -195,7 +196,7 @@ export default function DetallePedido({ params }: { params: Promise<{ id: string
             <LineaTiempo pedido={p} />
           </Tarjeta>
 
-          {process.env.NEXT_PUBLIC_DEMO === "1" && (p.estado === "enviado" || p.estado === "entregado") && (
+          {process.env.NEXT_PUBLIC_DEMO === "1" && !["rechazado", "cancelado"].includes(p.estado) && (
             <Tarjeta className="no-imprimir bg-arena/40">
               <p className="mb-2 text-xs font-bold uppercase tracking-wide text-gris">Simular comprador (pruebas)</p>
               <div className="flex flex-wrap gap-2">
@@ -204,7 +205,12 @@ export default function DetallePedido({ params }: { params: Promise<{ id: string
                     {p.metodo_pago === "al_recibir" ? "Pagó al recibir" : "Confirmó que lo recibió"}
                   </Boton>
                 )}
-                {!p.reclamo_detalle && p.entrega !== "motorizado" && (
+                {!p.ayuda?.abierta && (
+                  <Boton tamano="sm" variante="secundario" onClick={() => demo("ayuda", {}, "El cliente pidió ayuda con su pedido")}>
+                    Pidió ayuda con su pedido
+                  </Boton>
+                )}
+                {(p.estado === "enviado" || p.estado === "entregado") && !p.reclamo_detalle && p.entrega !== "motorizado" && (
                   <Boton tamano="sm" variante="secundario" onClick={() => demo("reclamo", { motivo: "no_llego" }, "El cliente abrió un reclamo")}>
                     Reclamó “No me llegó”
                   </Boton>
@@ -215,6 +221,7 @@ export default function DetallePedido({ params }: { params: Promise<{ id: string
         </div>
 
         <div className="space-y-5">
+          {p.ayuda && <TarjetaAyuda ayuda={p.ayuda} alResponder={() => { recargar(); recargarResumen(); }} />}
           <Tarjeta>
             <h2 className="mb-3 text-lg font-extrabold text-tinta">Cliente</h2>
             <div className="flex items-center gap-3">

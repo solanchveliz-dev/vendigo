@@ -41,6 +41,9 @@ func (m *Modulo) RutasVendedor(r chi.Router) {
 	r.Method("POST", "/reclamos/{id}/responder", httpx.Handler(m.responderReclamo))
 	r.Method("GET", "/notificaciones", httpx.Handler(m.notificaciones))
 	r.Method("POST", "/notificaciones/leer", httpx.Handler(m.leerNotificaciones))
+	r.Method("POST", "/notificaciones/{id}/leer", httpx.Handler(m.leerNotificacion))
+	r.Method("GET", "/ayudas", httpx.Handler(m.ayudas))
+	r.Method("POST", "/ayudas/{id}/responder", httpx.Handler(m.responderAyuda))
 }
 
 // Grupos del filtro de pedidos (los mismos nombres en la web y en la app).
@@ -225,6 +228,7 @@ type Detalle struct {
 	EntregadoEn    *time.Time   `json:"entregado_en"`
 	PedidosCliente int          `json:"pedidos_cliente"`
 	Motorizados    []Motorizado `json:"motorizados_guardados"`
+	Ayuda          *Ayuda       `json:"ayuda"`
 }
 
 func (m *Modulo) cargar(ctx context.Context, tid, pid string) (*Detalle, error) {
@@ -306,6 +310,9 @@ func (m *Modulo) cargar(ctx context.Context, tid, pid string) (*Detalle, error) 
 		d.Reclamo = &rc.Estado
 	}
 	d.Acciones = acciones(d)
+	if l, err := m.leerAyudas(ctx, tid, d.ID); err == nil && len(l) > 0 {
+		d.Ayuda = &l[0]
+	}
 	d.Motorizados = []Motorizado{}
 	if d.Entrega == "motorizado" {
 		var raw []byte
@@ -733,9 +740,10 @@ func (m *Modulo) resumen(w http.ResponseWriter, r *http.Request) error {
 		m.app.DB.QueryRowContext(ctx, `SELECT count(*) FROM pedidos p WHERE p.tienda_id=$1 AND `+Grupos[g], tid).Scan(&n)
 		cont[g] = n
 	}
-	var reclamos, preguntas, noLeidas int
+	var reclamos, preguntas, noLeidas, ayudas int
 	m.app.DB.QueryRowContext(ctx, `SELECT count(*) FROM reclamos c JOIN pedidos p ON p.id=c.pedido_id WHERE p.tienda_id=$1 AND c.estado='abierto'`, tid).Scan(&reclamos)
 	m.app.DB.QueryRowContext(ctx, `SELECT count(*) FROM preguntas q JOIN productos p ON p.id=q.producto_id WHERE p.tienda_id=$1 AND q.respuesta IS NULL`, tid).Scan(&preguntas)
+	m.app.DB.QueryRowContext(ctx, `SELECT count(*) FROM ayudas_pedido a JOIN pedidos p ON p.id=a.pedido_id WHERE p.tienda_id=$1 AND a.abierta`, tid).Scan(&ayudas)
 	u, _ := httpx.UsuarioDe(ctx)
 	m.app.DB.QueryRowContext(ctx, `SELECT count(*) FROM notificaciones WHERE usuario_id=$1 AND NOT leida`, u.ID).Scan(&noLeidas)
 
@@ -776,7 +784,7 @@ func (m *Modulo) resumen(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	httpx.OK(w, map[string]any{
-		"pedidos": cont, "reclamos_abiertos": reclamos, "preguntas_pendientes": preguntas, "notificaciones_no_leidas": noLeidas,
+		"pedidos": cont, "reclamos_abiertos": reclamos, "preguntas_pendientes": preguntas, "ayudas_abiertas": ayudas, "notificaciones_no_leidas": noLeidas,
 		"vendido_hoy_centimos": hoy, "vendido_mes_centimos": mes, "pedidos_mes": pedidosMes, "stock_bajo": stockBajo,
 		"clientes": clientes, "productos_publicados": publicados,
 		"semana": semana, "saldos": saldos,
@@ -789,8 +797,10 @@ func (m *Modulo) resumen(w http.ResponseWriter, r *http.Request) error {
 func (m *Modulo) notificaciones(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	u, _ := httpx.UsuarioDe(ctx)
-	rows, err := m.app.DB.QueryContext(ctx, `SELECT id, titulo, cuerpo, enlace, leida, creado_en FROM notificaciones
-		WHERE usuario_id=$1 ORDER BY creado_en DESC LIMIT 50`, u.ID)
+	// tipo: pedidos, pagos, consultas o inventario (vacío = todas).
+	tipo := r.URL.Query().Get("tipo")
+	rows, err := m.app.DB.QueryContext(ctx, `SELECT id, titulo, cuerpo, enlace, leida, creado_en, tipo FROM notificaciones
+		WHERE usuario_id=$1 AND ($2 = '' OR tipo = $2) ORDER BY creado_en DESC LIMIT 50`, u.ID, tipo)
 	if err != nil {
 		return err
 	}
@@ -802,14 +812,22 @@ func (m *Modulo) notificaciones(w http.ResponseWriter, r *http.Request) error {
 		Enlace   string    `json:"enlace"`
 		Leida    bool      `json:"leida"`
 		CreadoEn time.Time `json:"creado_en"`
+		Tipo     string    `json:"tipo"`
 	}
 	out := []n{}
 	for rows.Next() {
 		var x n
-		rows.Scan(&x.ID, &x.Titulo, &x.Cuerpo, &x.Enlace, &x.Leida, &x.CreadoEn)
+		rows.Scan(&x.ID, &x.Titulo, &x.Cuerpo, &x.Enlace, &x.Leida, &x.CreadoEn, &x.Tipo)
 		out = append(out, x)
 	}
 	httpx.OK(w, map[string]any{"notificaciones": out})
+	return nil
+}
+
+func (m *Modulo) leerNotificacion(w http.ResponseWriter, r *http.Request) error {
+	u, _ := httpx.UsuarioDe(r.Context())
+	m.app.DB.ExecContext(r.Context(), `UPDATE notificaciones SET leida=true WHERE usuario_id=$1 AND id::text=$2`, u.ID, chi.URLParam(r, "id"))
+	httpx.OK(w, map[string]string{"mensaje": "Listo."})
 	return nil
 }
 

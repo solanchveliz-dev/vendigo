@@ -53,7 +53,7 @@ export default function LayoutPanel({ children }: { children: React.ReactNode })
 
   const cuentas: Record<string, number> = {
     pedidos: (resumen?.pedidos.por_aceptar ?? 0) + (resumen?.pedidos.por_enviar ?? 0) + (resumen?.pedidos.recogen ?? 0),
-    consultas: resumen?.preguntas_pendientes ?? 0,
+    consultas: (resumen?.preguntas_pendientes ?? 0) + (resumen?.ayudas_abiertas ?? 0),
     reclamos: resumen?.reclamos_abiertos ?? 0,
   };
   const activo = (href: string) => (href === "/vendedor" ? ruta === href : ruta.startsWith(href));

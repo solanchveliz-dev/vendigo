@@ -31,6 +31,12 @@ func (m *Modulo) RutasVendedor(r chi.Router) {
 	r.Method("DELETE", "/productos/{id}/oferta", httpx.Handler(m.quitarOferta))
 	r.Method("GET", "/preguntas", httpx.Handler(m.preguntas))
 	r.Method("POST", "/preguntas/{id}/responder", httpx.Handler(m.responder))
+	r.Method("GET", "/respuestas-rapidas", httpx.Handler(m.listarRapidas))
+	r.Method("POST", "/respuestas-rapidas", httpx.Handler(m.crearRapida))
+	r.Method("PUT", "/respuestas-rapidas/{id}", httpx.Handler(m.editarRapida))
+	r.Method("DELETE", "/respuestas-rapidas/{id}", httpx.Handler(m.borrarRapida))
+	r.Method("GET", "/respuestas-automaticas", httpx.Handler(m.leerAutomaticas))
+	r.Method("PUT", "/respuestas-automaticas", httpx.Handler(m.cambiarAutomaticas))
 }
 
 func (m *Modulo) RutasPublicas(r chi.Router) {
@@ -511,6 +517,8 @@ type Pregunta struct {
 	Respuesta    *string    `json:"respuesta"`
 	RespondidaEn *time.Time `json:"respondida_en"`
 	CreadoEn     time.Time  `json:"creado_en"`
+	Automatica   bool       `json:"automatica"`
+	ImagenURL    string     `json:"imagen_url"`
 }
 
 func (m *Modulo) preguntas(w http.ResponseWriter, r *http.Request) error {
@@ -519,10 +527,15 @@ func (m *Modulo) preguntas(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	pendientes := r.URL.Query().Get("estado") != "respondidas"
-	rows, err := m.app.DB.QueryContext(ctx, `SELECT q.id, p.id, p.nombre, q.autor_nombre, q.pregunta, q.respuesta, q.respondida_en, q.creado_en
+	// estado: pendientes, respondidas o todas (por responder primero).
+	filtro := map[string]string{"pendientes": "q.respuesta IS NULL", "respondidas": "q.respuesta IS NOT NULL"}[r.URL.Query().Get("estado")]
+	if filtro == "" {
+		filtro = "TRUE"
+	}
+	rows, err := m.app.DB.QueryContext(ctx, `SELECT q.id, p.id, p.nombre, q.autor_nombre, q.pregunta, q.respuesta, q.respondida_en, q.creado_en, q.automatica,
+		(SELECT key FROM producto_imagenes i WHERE i.producto_id=p.id ORDER BY orden LIMIT 1)
 		FROM preguntas q JOIN productos p ON p.id=q.producto_id
-		WHERE p.tienda_id=$1 AND (q.respuesta IS NULL) = $2 ORDER BY q.creado_en DESC LIMIT 100`, tid, pendientes)
+		WHERE p.tienda_id=$1 AND `+filtro+` ORDER BY (q.respuesta IS NOT NULL), q.creado_en DESC LIMIT 100`, tid)
 	if err != nil {
 		return err
 	}
@@ -530,14 +543,19 @@ func (m *Modulo) preguntas(w http.ResponseWriter, r *http.Request) error {
 	out := []Pregunta{}
 	for rows.Next() {
 		var q Pregunta
-		if err := rows.Scan(&q.ID, &q.ProductoID, &q.Producto, &q.Autor, &q.Pregunta, &q.Respuesta, &q.RespondidaEn, &q.CreadoEn); err != nil {
+		var img sql.NullString
+		if err := rows.Scan(&q.ID, &q.ProductoID, &q.Producto, &q.Autor, &q.Pregunta, &q.Respuesta, &q.RespondidaEn, &q.CreadoEn, &q.Automatica, &img); err != nil {
 			return err
+		}
+		if img.Valid {
+			q.ImagenURL = m.app.Archivos.URLPublica(img.String)
 		}
 		out = append(out, q)
 	}
-	var pend int
-	m.app.DB.QueryRowContext(ctx, `SELECT count(*) FROM preguntas q JOIN productos p ON p.id=q.producto_id WHERE p.tienda_id=$1 AND q.respuesta IS NULL`, tid).Scan(&pend)
-	httpx.OK(w, map[string]any{"preguntas": out, "pendientes": pend})
+	var pend, auto int
+	m.app.DB.QueryRowContext(ctx, `SELECT count(*) FILTER (WHERE q.respuesta IS NULL), count(*) FILTER (WHERE q.automatica)
+		FROM preguntas q JOIN productos p ON p.id=q.producto_id WHERE p.tienda_id=$1`, tid).Scan(&pend, &auto)
+	httpx.OK(w, map[string]any{"preguntas": out, "pendientes": pend, "automaticas": auto})
 	return nil
 }
 
@@ -557,7 +575,7 @@ func (m *Modulo) responder(w http.ResponseWriter, r *http.Request) error {
 	if n := len([]rune(in.Respuesta)); n < 2 || n > 500 {
 		return httpx.Invalido("La respuesta debe tener entre 2 y 500 caracteres.")
 	}
-	res, err := m.app.DB.ExecContext(ctx, `UPDATE preguntas q SET respuesta=$3, respondida_en=now()
+	res, err := m.app.DB.ExecContext(ctx, `UPDATE preguntas q SET respuesta=$3, respondida_en=now(), automatica=false
 		FROM productos p WHERE q.id::text=$1 AND p.id=q.producto_id AND p.tienda_id=$2`, chi.URLParam(r, "id"), tid, in.Respuesta)
 	if err != nil {
 		return err
@@ -606,6 +624,7 @@ type PreguntaPublica struct {
 	Respuesta    *string    `json:"respuesta"`
 	RespondidaEn *time.Time `json:"respondida_en"`
 	CreadoEn     time.Time  `json:"creado_en"`
+	Automatica   bool       `json:"automatica"`
 }
 
 // productoPublico devuelve un producto publicado de la tienda y sus preguntas.
@@ -627,7 +646,7 @@ func (m *Modulo) productoPublico(w http.ResponseWriter, r *http.Request) error {
 	if len(l) == 0 {
 		return httpx.ErrNoEncontrado
 	}
-	rows, err := m.app.DB.QueryContext(ctx, `SELECT pregunta, respuesta, respondida_en, creado_en FROM preguntas
+	rows, err := m.app.DB.QueryContext(ctx, `SELECT pregunta, respuesta, respondida_en, creado_en, automatica FROM preguntas
 		WHERE producto_id=$1 ORDER BY (respuesta IS NULL), creado_en DESC LIMIT 30`, l[0].ID)
 	if err != nil {
 		return err
@@ -636,7 +655,7 @@ func (m *Modulo) productoPublico(w http.ResponseWriter, r *http.Request) error {
 	preguntas := []PreguntaPublica{}
 	for rows.Next() {
 		var q PreguntaPublica
-		if err := rows.Scan(&q.Pregunta, &q.Respuesta, &q.RespondidaEn, &q.CreadoEn); err != nil {
+		if err := rows.Scan(&q.Pregunta, &q.Respuesta, &q.RespondidaEn, &q.CreadoEn, &q.Automatica); err != nil {
 			return err
 		}
 		preguntas = append(preguntas, q)

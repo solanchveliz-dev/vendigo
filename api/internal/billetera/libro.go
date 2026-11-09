@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/solanchveliz-dev/vendigo/api/internal/core"
@@ -96,9 +97,19 @@ func liberar(ctx context.Context, tx *sql.Tx, tiendaID, pedidoID, codigo string)
 }
 
 // Notificar crea un aviso dentro de la plataforma para el dueño de la tienda.
+// El tipo (para los filtros) sale de a dónde lleva el aviso.
 func Notificar(ctx context.Context, q core.Ejecutor, tiendaID, titulo, cuerpo, enlace string) {
-	if _, err := q.ExecContext(ctx, `INSERT INTO notificaciones (usuario_id, titulo, cuerpo, enlace)
-		SELECT usuario_id, $2, $3, $4 FROM tiendas WHERE id=$1`, tiendaID, titulo, cuerpo, enlace); err != nil {
+	tipo := "pedidos"
+	switch {
+	case strings.HasPrefix(enlace, "/vendedor/cobros"), strings.HasPrefix(enlace, "/vendedor/plan"):
+		tipo = "pagos"
+	case strings.HasPrefix(enlace, "/vendedor/consultas"):
+		tipo = "consultas"
+	case strings.HasPrefix(enlace, "/vendedor/productos"):
+		tipo = "inventario"
+	}
+	if _, err := q.ExecContext(ctx, `INSERT INTO notificaciones (usuario_id, titulo, cuerpo, enlace, tipo)
+		SELECT usuario_id, $2, $3, $4, $5 FROM tiendas WHERE id=$1`, tiendaID, titulo, cuerpo, enlace, tipo); err != nil {
 		slog.Error("notificación", "err", err)
 	}
 }
