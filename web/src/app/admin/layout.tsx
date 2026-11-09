@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { BadgeCheck, Banknote, FileClock, LayoutDashboard, LogOut, ShieldAlert, Users } from "lucide-react";
 import { sesion, useApi } from "@/lib/api";
 import type { Usuario } from "@/lib/tipos";
@@ -30,6 +30,25 @@ export default function LayoutAdmin({ children }: { children: React.ReactNode })
   useEffect(() => {
     if (yo.datos && yo.datos.rol !== "admin") router.replace("/vendedor");
   }, [yo.datos, router]);
+
+  // Cierre de sesión tras 30 minutos sin actividad (la API también lo exige al renovar la sesión).
+  const ultimaActividad = useRef(Date.now());
+  useEffect(() => {
+    const marcar = () => (ultimaActividad.current = Date.now());
+    const eventos = ["mousemove", "keydown", "click", "scroll", "touchstart"];
+    eventos.forEach((e) => window.addEventListener(e, marcar, { passive: true }));
+    const t = setInterval(async () => {
+      if (Date.now() - ultimaActividad.current > 30 * 60 * 1000) {
+        clearInterval(t);
+        await sesion("salir").catch(() => null);
+        window.location.href = "/ingresar?inactiva=1&siguiente=/admin";
+      }
+    }, 20_000);
+    return () => {
+      clearInterval(t);
+      eventos.forEach((e) => window.removeEventListener(e, marcar));
+    };
+  }, []);
 
   if (!yo.datos || yo.datos.rol !== "admin") return <div className="p-10"><Cargando /></div>;
 

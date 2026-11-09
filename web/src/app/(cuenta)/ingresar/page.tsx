@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Aviso, Boton, Campo, Entrada, EntradaClave } from "@/components/ui";
 import { api, ErrorApi, sesion } from "@/lib/api";
 import type { Usuario } from "@/lib/tipos";
+import { PasoMFA, type DesafioMFA } from "@/components/paso-mfa";
 
 function Formulario() {
   const router = useRouter();
@@ -14,8 +15,17 @@ function Formulario() {
   const [usuario, setUsuario] = useState("");
   const [password, setPassword] = useState("");
   const [recordar, setRecordar] = useState(true);
-  const [error, setError] = useState(params.get("suspendida") ? "Tu cuenta está suspendida. Escríbenos a ayuda@vendigo.pe." : "");
+  const [error, setError] = useState(
+    params.get("suspendida") ? "Tu cuenta está suspendida. Escríbenos a ayuda@vendigo.pe." : params.get("inactiva") ? "Cerramos tu sesión por 30 minutos sin actividad. Vuelve a ingresar." : "",
+  );
   const [cargando, setCargando] = useState(false);
+  const [desafio, setDesafio] = useState<DesafioMFA | null>(null);
+
+  function entrar(u: Usuario) {
+    if (u.rol === "admin") router.replace(siguiente.startsWith("/admin") ? siguiente : "/admin");
+    else if (u.rol === "comprador") router.replace("/");
+    else router.replace(u.tienda_id ? siguiente : "/vendedor/crear-tienda");
+  }
 
   async function enviar(e: React.FormEvent) {
     e.preventDefault();
@@ -23,10 +33,13 @@ function Formulario() {
     setCargando(true);
     const u = usuario.includes("@") ? usuario.trim() : usuario.replace(/\s/g, "");
     try {
-      const r = await sesion<{ usuario: Usuario }>("ingresar", { usuario: u, password, recordar });
-      if (r.usuario.rol === "admin") router.replace(siguiente.startsWith("/admin") ? siguiente : "/admin");
-      else if (r.usuario.rol === "comprador") router.replace("/");
-      else router.replace(r.usuario.tienda_id ? siguiente : "/vendedor/crear-tienda");
+      const r = await sesion<{ usuario?: Usuario } & Partial<DesafioMFA>>("ingresar", { usuario: u, password, recordar });
+      if (r.mfa && r.desafio) {
+        setPassword("");
+        setDesafio(r as DesafioMFA);
+        return;
+      }
+      if (r.usuario) entrar(r.usuario);
     } catch (err) {
       const e = err as ErrorApi;
       if (e.codigo === "celular_no_verificado") {
@@ -39,6 +52,8 @@ function Formulario() {
       setCargando(false);
     }
   }
+
+  if (desafio) return <PasoMFA d={desafio} alTerminar={entrar} alVolver={() => setDesafio(null)} />;
 
   return (
     <form onSubmit={enviar} className="space-y-4">

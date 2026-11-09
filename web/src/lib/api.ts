@@ -38,7 +38,7 @@ export const api = {
   del: <T,>(ruta: string) => llamar<T>("DELETE", ruta),
 };
 
-export async function sesion<T>(accion: "ingresar" | "verificar" | "renovar" | "salir", cuerpo: unknown = {}): Promise<T> {
+export async function sesion<T>(accion: "ingresar" | "verificar" | "mfa" | "renovar" | "salir", cuerpo: unknown = {}): Promise<T> {
   const r = await fetch(`/api/sesion/${accion}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

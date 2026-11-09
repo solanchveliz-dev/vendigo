@@ -5,6 +5,7 @@ import { API_URL, borrarSesion, guardarSesion, renovar, tokens, type Sesion } fr
 const destinos: Record<string, string> = {
   ingresar: "/api/v1/auth/login",
   verificar: "/api/v1/auth/verificar",
+  mfa: "/api/v1/auth/mfa",
 };
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ accion: string }> }) {
@@ -57,8 +58,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ acc
   });
   const datos = await r.json().catch(() => ({}));
   if (!r.ok) return NextResponse.json(datos, { status: r.status });
-  const s = datos as Sesion;
-  const res = NextResponse.json({ usuario: s.usuario });
-  guardarSesion(res, s, recordar);
+  // Administrador: la contraseña fue correcta pero falta el código de su app (no hay sesión todavía).
+  if (!datos.access_token) return NextResponse.json(datos);
+  const s = datos as Sesion & { codigos_respaldo?: string[] };
+  const res = NextResponse.json({ usuario: s.usuario, codigos_respaldo: s.codigos_respaldo });
+  // Las sesiones de administrador nunca se "recuerdan": se cierran al cerrar el navegador.
+  guardarSesion(res, s, recordar && s.usuario.rol !== "admin");
   return res;
 }

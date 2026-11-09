@@ -77,3 +77,17 @@ func TestValidarPassword(t *testing.T) {
 		}
 	}
 }
+
+// Vector de prueba del RFC 6238 (SHA1, secreto "12345678901234567890").
+func TestTOTP(t *testing.T) {
+	sec := b32.EncodeToString([]byte("12345678901234567890"))
+	if _, ok := VerificarTOTP(sec, "287082", time.Unix(59, 0)); !ok {
+		t.Fatal("el código del RFC debería ser válido")
+	}
+	if _, ok := VerificarTOTP(sec, "287082", time.Unix(59+120, 0)); ok {
+		t.Fatal("un código viejo no debería servir")
+	}
+	if c := CodigosRespaldo(3); len(c) != 3 || len(c[0]) != 11 {
+		t.Fatal("códigos de respaldo mal formados")
+	}
+}

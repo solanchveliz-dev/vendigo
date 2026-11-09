@@ -84,7 +84,7 @@ func main() {
 		visitasDemo(ctx, conexion)
 		historialDemo(ctx, conexion)
 		fmt.Println("Los datos de prueba ya existen. Usuario: 999888777 · Contraseña: vendigo123")
-		fmt.Println("Administrador de prueba: 900000001 · Contraseña: Admin2026")
+		fmt.Println("Administrador de prueba: admin@vendigo.pe · Contraseña: Admin2026 (la primera vez configura tu app de autenticación)")
 		return
 	}
 	hash, _ := seguridad.HashPassword("vendigo123")
@@ -158,7 +158,7 @@ func main() {
 	visitasDemo(ctx, conexion)
 	historialDemo(ctx, conexion)
 	fmt.Printf("Datos de prueba listos (%d imágenes subidas).\nUsuario: 999888777 · Contraseña: vendigo123\n", subidas)
-	fmt.Println("Administrador de prueba: 900000001 · Contraseña: Admin2026")
+	fmt.Println("Administrador de prueba: admin@vendigo.pe · Contraseña: Admin2026 (la primera vez configura tu app de autenticación)")
 }
 
 // visitasDemo agrega visitas de los últimos 30 días a la tienda de prueba (solo si aún no tiene),
