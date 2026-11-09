@@ -26,7 +26,7 @@ export default function TuTienda() {
     if (t && !f)
       setF({
         nombre: t.nombre, rubro: t.rubro, descripcion: t.descripcion, ciudad: t.ciudad, distrito: t.distrito, whatsapp: t.whatsapp,
-        correo: t.correo, horario: t.horario, instagram: t.instagram, tiktok: t.tiktok, facebook: t.facebook, politicas: t.politicas,
+        correo: t.correo, horario: t.horario || t.entrega.horario_recojo, instagram: t.instagram, tiktok: t.tiktok, facebook: t.facebook, politicas: t.politicas,
       });
   }, [t, f]);
   if (!t || !f) return <Cargando />;

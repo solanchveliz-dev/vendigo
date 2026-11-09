@@ -16,8 +16,8 @@ import { enlaceRed } from "@/lib/redes";
 // Página pública de la tienda. Se genera en el servidor para que Google pueda leerla.
 async function cargar(slug: string) {
   const [t, p] = await Promise.all([
-    fetch(`${API_URL}/api/v1/tiendas/${encodeURIComponent(slug)}`, { next: { revalidate: 60 } }),
-    fetch(`${API_URL}/api/v1/tiendas/${encodeURIComponent(slug)}/productos`, { next: { revalidate: 60 } }),
+    fetch(`${API_URL}/api/v1/tiendas/${encodeURIComponent(slug)}`, { cache: "no-store" }),
+    fetch(`${API_URL}/api/v1/tiendas/${encodeURIComponent(slug)}/productos`, { cache: "no-store" }),
   ]);
   if (!t.ok) return null;
   return { tienda: (await t.json()) as Tienda, productos: ((await p.json()) as { productos: Producto[] }).productos };

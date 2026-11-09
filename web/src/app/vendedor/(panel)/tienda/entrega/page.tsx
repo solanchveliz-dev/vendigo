@@ -52,7 +52,12 @@ export default function FormasDeEntrega() {
         {e.recojo && (
           <div className="grid gap-3 sm:grid-cols-2">
             <Campo etiqueta="Dirección"><Entrada value={e.direccion_recojo} onChange={(x) => setE({ ...e, direccion_recojo: x.target.value })} /></Campo>
-            <Campo etiqueta="Horario"><Entrada value={e.horario_recojo} onChange={(x) => setE({ ...e, horario_recojo: x.target.value })} placeholder="Lun a sáb, 10 a. m. a 7 p. m." /></Campo>
+            <Campo etiqueta="Horario">
+              <Link href="/vendedor/tienda" className="block rounded-xl bg-crema px-4 py-2.5 text-sm ring-1 ring-linea hover:ring-pino/40">
+                {t?.horario || "Aún no pones tu horario"} <span className="font-semibold text-coral">· cambiar</span>
+              </Link>
+              <span className="mt-1 block text-xs text-gris">Es tu horario de atención, se cambia en Tu tienda.</span>
+            </Campo>
           </div>
         )}
       </Tarjeta>

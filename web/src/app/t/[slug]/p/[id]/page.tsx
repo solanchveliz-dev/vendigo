@@ -15,8 +15,8 @@ type Pregunta = { pregunta: string; respuesta: string | null; respondida_en: str
 // Página pública de un producto. Se genera en el servidor para que Google pueda leerla.
 async function cargar(slug: string, id: string) {
   const [t, p] = await Promise.all([
-    fetch(`${API_URL}/api/v1/tiendas/${encodeURIComponent(slug)}`, { next: { revalidate: 60 } }),
-    fetch(`${API_URL}/api/v1/tiendas/${encodeURIComponent(slug)}/productos/${encodeURIComponent(id)}`, { next: { revalidate: 60 } }),
+    fetch(`${API_URL}/api/v1/tiendas/${encodeURIComponent(slug)}`, { cache: "no-store" }),
+    fetch(`${API_URL}/api/v1/tiendas/${encodeURIComponent(slug)}/productos/${encodeURIComponent(id)}`, { cache: "no-store" }),
   ]);
   if (!t.ok || !p.ok) return null;
   const d = (await p.json()) as { producto: Producto; preguntas: Pregunta[] };

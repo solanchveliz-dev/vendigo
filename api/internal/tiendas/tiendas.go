@@ -340,7 +340,7 @@ func (m *Modulo) actualizar(w http.ResponseWriter, r *http.Request) error {
 	}
 	_, err = m.app.DB.ExecContext(ctx, `UPDATE tiendas SET nombre=$2, rubro=$3, descripcion=$4, ciudad=$5, distrito=$6,
 		logo_key=COALESCE(NULLIF($7,''), logo_key), portada_key=COALESCE(NULLIF($8,''), portada_key),
-		instagram=$9, facebook=$10, tiktok=$11, whatsapp=$12, correo=$13, horario=$14, politicas=$15, actualizado_en=now() WHERE id=$1`,
+		instagram=$9, facebook=$10, tiktok=$11, whatsapp=$12, correo=$13, horario=$14, horario_recojo=$14, politicas=$15, actualizado_en=now() WHERE id=$1`,
 		id, in.Nombre, in.Rubro, in.Descripcion, in.Ciudad, in.Distrito, valor(in.LogoKey), valor(in.PortadaKey),
 		in.Instagram, in.Facebook, in.Tiktok, in.Whatsapp, in.Correo, in.Horario, in.Politicas)
 	if err != nil {
@@ -389,7 +389,7 @@ func (m *Modulo) actualizarEntrega(w http.ResponseWriter, r *http.Request) error
 	if in.CostoMotorizado < 0 || in.CostoMotorizado > 10000 {
 		return httpx.Invalido("El costo del motorizado debe estar entre S/ 0 y S/ 100.")
 	}
-	_, err = m.app.DB.ExecContext(ctx, `UPDATE tiendas SET entrega_recojo=$2, direccion_recojo=$3, horario_recojo=$4, entrega_agencia=$5,
+	_, err = m.app.DB.ExecContext(ctx, `UPDATE tiendas SET entrega_recojo=$2, direccion_recojo=$3, horario_recojo=CASE WHEN horario<>'' THEN horario ELSE $4 END, entrega_agencia=$5,
 		agencias=$6, entrega_motorizado=$7, costo_motorizado_centimos=$8, zonas_motorizado=$9, actualizado_en=now() WHERE id=$1`,
 		id, in.Recojo, in.DireccionRecojo, strings.TrimSpace(in.HorarioRecojo), in.Agencia, pq.Array(in.Agencias), in.Motorizado,
 		in.CostoMotorizado, strings.TrimSpace(in.ZonasMotorizado))
