@@ -81,6 +81,7 @@ func main() {
 			fmt.Printf("Se volvieron a subir %d fotos de prueba que faltaban.\n", n)
 		}
 		visitasDemo(ctx, conexion)
+		historialDemo(ctx, conexion)
 		fmt.Println("Los datos de prueba ya existen. Usuario: 999888777 · Contraseña: vendigo123")
 		return
 	}
@@ -153,6 +154,7 @@ func main() {
 		return billetera.MarcarEntregado(ctx, tx, tid, listo, "", "excelente", "comprador")
 	})
 	visitasDemo(ctx, conexion)
+	historialDemo(ctx, conexion)
 	fmt.Printf("Datos de prueba listos (%d imágenes subidas).\nUsuario: 999888777 · Contraseña: vendigo123\n", subidas)
 }
 
@@ -174,6 +176,102 @@ func visitasDemo(ctx context.Context, conexion *sql.DB) {
 		FROM (SELECT id, row_number() OVER (ORDER BY creado_en, id) AS n FROM productos WHERE tienda_id=$1 AND NOT eliminado) p,
 		generate_series(1, 30) d
 		ON CONFLICT DO NOTHING`, tid)
+}
+
+// historialDemo agrega 8 semanas de pedidos ya entregados a la tienda de prueba (solo si aún no tiene historial),
+// para que la Analítica, el pronóstico y el analista de ventas tengan datos en la demo.
+// Cada producto tiene un patrón: unos suben, otros bajan, otros se mantienen.
+func historialDemo(ctx context.Context, conexion *sql.DB) {
+	var tid string
+	var hay bool
+	conexion.QueryRowContext(ctx, `SELECT id, EXISTS(SELECT 1 FROM pedidos p WHERE p.tienda_id=t.id AND p.creado_en < now() - interval '14 days')
+		FROM tiendas t WHERE slug='luna-y-sol'`).Scan(&tid, &hay)
+	if tid == "" || hay {
+		return
+	}
+	// unidades por semana (de la más antigua a la actual) para cada producto del catálogo
+	patron := map[string][8]int{
+		"Aretes de filigrana con piedras": {1, 1, 2, 2, 3, 3, 4, 3}, // sube
+		"Collar luna de plata":            {4, 4, 3, 3, 2, 1, 1, 0}, // baja
+		"Anillo de plata floral":          {1, 2, 1, 2, 1, 2, 1, 1}, // estable
+		"Pulsera hilo encerado":           {2, 1, 2, 1, 2, 2, 1, 1}, // estable
+		"Set de aretes pequeños":          {0, 1, 1, 1, 2, 2, 2, 2}, // sube y queda poco stock
+	}
+	clientes := [][2]string{{"Lucía Paredes", "981234110"}, {"Jhon Paredes", "984120998"}, {"Sofía Ramírez", "987300441"}, {"Mariela Torres", "986554210"},
+		{"Andrea Torres", "989001122"}, {"Mariana Vega", "985443321"}, {"Diego Salazar", "984120998"}, {"Valeria Quispe", "987300441"}}
+	rows, err := conexion.QueryContext(ctx, `SELECT id, nombre, precio_centimos FROM productos WHERE tienda_id=$1 AND NOT eliminado`, tid)
+	if err != nil {
+		return
+	}
+	type prod struct {
+		id, nombre string
+		precio     int
+	}
+	var prods []prod
+	for rows.Next() {
+		var p prod
+		rows.Scan(&p.id, &p.nombre, &p.precio)
+		prods = append(prods, p)
+	}
+	rows.Close()
+	entregas := []string{"agencia", "agencia", "motorizado", "recojo"}
+	n := 0
+	for _, p := range prods {
+		sem, ok := patron[p.nombre]
+		if !ok {
+			continue
+		}
+		for k, unidades := range sem {
+			if unidades == 0 {
+				continue
+			}
+			// semana k: entre (7-k)*7 y (7-k)*7+6 días atrás; la actual, entre 1 y 6 días atrás
+			hace := (7-k)*7 + 1 + (n*5+k)%6
+			if k == 6 {
+				hace = 8 + (n*5+k)%6
+			}
+			c := clientes[n%len(clientes)]
+			entrega := entregas[n%len(entregas)]
+			metodo := []string{"yape", "tarjeta", "yape"}[n%3]
+			if entrega == "motorizado" {
+				metodo = "al_recibir"
+			}
+			total := p.precio * unidades
+			comision := billetera.ComisionPasarela(total)
+			if metodo == "al_recibir" {
+				comision = 0
+			}
+			neto := total - comision
+			var pid string
+			if err := conexion.QueryRowContext(ctx, `INSERT INTO pedidos (tienda_id, comprador_nombre, comprador_celular, entrega, estado, metodo_pago, pago_estado,
+				subtotal_centimos, total_centimos, comision_pasarela_centimos, confirmado_por, liberado, liberar_en,
+				creado_en, aceptado_en, enviado_en, entregado_en, cerrado_en)
+				VALUES ($1,$2,$3,$4,'entregado',$5,'pagado',$6,$6,$7,'comprador',true,
+				now() - make_interval(days => $8) + interval '6 days',
+				now() - make_interval(days => $8), now() - make_interval(days => $8) + interval '2 hours',
+				now() - make_interval(days => $8) + interval '1 day', now() - make_interval(days => $8) + interval '3 days',
+				now() - make_interval(days => $8) + interval '6 days') RETURNING id`,
+				tid, c[0], c[1], entrega, metodo, total, comision, hace).Scan(&pid); err != nil {
+				fmt.Println("historial:", err)
+				return
+			}
+			conexion.ExecContext(ctx, `INSERT INTO pedido_items (pedido_id, producto_id, nombre, precio_centimos, cantidad) VALUES ($1,$2,$3,$4,$5)`,
+				pid, p.id, p.nombre, p.precio, unidades)
+			// El dinero ya pasó por las tres bolsas: cobrado, liberado y retirado.
+			for _, mv := range []struct {
+				tipo, bolsa string
+				monto       int
+			}{{"cobro", "a_liberar", total}, {"comision_pasarela", "a_liberar", -comision}, {"liberacion", "a_liberar", -neto},
+				{"liberacion", "disponible", neto}, {"retiro", "disponible", -neto}, {"retiro", "retirado", neto}} {
+				if mv.monto != 0 {
+					conexion.ExecContext(ctx, `INSERT INTO movimientos (tienda_id, pedido_id, tipo, bolsa, monto_centimos, detalle, creado_en)
+						VALUES ($1,$2,$3,$4,$5,'Historial de prueba', now() - make_interval(days => $6))`, tid, pid, mv.tipo, mv.bolsa, mv.monto, hace)
+				}
+			}
+			n++
+		}
+	}
+	fmt.Printf("Se agregó un historial de %d pedidos entregados para la analítica.\n", n)
 }
 
 // reponerFotos vuelve a subir las fotos de prueba que no estén en el almacenamiento

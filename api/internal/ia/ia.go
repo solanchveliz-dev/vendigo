@@ -17,7 +17,7 @@ import (
 )
 
 // La IA no responde mensajes: automatiza tareas del vendedor. Cada herramienta gasta créditos del plan.
-var Costos = map[string]int{"publicar_con_foto": 3, "leer_boleta": 2, "crear_post": 1, "resumen_opiniones": 0}
+var Costos = map[string]int{"publicar_con_foto": 3, "leer_boleta": 2, "crear_post": 1, "analista_ventas": 2, "resumen_opiniones": 0}
 
 const (
 	paqueteCreditos = 100
@@ -39,6 +39,7 @@ func (m *Modulo) RutasVendedor(r chi.Router) {
 		r.Method("POST", "/ia/publicar-con-foto", httpx.Handler(m.publicarConFoto))
 		r.Method("POST", "/ia/leer-boleta", httpx.Handler(m.leerBoleta))
 		r.Method("POST", "/ia/crear-post", httpx.Handler(m.crearPost))
+		r.Method("POST", "/ia/analista", httpx.Handler(m.analista))
 	})
 }
 

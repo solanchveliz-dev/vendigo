@@ -29,6 +29,7 @@ func Nuevo(app *core.App) *Modulo { return &Modulo{app: app} }
 func (m *Modulo) RutasVendedor(r chi.Router) {
 	r.Method("GET", "/resumen", httpx.Handler(m.resumen))
 	r.Method("GET", "/inicio", httpx.Handler(m.inicio))
+	r.Method("GET", "/analitica", httpx.Handler(m.analitica))
 	r.Method("GET", "/pedidos", httpx.Handler(m.listar))
 	r.Method("GET", "/pedidos/{id}", httpx.Handler(m.obtener))
 	r.Method("POST", "/pedidos/{id}/aceptar", httpx.Handler(m.aceptar))

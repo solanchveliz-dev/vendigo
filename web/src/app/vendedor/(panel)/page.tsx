@@ -207,7 +207,10 @@ export default function Inicio() {
           </Tarjeta>
 
           <Tarjeta>
-            <h2 className="mb-4 font-extrabold text-pino">Ventas de los últimos 7 días</h2>
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="font-extrabold text-pino">Ventas de los últimos 7 días</h2>
+              <Link href="/vendedor/analitica" className="text-sm font-semibold text-pino">Ver analítica</Link>
+            </div>
             <div className="flex h-44 items-end gap-3 sm:gap-6">
               {r.semana.map((d, i) => {
                 const hoy = i === r.semana.length - 1;

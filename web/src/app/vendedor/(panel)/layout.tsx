@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { Bell, ClipboardList, Crown, Home, LogOut, MessageCircleQuestion, Package, ShieldCheck, Sparkles, Store, Wallet, Landmark, Search, Share2, Plus } from "lucide-react";
+import { BarChart3, Bell, ClipboardList, Crown, Home, LogOut, MessageCircleQuestion, Package, ShieldCheck, Sparkles, Store, Wallet, Landmark, Search, Share2, Plus } from "lucide-react";
 import { api, sesion, useApi } from "@/lib/api";
 import type { Usuario } from "@/lib/tipos";
 import { cn, Cargando } from "@/components/ui";
@@ -17,6 +17,7 @@ const menu = [
   { href: "/vendedor/productos", texto: "Productos", icono: Package },
   { href: "/vendedor/consultas", texto: "Consultas", icono: MessageCircleQuestion, cuenta: "consultas" },
   { href: "/vendedor/cobros", texto: "Mis cobros", icono: Wallet, cuenta: "reclamos" },
+  { href: "/vendedor/analitica", texto: "Analítica", icono: BarChart3 },
   { href: "/vendedor/ia", texto: "Herramientas IA", icono: Sparkles },
   { href: "/vendedor/tienda", texto: "Mi tienda", icono: Store },
   { href: "/vendedor/plan", texto: "Plan y ventas", icono: Crown },

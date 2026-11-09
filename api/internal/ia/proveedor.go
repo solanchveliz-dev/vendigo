@@ -51,7 +51,7 @@ func (b *Bedrock) Preguntar(ctx context.Context, instruccion string, imagen []by
 	out, err := b.cliente.Converse(ctx, &bedrockruntime.ConverseInput{
 		ModelId:         aws.String(b.modelo),
 		Messages:        []types.Message{{Role: types.ConversationRoleUser, Content: contenido}},
-		InferenceConfig: &types.InferenceConfiguration{MaxTokens: aws.Int32(600), Temperature: aws.Float32(0.3)},
+		InferenceConfig: &types.InferenceConfiguration{MaxTokens: aws.Int32(900), Temperature: aws.Float32(0.3)},
 	})
 	if err != nil {
 		return "", err
