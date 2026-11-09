@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { BarChart3, Camera, FileText, Info, Megaphone, MessageSquareQuote, Sparkles } from "lucide-react";
+import { BarChart3, Camera, FileText, Info, MessageSquareQuote, Sparkles } from "lucide-react";
 import { api, ErrorApi, useApi } from "@/lib/api";
 import type { Creditos, Plan } from "@/lib/tipos";
 import { Aviso, Boton, Cargando, Encabezado, Modal, Tarjeta, useAvisar } from "@/components/ui";
@@ -10,7 +10,6 @@ import { Aviso, Boton, Cargando, Encabezado, Modal, Tarjeta, useAvisar } from "@
 const herramientas = [
   { id: "publicar_con_foto", icono: Camera, titulo: "Publicar con foto", texto: "Sube la foto y la IA propone nombre, descripción y categoría.", href: "/vendedor/productos/nuevo", boton: "Publicar un producto" },
   { id: "leer_boleta", icono: FileText, titulo: "Leer boleta de envío", texto: "Al registrar un envío, la IA lee el número de orden y la clave de la boleta.", href: "/vendedor/pedidos?grupo=por_enviar", boton: "Ver pedidos por enviar" },
-  { id: "crear_post", icono: Megaphone, titulo: "Post para redes", texto: "Escribe el texto para Instagram, TikTok o tu estado de WhatsApp de un producto. Lo creas desde Editar producto.", href: "/vendedor/productos", boton: "Elegir producto" },
   { id: "analista_ventas", icono: BarChart3, titulo: "Analista de ventas", texto: "Revisa qué se vendió más y qué menos, estima las próximas semanas y te dice qué reponer, qué impulsar y qué revisar.", href: "/vendedor/analitica", boton: "Analizar mis ventas" },
   { id: "resumen_opiniones", icono: MessageSquareQuote, titulo: "Resumen de opiniones", texto: "Resume lo que dicen tus clientes de cada producto. Gratis.", href: "", boton: "" },
 ];
