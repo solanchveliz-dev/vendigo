@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Apple, Armchair, Dumbbell, Gem, Headphones, Palette, Shirt, Sparkles, type LucideIcon } from "lucide-react";
 import { Aviso, Boton, Campo, Entrada, EntradaClave, cn } from "@/components/ui";
 import { api, ErrorApi } from "@/lib/api";
+import { MedidorClave, claveValida } from "@/components/medidor-clave";
 
 // Lo que elige aquí se usa para dejar listo el rubro al crear su tienda.
 const QUE_VENDES: { id: string; texto: string; icono: LucideIcon }[] = [
@@ -33,6 +34,7 @@ function Formulario() {
 
   async function enviar(e: React.FormEvent) {
     e.preventDefault();
+    if (!claveValida(f.password)) return setError("Tu contraseña debe tener 8 caracteres o más, una mayúscula, una minúscula y un número.");
     if (!acepto) return setError("Acepta los términos y la política de privacidad para continuar.");
     setError("");
     setCargando(true);
@@ -81,6 +83,7 @@ function Formulario() {
       </Campo>
       <Campo etiqueta="Contraseña">
         <EntradaClave value={f.password} onChange={cambiar("password")} placeholder="Mínimo 8 caracteres" autoComplete="new-password" minLength={8} required />
+        <MedidorClave clave={f.password} />
       </Campo>
 
       {vende && (

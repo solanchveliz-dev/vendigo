@@ -2,9 +2,10 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Eye, EyeOff, Info } from "lucide-react";
+import { CheckCircle2, Eye, EyeOff, Info, XCircle } from "lucide-react";
 import { api, ErrorApi, sesion, useApi } from "@/lib/api";
 import type { Usuario } from "@/lib/tipos";
+import { MedidorClave, claveValida } from "@/components/medidor-clave";
 import { Boton, Campo, Cargando, Entrada, Modal, cn, useAvisar } from "@/components/ui";
 
 type Ajustes = { ruc: string; pausada: boolean; avisos: { pedidos: boolean; consultas: boolean; inventario: boolean } };
@@ -142,7 +143,7 @@ function Seguridad() {
   async function cambiar(e: React.FormEvent) {
     e.preventDefault();
     setError("");
-    if (nueva.length < 8) return setError("La contraseña nueva debe tener al menos 8 caracteres.");
+    if (!claveValida(nueva)) return setError("La contraseña nueva debe tener 8 caracteres o más, una mayúscula, una minúscula y un número.");
     if (nueva !== repite) return setError("Las contraseñas no coinciden.");
     setEnviando(true);
     try {
@@ -174,6 +175,7 @@ function Seguridad() {
   }
 
   return (
+    <div className="space-y-5">
     <div className={tarjeta}>
       <Fila titulo="Contraseña" detalle={`Cambiada ${haceCuanto(datos.password_cambiado_en)}`}>
         <Boton variante="secundario" tamano="sm" onClick={() => { setError(""); setModal(true); }}>Cambiar</Boton>
@@ -191,9 +193,12 @@ function Seguridad() {
       <Modal abierto={modal} onCerrar={() => setModal(false)} titulo="Cambiar contraseña">
         <form onSubmit={cambiar} className="space-y-4">
           <CampoClave etiqueta="Contraseña actual" valor={actual} onChange={setActual} autoComplete="current-password" />
-          <CampoClave etiqueta="Contraseña nueva" valor={nueva} onChange={setNueva} autoComplete="new-password" />
+          <div>
+            <CampoClave etiqueta="Contraseña nueva" valor={nueva} onChange={setNueva} autoComplete="new-password" />
+            <MedidorClave clave={nueva} />
+          </div>
           <CampoClave etiqueta="Repite la contraseña nueva" valor={repite} onChange={setRepite} autoComplete="new-password" />
-          <p className="text-xs text-gris">Usa al menos 8 caracteres. Al cambiarla, cerramos tu cuenta en los otros equipos.</p>
+          <p className="text-xs text-gris">Al cambiarla, cerramos tu cuenta en los otros equipos y te dejamos un aviso.</p>
           {error && <p className="text-sm font-semibold text-error">{error}</p>}
           <div className="flex justify-end gap-2">
             <Boton type="button" variante="secundario" onClick={() => setModal(false)}>Cancelar</Boton>
@@ -201,6 +206,41 @@ function Seguridad() {
           </div>
         </form>
       </Modal>
+    </div>
+    <Accesos />
+    </div>
+  );
+}
+
+type Acceso = { exito: boolean; motivo: string; ip: string; equipo: string; creado_en: string };
+
+// Últimos ingresos a la cuenta: si ve uno que no reconoce, cambia su contraseña.
+function Accesos() {
+  const { datos } = useApi<{ accesos: Acceso[] }>("/me/accesos");
+  return (
+    <div className={tarjeta}>
+      <h3 className="font-bold text-tinta">Últimos accesos a tu cuenta</h3>
+      <p className="mb-3 text-sm text-gris">Si ves uno que no reconoces, cambia tu contraseña.</p>
+      {!datos ? (
+        <Cargando />
+      ) : !datos.accesos.length ? (
+        <p className="text-sm text-gris">Aún no hay accesos registrados.</p>
+      ) : (
+        <ul>
+          {datos.accesos.map((a, i) => (
+            <li key={i} className="flex items-center gap-3 border-b border-linea py-2.5 text-sm last:border-0">
+              {a.exito ? <CheckCircle2 className="size-[18px] shrink-0 text-ok" /> : <XCircle className="size-[18px] shrink-0 text-error" />}
+              <span className="min-w-0 flex-1">
+                <b className="block text-tinta">{a.exito ? "Ingreso correcto" : `Intento fallido · ${a.motivo}`}</b>
+                <span className="text-xs text-gris">{a.equipo}{a.ip ? ` · IP ${a.ip}` : ""}</span>
+              </span>
+              <span className="whitespace-nowrap text-xs text-gris">
+                {new Date(a.creado_en).toLocaleString("es-PE", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: false })}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

@@ -227,7 +227,7 @@ export default function MisCobros() {
                   <span className="grid size-10 place-items-center rounded-xl bg-crema text-tinta"><ReceiptText className="size-4" /></span>
                   <span className="flex-1 text-sm">
                     <b className="block text-tinta">{dia(r.creado_en)}</b>
-                    <span className="text-xs text-gris">{r.pedidos} {r.pedidos === 1 ? "pedido" : "pedidos"} · {r.estado === "pagado" ? "depositado" : "en proceso, llega en 1 día hábil"} · ver detalle</span>
+                    <span className="text-xs text-gris">{r.pedidos} {r.pedidos === 1 ? "pedido" : "pedidos"} · {r.estado === "pagado" ? "depositado" : r.estado === "rechazado" ? "rechazado, volvió a tu saldo" : "en proceso, llega en 1 día hábil"} · ver detalle</span>
                   </span>
                   <span className="text-right">
                     <span className="block text-[10px] font-semibold uppercase tracking-wide text-gris">Retiraste</span>

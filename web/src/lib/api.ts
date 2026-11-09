@@ -20,6 +20,11 @@ async function llamar<T>(metodo: string, ruta: string, cuerpo?: unknown): Promis
     if (r.status === 401 && typeof window !== "undefined" && !ruta.startsWith("/auth")) {
       window.location.href = `/ingresar?siguiente=${encodeURIComponent(window.location.pathname)}`;
     }
+    // Si el administrador suspendió la cuenta, se cierra la sesión y se explica en el ingreso.
+    if (r.status === 403 && datos?.codigo === "cuenta_suspendida" && typeof window !== "undefined") {
+      await fetch("/api/sesion/salir", { method: "POST" }).catch(() => null);
+      window.location.href = "/ingresar?suspendida=1";
+    }
     throw new ErrorApi(r.status, datos?.codigo ?? "error", datos?.mensaje ?? "Algo salió mal. Inténtalo de nuevo.");
   }
   return datos as T;

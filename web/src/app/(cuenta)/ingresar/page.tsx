@@ -9,11 +9,12 @@ import type { Usuario } from "@/lib/tipos";
 
 function Formulario() {
   const router = useRouter();
-  const siguiente = useSearchParams().get("siguiente") || "/vendedor";
+  const params = useSearchParams();
+  const siguiente = params.get("siguiente") || "/vendedor";
   const [usuario, setUsuario] = useState("");
   const [password, setPassword] = useState("");
   const [recordar, setRecordar] = useState(true);
-  const [error, setError] = useState("");
+  const [error, setError] = useState(params.get("suspendida") ? "Tu cuenta está suspendida. Escríbenos a ayuda@vendigo.pe." : "");
   const [cargando, setCargando] = useState(false);
 
   async function enviar(e: React.FormEvent) {
@@ -23,7 +24,8 @@ function Formulario() {
     const u = usuario.includes("@") ? usuario.trim() : usuario.replace(/\s/g, "");
     try {
       const r = await sesion<{ usuario: Usuario }>("ingresar", { usuario: u, password, recordar });
-      if (r.usuario.rol === "comprador") router.replace("/");
+      if (r.usuario.rol === "admin") router.replace(siguiente.startsWith("/admin") ? siguiente : "/admin");
+      else if (r.usuario.rol === "comprador") router.replace("/");
       else router.replace(r.usuario.tienda_id ? siguiente : "/vendedor/crear-tienda");
     } catch (err) {
       const e = err as ErrorApi;

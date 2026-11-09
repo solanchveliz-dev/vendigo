@@ -74,6 +74,7 @@ func main() {
 	}
 	app := &core.App{Cfg: cfg, DB: conexion, Cifrador: cif, Archivos: s3, Avisos: core.NotificadorConsola{}}
 
+	adminDemo(ctx, conexion)
 	var existe bool
 	conexion.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM usuarios WHERE celular='999888777')`).Scan(&existe)
 	if existe {
@@ -83,6 +84,7 @@ func main() {
 		visitasDemo(ctx, conexion)
 		historialDemo(ctx, conexion)
 		fmt.Println("Los datos de prueba ya existen. Usuario: 999888777 · Contraseña: vendigo123")
+		fmt.Println("Administrador de prueba: 900000001 · Contraseña: Admin2026")
 		return
 	}
 	hash, _ := seguridad.HashPassword("vendigo123")
@@ -156,6 +158,7 @@ func main() {
 	visitasDemo(ctx, conexion)
 	historialDemo(ctx, conexion)
 	fmt.Printf("Datos de prueba listos (%d imágenes subidas).\nUsuario: 999888777 · Contraseña: vendigo123\n", subidas)
+	fmt.Println("Administrador de prueba: 900000001 · Contraseña: Admin2026")
 }
 
 // visitasDemo agrega visitas de los últimos 30 días a la tienda de prueba (solo si aún no tiene),
@@ -306,4 +309,16 @@ func reponerFotos(ctx context.Context, conexion *sql.DB, s3 *archivos.S3) int {
 		}
 	}
 	return n
+}
+
+// adminDemo crea el administrador de prueba (solo en local; en producción se usa cmd/admin).
+func adminDemo(ctx context.Context, conexion *sql.DB) {
+	var existe bool
+	conexion.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM usuarios WHERE celular='900000001')`).Scan(&existe)
+	if existe {
+		return
+	}
+	hash, _ := seguridad.HashPassword("Admin2026")
+	conexion.ExecContext(ctx, `INSERT INTO usuarios (nombre, celular, email, password_hash, rol, celular_verificado)
+		VALUES ('Equipo VendiGo', '900000001', 'admin@vendigo.pe', $1, 'admin', true)`, hash)
 }

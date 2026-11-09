@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/solanchveliz-dev/vendigo/api/internal/admin"
 	"github.com/solanchveliz-dev/vendigo/api/internal/auth"
 	"github.com/solanchveliz-dev/vendigo/api/internal/billetera"
 	"github.com/solanchveliz-dev/vendigo/api/internal/core"
@@ -54,6 +55,7 @@ func registrarModulos(app *core.App, api chi.Router) {
 	// Con sesión
 	api.Group(func(r chi.Router) {
 		r.Use(httpx.Autenticar(app.Cfg.JWTSecreto))
+		r.Use(httpx.SoloActivos(app.DB))
 		mAuth.RutasPrivadas(r)
 		mTiendas.RutasCuenta(r)
 
@@ -65,6 +67,12 @@ func registrarModulos(app *core.App, api chi.Router) {
 			mBilletera.RutasVendedor(v)
 			mPlanes.RutasVendedor(v)
 			mIA.RutasVendedor(v)
+		})
+
+		// Panel del administrador: solo cuentas con rol admin (no se pueden crear desde el registro).
+		r.Route("/admin", func(a chi.Router) {
+			a.Use(httpx.Rol("admin"))
+			admin.Nuevo(app).Rutas(a)
 		})
 
 		if app.Cfg.EsDev() {

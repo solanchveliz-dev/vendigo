@@ -46,7 +46,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ acc
   } catch {}
   const r = await fetch(API_URL + destino, {
     method: "POST",
-    headers: { "Content-Type": "application/json", "X-Forwarded-For": req.headers.get("x-forwarded-for") ?? "" },
+    // La IP y el navegador se reenvían para el historial de accesos y el aviso de "nuevo inicio de sesión".
+    headers: {
+      "Content-Type": "application/json",
+      "X-Forwarded-For": req.headers.get("x-forwarded-for") ?? "",
+      "User-Agent": req.headers.get("user-agent") ?? "",
+    },
     body: cuerpo,
     cache: "no-store",
   });

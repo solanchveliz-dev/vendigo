@@ -889,3 +889,49 @@ func (m *Modulo) leerNotificaciones(w http.ResponseWriter, r *http.Request) erro
 	httpx.OK(w, map[string]string{"mensaje": "Listo."})
 	return nil
 }
+
+// ResolverReclamo lo usa el administrador cuando la tienda y el comprador no se ponen de acuerdo.
+// aFavor: "comprador" (se devuelve el dinero y se cancela el pedido) o "vendedor" (el dinero sigue su curso).
+func ResolverReclamo(ctx context.Context, app *core.App, tx *sql.Tx, reclamoID, aFavor, nota, adminID string) (string, error) {
+	var pid, tid, codigo, estado string
+	var liberado bool
+	err := tx.QueryRowContext(ctx, `SELECT p.id, p.tienda_id, p.codigo, p.estado, p.liberado FROM reclamos c JOIN pedidos p ON p.id=c.pedido_id
+		WHERE c.id::text=$1 AND c.estado IN ('abierto','en_revision') FOR UPDATE OF c`, reclamoID).Scan(&pid, &tid, &codigo, &estado, &liberado)
+	if core.SinFilas(err) {
+		return "", httpx.Conflicto("reclamo_cerrado", "Este reclamo ya se resolvió o no existe.")
+	}
+	if err != nil {
+		return "", err
+	}
+	switch aFavor {
+	case "comprador":
+		if liberado {
+			return "", httpx.Conflicto("ya_liberado", "El dinero de este pedido ya se liberó a la tienda; la devolución debe gestionarse aparte.")
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE reclamos SET estado='a_favor_comprador', nota_admin=$2, resuelto_en=now() WHERE id::text=$1`, reclamoID, nota); err != nil {
+			return "", err
+		}
+		if err := billetera.RegistrarDevolucion(ctx, tx, tid, pid, codigo); err != nil {
+			return "", err
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE pedidos SET estado='cancelado', motivo_cancelacion='VendiGo resolvió el reclamo a favor del comprador', cerrado_en=now() WHERE id=$1`, pid); err != nil {
+			return "", err
+		}
+		if err := evento(ctx, tx, pid, "cancelado", "VendiGo revisó tu reclamo y te dio la razón. Te devolvimos todo tu dinero."); err != nil {
+			return "", err
+		}
+		billetera.Notificar(ctx, tx, tid, "Reclamo resuelto a favor del comprador", "Pedido "+codigo+": "+nota, "/vendedor/cobros/reclamo/"+pid)
+	case "vendedor":
+		if _, err := tx.ExecContext(ctx, `UPDATE reclamos SET estado='a_favor_vendedor', nota_admin=$2, resuelto_en=now() WHERE id::text=$1`, reclamoID, nota); err != nil {
+			return "", err
+		}
+		if err := evento(ctx, tx, pid, estado, "VendiGo revisó el reclamo y las pruebas de la tienda. El pedido queda como entregado."); err != nil {
+			return "", err
+		}
+		billetera.Notificar(ctx, tx, tid, "Reclamo resuelto a tu favor", "Pedido "+codigo+": tu dinero se libera en la fecha prevista.", "/vendedor/cobros/reclamo/"+pid)
+	default:
+		return "", httpx.Invalido("Elige a favor de quién se resuelve.")
+	}
+	app.Auditar(ctx, tx, adminID, "resolver_reclamo", "reclamo", reclamoID, map[string]string{"a_favor": aFavor, "nota": nota, "pedido": codigo})
+	return pid, nil
+}

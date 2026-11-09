@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-// El panel del vendedor solo se abre con sesión.
+// El panel del vendedor y el del administrador solo se abren con sesión.
 export function middleware(req: NextRequest) {
   if (!req.cookies.get("vg_rt")?.value) {
     const url = req.nextUrl.clone();
@@ -11,4 +11,4 @@ export function middleware(req: NextRequest) {
   return NextResponse.next();
 }
 
-export const config = { matcher: ["/vendedor/:path*"] };
+export const config = { matcher: ["/vendedor/:path*", "/admin/:path*", "/admin"] };

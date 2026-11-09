@@ -13,6 +13,7 @@ type Detalle = {
   pagaron_centimos: number;
   culqi_centimos: number;
   operacion: string;
+  motivo_rechazo: string;
 };
 
 // "Retiro del …": cuánto se depositó y qué pedidos incluye.
@@ -33,7 +34,7 @@ export default function DetalleRetiro({ params }: { params: Promise<{ id: string
         <div className="mb-2 h-1 w-8 rounded-full bg-coral" />
         <h1 className="text-[34px] font-extrabold leading-tight text-pino">Retiro del {fecha.toLocaleDateString("es-PE", { day: "numeric", month: "short" }).replace(".", "")}</h1>
         <p className="text-sm text-gris">
-          {r.banco} •••• {r.ultimos4} · {fecha.toLocaleTimeString("es-PE", { hour: "numeric", minute: "2-digit" })} · operación {d.operacion} · {r.estado === "pagado" ? "depositado" : "en proceso"}
+          {r.banco} •••• {r.ultimos4} · {fecha.toLocaleTimeString("es-PE", { hour: "numeric", minute: "2-digit" })} {d.operacion ? ` · operación ${d.operacion}` : ""} · {r.estado === "pagado" ? "depositado" : r.estado === "rechazado" ? `rechazado: ${d.motivo_rechazo}. El dinero volvió a tu saldo disponible` : "en proceso, llega en 1 día hábil"}
         </p>
       </div>
 

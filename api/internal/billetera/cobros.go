@@ -229,8 +229,9 @@ func (m *Modulo) detalleRetiro(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	var x retiro
-	err = m.app.DB.QueryRowContext(ctx, `SELECT id, monto_centimos, banco, ultimos4, estado, creado_en, pagado_en FROM retiros WHERE id::text=$1 AND tienda_id=$2`,
-		chi.URLParam(r, "id"), tid).Scan(&x.ID, &x.Monto, &x.Banco, &x.Ultimos4, &x.Estado, &x.CreadoEn, &x.PagadoEn)
+	var operacion, motivo string
+	err = m.app.DB.QueryRowContext(ctx, `SELECT id, monto_centimos, banco, ultimos4, estado, creado_en, pagado_en, operacion, motivo_rechazo FROM retiros WHERE id::text=$1 AND tienda_id=$2`,
+		chi.URLParam(r, "id"), tid).Scan(&x.ID, &x.Monto, &x.Banco, &x.Ultimos4, &x.Estado, &x.CreadoEn, &x.PagadoEn, &operacion, &motivo)
 	if core.SinFilas(err) {
 		return httpx.ErrNoEncontrado
 	}
@@ -253,8 +254,9 @@ func (m *Modulo) detalleRetiro(w http.ResponseWriter, r *http.Request) error {
 		lineas = append(lineas, l)
 	}
 	x.Pedidos = len(lineas)
+	// El número de operación lo registra el administrador al hacer la transferencia.
 	httpx.OK(w, map[string]any{"retiro": x, "pedidos": lineas, "pagaron_centimos": total, "culqi_centimos": comision,
-		"operacion": "TRF-" + strings.ToUpper(strings.ReplaceAll(x.ID, "-", "")[:8])})
+		"operacion": operacion, "motivo_rechazo": motivo})
 	return nil
 }
 

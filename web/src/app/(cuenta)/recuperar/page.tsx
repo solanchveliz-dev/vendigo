@@ -5,6 +5,7 @@ import { useState } from "react";
 import { ArrowLeft, Check } from "lucide-react";
 import { Aviso, Boton, Campo, Entrada, EntradaClave, cn } from "@/components/ui";
 import { api, ErrorApi } from "@/lib/api";
+import { MedidorClave, claveValida } from "@/components/medidor-clave";
 
 const PASOS = ["Celular", "Código", "Nueva contraseña"];
 
@@ -39,6 +40,7 @@ export default function Recuperar() {
   async function cambiar(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+    if (!claveValida(password)) return setError("Tu contraseña debe tener 8 caracteres o más, una mayúscula, una minúscula y un número.");
     if (password !== repite) return setError("Las contraseñas no coinciden.");
     setCargando(true);
     try {
@@ -129,6 +131,7 @@ export default function Recuperar() {
         <>
           <Campo etiqueta="Nueva contraseña">
             <EntradaClave value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Mínimo 8 caracteres" minLength={8} autoComplete="new-password" required />
+            <MedidorClave clave={password} />
           </Campo>
           <Campo etiqueta="Repite la contraseña">
             <EntradaClave value={repite} onChange={(e) => setRepite(e.target.value)} minLength={8} autoComplete="new-password" required />

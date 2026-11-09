@@ -68,3 +68,12 @@ func TestOTP(t *testing.T) {
 		t.Error("códigos distintos no deben tener el mismo hash")
 	}
 }
+
+func TestValidarPassword(t *testing.T) {
+	casos := map[string]bool{"corta1A": false, "sinmayuscula1": false, "SINMINUSCULA1": false, "SinNumero": false, "Vendigo2026": true}
+	for p, ok := range casos {
+		if (ValidarPassword(p) == "") != ok {
+			t.Errorf("%q: esperaba válida=%v", p, ok)
+		}
+	}
+}

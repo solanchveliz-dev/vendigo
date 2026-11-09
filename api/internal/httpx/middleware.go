@@ -2,6 +2,7 @@ package httpx
 
 import (
 	"context"
+	"database/sql"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -131,6 +132,26 @@ func Limite(maximo int, ventana time.Duration) func(http.Handler) http.Handler {
 			mu.Unlock()
 			if n > maximo {
 				Fallo(w, r, NuevoError(http.StatusTooManyRequests, "demasiados_intentos", "Hiciste demasiados intentos. Espera unos minutos."))
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// SoloActivos corta al instante el acceso de una cuenta suspendida por el administrador,
+// aunque su token todavía no haya vencido.
+func SoloActivos(db *sql.DB) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			u, ok := UsuarioDe(r.Context())
+			if !ok {
+				Fallo(w, r, ErrNoAutorizado)
+				return
+			}
+			var activo bool
+			if err := db.QueryRowContext(r.Context(), `SELECT activo FROM usuarios WHERE id=$1`, u.ID).Scan(&activo); err != nil || !activo {
+				Fallo(w, r, NuevoError(http.StatusForbidden, "cuenta_suspendida", "Tu cuenta está suspendida. Escríbenos a ayuda@vendigo.pe."))
 				return
 			}
 			next.ServeHTTP(w, r)

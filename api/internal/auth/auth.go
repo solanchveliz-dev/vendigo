@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"net/http"
 	"regexp"
 	"strings"
@@ -43,6 +44,7 @@ func (m *Modulo) RutasPrivadas(r chi.Router) {
 	r.Method("PUT", "/me/password", httpx.Handler(m.cambiarPassword))
 	r.Method("POST", "/me/cerrar-sesiones", httpx.Handler(m.cerrarSesiones))
 	r.Method("GET", "/me/sesiones", httpx.Handler(m.sesiones))
+	r.Method("GET", "/me/accesos", httpx.Handler(m.accesos))
 }
 
 var (
@@ -104,8 +106,8 @@ func (m *Modulo) registro(w http.ResponseWriter, r *http.Request) error {
 	if in.Email != "" && !reEmail.MatchString(in.Email) {
 		return httpx.Invalido("El correo no es válido.")
 	}
-	if len(in.Password) < 8 {
-		return httpx.Invalido("La contraseña debe tener al menos 8 caracteres.")
+	if msg := seguridad.ValidarPassword(in.Password); msg != "" {
+		return httpx.Invalido(msg)
 	}
 	if in.Rol == "" {
 		in.Rol = "comprador"
@@ -265,22 +267,51 @@ func (m *Modulo) login(w http.ResponseWriter, r *http.Request) error {
 	if reCelular.MatchString(limpiarCelular(u)) {
 		u = limpiarCelular(u)
 	}
+	ctx := r.Context()
 	var id, hash, celular string
 	var verificado, activo bool
-	err := m.app.DB.QueryRowContext(r.Context(), `SELECT id, password_hash, celular, celular_verificado, activo FROM usuarios
-		WHERE celular=$1 OR email=$1`, u).Scan(&id, &hash, &celular, &verificado, &activo)
-	if core.SinFilas(err) || (err == nil && !seguridad.VerificarPassword(in.Password, hash)) {
+	var bloqueado *time.Time
+	err := m.app.DB.QueryRowContext(ctx, `SELECT id, password_hash, celular, celular_verificado, activo, bloqueado_hasta FROM usuarios
+		WHERE celular=$1 OR email=$1`, u).Scan(&id, &hash, &celular, &verificado, &activo, &bloqueado)
+	if core.SinFilas(err) {
 		return httpx.NuevoError(http.StatusUnauthorized, "credenciales", "El celular o la contraseña no son correctos.")
 	}
 	if err != nil {
 		return err
 	}
+	if bloqueado != nil && time.Now().Before(*bloqueado) {
+		min := int(time.Until(*bloqueado).Minutes()) + 1
+		m.registrarAcceso(r, id, false, "cuenta bloqueada")
+		return httpx.NuevoError(http.StatusTooManyRequests, "cuenta_bloqueada",
+			fmt.Sprintf("Por seguridad bloqueamos tu cuenta %d min por varios intentos fallidos. Si olvidaste tu contraseña, recupérala.", min))
+	}
+	if !seguridad.VerificarPassword(in.Password, hash) {
+		// Tras 5 intentos fallidos seguidos la cuenta se bloquea 15 minutos.
+		var intentos int
+		m.app.DB.QueryRowContext(ctx, `UPDATE usuarios SET intentos_fallidos = intentos_fallidos + 1,
+			bloqueado_hasta = CASE WHEN intentos_fallidos + 1 >= $2 THEN now() + $3::interval ELSE bloqueado_hasta END
+			WHERE id=$1 RETURNING intentos_fallidos`, id, maxIntentos, bloqueoDuracion).Scan(&intentos)
+		m.registrarAcceso(r, id, false, "contraseña incorrecta")
+		if intentos >= maxIntentos {
+			m.app.DB.ExecContext(ctx, `UPDATE usuarios SET intentos_fallidos=0 WHERE id=$1`, id)
+			avisoSeguridad(ctx, m.app.DB, id, "Bloqueamos tu cuenta 15 minutos", "Alguien intentó entrar varias veces con una contraseña incorrecta. Si no fuiste tú, cambia tu contraseña.")
+			return httpx.NuevoError(http.StatusTooManyRequests, "cuenta_bloqueada", "Por seguridad bloqueamos tu cuenta 15 min por varios intentos fallidos. Si olvidaste tu contraseña, recupérala.")
+		}
+		if quedan := maxIntentos - intentos; quedan <= 2 {
+			return httpx.NuevoError(http.StatusUnauthorized, "credenciales", fmt.Sprintf("El celular o la contraseña no son correctos. Te quedan %d %s antes de bloquear tu cuenta.", quedan, map[bool]string{true: "intento", false: "intentos"}[quedan == 1]))
+		}
+		return httpx.NuevoError(http.StatusUnauthorized, "credenciales", "El celular o la contraseña no son correctos.")
+	}
 	if !activo {
+		m.registrarAcceso(r, id, false, "cuenta suspendida")
 		return httpx.NuevoError(http.StatusForbidden, "cuenta_suspendida", "Tu cuenta está suspendida. Escríbenos a ayuda@vendigo.pe.")
 	}
 	if !verificado {
 		return httpx.NuevoError(http.StatusForbidden, "celular_no_verificado", "Primero verifica tu celular con el código que te enviamos.")
 	}
+	m.app.DB.ExecContext(ctx, `UPDATE usuarios SET intentos_fallidos=0, bloqueado_hasta=NULL WHERE id=$1`, id)
+	m.avisarEquipoNuevo(r, id)
+	m.registrarAcceso(r, id, true, "")
 	return m.responderSesion(w, r, id)
 }
 
@@ -340,6 +371,11 @@ func (m *Modulo) refresh(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
+	var activo bool
+	m.app.DB.QueryRowContext(r.Context(), `SELECT activo FROM usuarios WHERE id=$1`, uid).Scan(&activo)
+	if !activo {
+		return httpx.NuevoError(http.StatusForbidden, "cuenta_suspendida", "Tu cuenta está suspendida. Escríbenos a ayuda@vendigo.pe.")
+	}
 	return m.responderSesion(w, r, uid)
 }
 
@@ -384,8 +420,8 @@ func (m *Modulo) restablecer(w http.ResponseWriter, r *http.Request) error {
 	if err := httpx.Leer(r, &in); err != nil {
 		return err
 	}
-	if len(in.Password) < 8 {
-		return httpx.Invalido("La contraseña debe tener al menos 8 caracteres.")
+	if msg := seguridad.ValidarPassword(in.Password); msg != "" {
+		return httpx.Invalido(msg)
 	}
 	cel := limpiarCelular(in.Celular)
 	hash, err := seguridad.HashPassword(in.Password)
@@ -401,11 +437,17 @@ func (m *Modulo) restablecer(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 		var uid string
-		if err := tx.QueryRowContext(ctx, `UPDATE usuarios SET password_hash=$2, password_cambiado_en=now() WHERE celular=$1 RETURNING id`, cel, hash).Scan(&uid); err != nil {
+		// Al recuperar la contraseña también se quita el bloqueo por intentos fallidos.
+		if err := tx.QueryRowContext(ctx, `UPDATE usuarios SET password_hash=$2, password_cambiado_en=now(), intentos_fallidos=0, bloqueado_hasta=NULL
+			WHERE celular=$1 RETURNING id`, cel, hash).Scan(&uid); err != nil {
 			return err
 		}
-		_, err := tx.ExecContext(ctx, `UPDATE refresh_tokens SET revocado=true WHERE usuario_id=$1`, uid)
-		return err
+		if _, err := tx.ExecContext(ctx, `UPDATE refresh_tokens SET revocado=true WHERE usuario_id=$1`, uid); err != nil {
+			return err
+		}
+		avisoSeguridad(ctx, tx, uid, "Recuperaste tu contraseña", "Cerramos tu cuenta en todos los equipos. Si no fuiste tú, escríbenos a ayuda@vendigo.pe.")
+		m.app.Auditar(ctx, tx, uid, "recuperar_password", "usuario", uid, nil)
+		return nil
 	})
 	if err != nil {
 		return err
@@ -466,8 +508,8 @@ func (m *Modulo) cambiarPassword(w http.ResponseWriter, r *http.Request) error {
 	if err := httpx.Leer(r, &in); err != nil {
 		return err
 	}
-	if len(in.Nueva) < 8 {
-		return httpx.Invalido("La contraseña nueva debe tener al menos 8 caracteres.")
+	if msg := seguridad.ValidarPassword(in.Nueva); msg != "" {
+		return httpx.Invalido(msg)
 	}
 	if in.Nueva == in.Actual {
 		return httpx.Invalido("La contraseña nueva debe ser distinta a la actual.")
@@ -496,6 +538,8 @@ func (m *Modulo) cambiarPassword(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
+	avisoSeguridad(ctx, m.app.DB, u.ID, "Cambiaste tu contraseña", "Si no fuiste tú, recupera tu cuenta de inmediato desde «¿Olvidaste tu contraseña?».")
+	m.app.Auditar(ctx, m.app.DB, u.ID, "cambiar_password", "usuario", u.ID, nil)
 	httpx.OK(w, map[string]string{"mensaje": "Listo, cambiaste tu contraseña."})
 	return nil
 }
@@ -535,5 +579,104 @@ func (m *Modulo) sesiones(w http.ResponseWriter, r *http.Request) error {
 		cambiada = *pc
 	}
 	httpx.OK(w, map[string]any{"abiertas": n, "password_cambiado_en": cambiada})
+	return nil
+}
+
+// ---------- seguridad de la cuenta ----------
+
+const (
+	maxIntentos     = 5
+	bloqueoDuracion = "15 minutes"
+)
+
+func agente(r *http.Request) string {
+	a := r.Header.Get("User-Agent")
+	if len(a) > 300 {
+		a = a[:300]
+	}
+	return a
+}
+
+func (m *Modulo) registrarAcceso(r *http.Request, usuarioID string, exito bool, motivo string) {
+	m.app.DB.ExecContext(r.Context(), `INSERT INTO accesos (usuario_id, exito, motivo, ip, agente) VALUES ($1,$2,$3,$4,$5)`,
+		usuarioID, exito, motivo, httpx.IP(r), agente(r))
+}
+
+// avisarEquipoNuevo avisa si la cuenta entra desde un navegador con el que nunca había entrado.
+func (m *Modulo) avisarEquipoNuevo(r *http.Request, usuarioID string) {
+	var antes, conEste bool
+	m.app.DB.QueryRowContext(r.Context(), `SELECT EXISTS(SELECT 1 FROM accesos WHERE usuario_id=$1 AND exito),
+		EXISTS(SELECT 1 FROM accesos WHERE usuario_id=$1 AND exito AND agente=$2)`, usuarioID, agente(r)).Scan(&antes, &conEste)
+	if antes && !conEste {
+		avisoSeguridad(r.Context(), m.app.DB, usuarioID, "Nuevo inicio de sesión",
+			"Entraron a tu cuenta desde "+Equipo(agente(r))+". Si no fuiste tú, cambia tu contraseña y cierra las otras sesiones.")
+	}
+}
+
+// avisoSeguridad deja un aviso en la campana de la persona (siempre llega, no se puede apagar).
+func avisoSeguridad(ctx context.Context, q core.Ejecutor, usuarioID, titulo, cuerpo string) {
+	q.ExecContext(ctx, `INSERT INTO notificaciones (usuario_id, titulo, cuerpo, enlace, tipo)
+		SELECT id, $2, $3, CASE WHEN rol='admin' THEN '/admin' ELSE '/vendedor/configuracion' END, 'pagos' FROM usuarios WHERE id=$1`, usuarioID, titulo, cuerpo)
+}
+
+// Equipo describe el navegador y sistema a partir del User-Agent ("Chrome en Mac").
+func Equipo(ua string) string {
+	nav := "un navegador"
+	switch {
+	case strings.Contains(ua, "Edg/"):
+		nav = "Edge"
+	case strings.Contains(ua, "OPR/"):
+		nav = "Opera"
+	case strings.Contains(ua, "Chrome/"):
+		nav = "Chrome"
+	case strings.Contains(ua, "Firefox/"):
+		nav = "Firefox"
+	case strings.Contains(ua, "Safari/"):
+		nav = "Safari"
+	}
+	so := ""
+	switch {
+	case strings.Contains(ua, "iPhone"), strings.Contains(ua, "iPad"):
+		so = "iPhone"
+	case strings.Contains(ua, "Android"):
+		so = "Android"
+	case strings.Contains(ua, "Mac OS"):
+		so = "Mac"
+	case strings.Contains(ua, "Windows"):
+		so = "Windows"
+	case strings.Contains(ua, "Linux"):
+		so = "Linux"
+	}
+	if so == "" {
+		return nav
+	}
+	return nav + " en " + so
+}
+
+// accesos: últimos ingresos a la cuenta, para revisar si hubo algo raro.
+func (m *Modulo) accesos(w http.ResponseWriter, r *http.Request) error {
+	u, _ := httpx.UsuarioDe(r.Context())
+	rows, err := m.app.DB.QueryContext(r.Context(), `SELECT exito, motivo, ip, agente, creado_en FROM accesos
+		WHERE usuario_id=$1 ORDER BY creado_en DESC LIMIT 15`, u.ID)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	type acceso struct {
+		Exito  bool      `json:"exito"`
+		Motivo string    `json:"motivo"`
+		IP     string    `json:"ip"`
+		Equipo string    `json:"equipo"`
+		Fecha  time.Time `json:"creado_en"`
+	}
+	out := []acceso{}
+	for rows.Next() {
+		var a acceso
+		var ag string
+		rows.Scan(&a.Exito, &a.Motivo, &a.IP, &ag, &a.Fecha)
+		a.Equipo = Equipo(ag)
+		out = append(out, a)
+	}
+	httpx.OK(w, map[string]any{"accesos": out})
 	return nil
 }
