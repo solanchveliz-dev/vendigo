@@ -173,12 +173,18 @@ func Crear(ctx context.Context, app *core.App, tx *sql.Tx, in PedidoNuevo) (stri
 		culqi = in.CulqiCargo
 	}
 	var pid, codigo string
+	// Si la tienda eligió su prefijo, el pedido sale con su propia numeración (LUNA-1001); si no, VG-….
+	var propio sql.NullString
+	if err := tx.QueryRowContext(ctx, `UPDATE tiendas SET contador_pedidos=contador_pedidos+1 WHERE id=$1 AND prefijo_pedido<>''
+		RETURNING prefijo_pedido||'-'||contador_pedidos`, in.TiendaID).Scan(&propio); err != nil && !core.SinFilas(err) {
+		return "", "", err
+	}
 	err := tx.QueryRowContext(ctx, `INSERT INTO pedidos (tienda_id, comprador_id, comprador_nombre, comprador_celular, comprador_dni_cifrado, entrega,
 		direccion, distrito, ciudad, referencia, agencia, agencia_sede, codigo_recojo, metodo_pago, pago_estado, culqi_cargo_id,
-		subtotal_centimos, envio_centimos, total_centimos, nota_comprador)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20) RETURNING id, codigo`,
+		subtotal_centimos, envio_centimos, total_centimos, nota_comprador, codigo)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20, COALESCE($21, 'VG-' || nextval('pedidos_codigo_seq'))) RETURNING id, codigo`,
 		in.TiendaID, comprador, in.Nombre, in.Celular, dni, in.Entrega, in.Direccion, in.Distrito, in.Ciudad, in.Referencia,
-		in.Agencia, in.AgenciaSede, codigoRecojo(), in.MetodoPago, pago, culqi, subtotal, envio, total, in.Nota).Scan(&pid, &codigo)
+		in.Agencia, in.AgenciaSede, codigoRecojo(), in.MetodoPago, pago, culqi, subtotal, envio, total, in.Nota, propio).Scan(&pid, &codigo)
 	if err != nil {
 		return "", "", err
 	}

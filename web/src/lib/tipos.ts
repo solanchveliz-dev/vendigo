@@ -41,6 +41,9 @@ export type Tienda = {
   dias_liberacion: number;
   enlace: string;
   pausada: boolean;
+  tema_color: string;
+  tema_fuente: string;
+  prefijo_pedido: string;
 };
 
 export type Variante = { id?: string; nombre: string; stock: number; precio_centimos: number | null };

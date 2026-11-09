@@ -1,3 +1,4 @@
+import { estiloTema } from "@/lib/tema";
 import type { Metadata } from "next";
 import { ContarVisita } from "@/components/tienda/contar-visita";
 import Link from "next/link";
@@ -68,7 +69,7 @@ export default async function ProductoPublico({ params, searchParams }: Params &
     <div className="min-h-screen bg-crema">
       {!vista && <><CabeceraPublica /><ContarVisita slug={slug} productoId={p.id} /></>}
 
-      <main className="mx-auto max-w-[1400px] px-5 pb-16 sm:px-10">
+      <main className="mx-auto max-w-[1400px] px-5 pb-16 sm:px-10" style={estiloTema(t)}>
         <nav className="flex items-center gap-1.5 py-6 text-sm text-gris">
           <Link href="/" className="shrink-0 hover:text-tinta">Inicio</Link>
           <ChevronRight className="size-3.5 shrink-0" />

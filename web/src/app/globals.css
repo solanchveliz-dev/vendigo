@@ -1,6 +1,7 @@
 @import "@fontsource-variable/manrope";
 @import "@fontsource-variable/dm-sans";
 @import "@fontsource-variable/playfair-display/wght-italic.css";
+@import "@fontsource-variable/playfair-display";
 @import "tailwindcss";
 
 @theme {

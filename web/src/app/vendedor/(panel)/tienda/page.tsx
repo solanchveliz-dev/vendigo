@@ -223,6 +223,13 @@ export default function TuTienda() {
             </Link>
           </Tarjeta>
           <Tarjeta>
+            <h3 className="mb-1 text-lg font-extrabold text-tinta">Estilo de tu tienda</h3>
+            <p className="text-sm text-gris">Colores, letra de los títulos y el código de tus pedidos.</p>
+            <Link href="/vendedor/tienda/estilo">
+              <Boton variante="secundario" tamano="sm" bloque className="mt-4">Personalizar</Boton>
+            </Link>
+          </Tarjeta>
+          <Tarjeta>
             <h3 className="mb-2 text-lg font-extrabold text-tinta">Tu enlace</h3>
             <p className="break-all text-sm font-bold text-pino">{t.enlace.replace(/^https?:\/\//, "")}</p>
             <div className="mt-3 flex gap-2">

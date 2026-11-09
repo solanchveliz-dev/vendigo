@@ -1,3 +1,4 @@
+import { estiloTema } from "@/lib/tema";
 import type { Metadata } from "next";
 import { ContarVisita } from "@/components/tienda/contar-visita";
 import { notFound } from "next/navigation";
@@ -64,7 +65,7 @@ export default async function TiendaPublica({ params, searchParams }: { params: 
     <div className="min-h-screen bg-crema">
       {!vista && <><CabeceraPublica /><ContarVisita slug={t.slug} /></>}
 
-      <main className="mx-auto max-w-[1400px] px-5 pb-16 sm:px-10">
+      <main className="mx-auto max-w-[1400px] px-5 pb-16 sm:px-10" style={estiloTema(t)}>
         {t.pausada && (
           <div className="mt-5 flex items-center gap-3 rounded-2xl bg-arena px-5 py-3 text-sm text-tinta ring-1 ring-linea">
             <Clock className="size-5 shrink-0" />

@@ -30,6 +30,7 @@ func (m *Modulo) RutasVendedor(r chi.Router) {
 	r.Method("GET", "/tienda", httpx.Handler(m.obtener))
 	r.Method("PUT", "/tienda", httpx.Handler(m.actualizar))
 	r.Method("PUT", "/tienda/entrega", httpx.Handler(m.actualizarEntrega))
+	r.Method("PUT", "/tienda/estilo", httpx.Handler(m.guardarEstilo))
 	r.Method("GET", "/tienda/ajustes", httpx.Handler(m.ajustes))
 	r.Method("PUT", "/tienda/ajustes", httpx.Handler(m.guardarAjustes))
 	r.Method("POST", "/archivos", httpx.Handler(m.pedirSubida))
@@ -94,6 +95,9 @@ type Tienda struct {
 	DiasLiberacion int     `json:"dias_liberacion"`
 	Enlace         string  `json:"enlace"`
 	Pausada        bool    `json:"pausada"`
+	TemaColor      string  `json:"tema_color"`
+	TemaFuente     string  `json:"tema_fuente"`
+	Prefijo        string  `json:"prefijo_pedido"`
 }
 
 type Entrega struct {
@@ -128,7 +132,7 @@ func DiasLiberacion(reputacion string) int {
 const columnas = `id, nombre, slug, rubro, descripcion, ciudad, distrito, logo_key, portada_key, instagram, facebook, tiktok, whatsapp,
 	entrega_recojo, direccion_recojo, horario_recojo, entrega_agencia, agencias, entrega_motorizado, costo_motorizado_centimos, zonas_motorizado, reputacion,
 	correo, horario, politicas,
-	instrucciones_recojo, dias_recojo, adelanto_pct, costo_agencia_centimos, entrega_otra, descripcion_otra, pausada`
+	instrucciones_recojo, dias_recojo, adelanto_pct, costo_agencia_centimos, entrega_otra, descripcion_otra, pausada, tema_color, tema_fuente, prefijo_pedido`
 
 func (m *Modulo) leer(ctx context.Context, where string, arg any) (Tienda, error) {
 	var t Tienda
@@ -138,7 +142,7 @@ func (m *Modulo) leer(ctx context.Context, where string, arg any) (Tienda, error
 		&t.Instagram, &t.Facebook, &t.Tiktok, &t.Whatsapp,
 		&e.Recojo, &e.DireccionRecojo, &e.HorarioRecojo, &e.Agencia, pq.Array(&e.Agencias), &e.Motorizado, &e.CostoMotorizado, &e.ZonasMotorizado, &t.Reputacion,
 		&t.Correo, &t.Horario, &t.Politicas,
-		&e.Instrucciones, pq.Array(&e.DiasRecojo), &e.AdelantoPct, &e.CostoAgencia, &e.Otra, &e.DescripcionOtra, &t.Pausada)
+		&e.Instrucciones, pq.Array(&e.DiasRecojo), &e.AdelantoPct, &e.CostoAgencia, &e.Otra, &e.DescripcionOtra, &t.Pausada, &t.TemaColor, &t.TemaFuente, &t.Prefijo)
 	if core.SinFilas(err) {
 		return t, httpx.ErrNoEncontrado
 	}
