@@ -10,9 +10,10 @@ export function GaleriaProducto({ producto: p }: { producto: Producto }) {
   const [foto, setFoto] = useState(0);
 
   return (
-    <div className="flex min-w-0 flex-col-reverse gap-3 self-start sm:flex-row">
+    // Como en el prototipo: en computadora la foto se queda fija mientras bajas por la información.
+    <div className="flex min-w-0 flex-col-reverse gap-3 self-start sm:flex-row lg:sticky lg:top-24">
       {p.imagenes.length > 1 && (
-        <div className="flex gap-3 sm:flex-col">
+        <div className="flex gap-3 overflow-x-auto sm:max-h-[calc(100vh-8rem)] sm:flex-col sm:overflow-y-auto sm:overflow-x-visible">
           {p.imagenes.map((img, i) => (
             <button
               key={img.key}

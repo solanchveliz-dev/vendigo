@@ -26,14 +26,15 @@ export default function DetalleProducto({ params }: { params: Promise<{ id: stri
   const imgs = d.info.imagenes;
   const precioFinal = p.oferta_pct ? Math.floor((p.precio_centimos * (100 - p.oferta_pct)) / 100 / 10) * 10 : p.precio_centimos;
 
-  // Mismos datos que el prototipo. "Denuncias" = reclamos de compradores sobre pedidos con este producto.
+  // Mismos datos que el prototipo. "Reclamos" = reclamos de compradores sobre pedidos con este producto.
   const filas: [string, React.ReactNode][] = [
     ["Precio", soles(precioFinal)],
     ["Stock", p.stock],
     ["Categoría", RUBROS[p.rubro] ?? p.rubro],
+    ...(d.info.variantes.length ? [["Opciones", d.info.variantes.join(", ")] as [string, React.ReactNode]] : []),
     ["Vendidos", d.info.vendidos.toLocaleString("es-PE")],
     ["Visitas", d.info.visitas.toLocaleString("es-PE")],
-    ["Denuncias", d.info.reclamos],
+    ["Reclamos", d.info.reclamos],
     ["Descripción", d.info.descripcion || "—"],
   ];
 
