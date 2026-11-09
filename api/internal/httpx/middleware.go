@@ -53,6 +53,10 @@ func Autenticar(secreto string) func(http.Handler) http.Handler {
 }
 
 // Rol permite el paso solo a los roles indicados.
+// AlDenegar se llama cuando alguien con sesión intenta entrar a una sección sin permiso
+// (queda en "Intentos de acceso denegados" del panel admin).
+var AlDenegar func(r *http.Request, u Usuario)
+
 func Rol(roles ...string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -66,6 +70,9 @@ func Rol(roles ...string) func(http.Handler) http.Handler {
 					next.ServeHTTP(w, r)
 					return
 				}
+			}
+			if AlDenegar != nil {
+				AlDenegar(r, u)
 			}
 			Fallo(w, r, ErrProhibido)
 		})

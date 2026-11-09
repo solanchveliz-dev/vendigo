@@ -3,42 +3,54 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useRef } from "react";
-import { BadgeCheck, Banknote, FileClock, LayoutDashboard, LogOut, ShieldAlert, Users } from "lucide-react";
-import { sesion, useApi } from "@/lib/api";
+import { useEffect, useRef, useState } from "react";
+import { Bell, Download, Flag, Home, LayoutGrid, LogOut, Search, ShieldCheck, Wallet, Briefcase } from "lucide-react";
+import { api, sesion, useApi } from "@/lib/api";
 import type { Usuario } from "@/lib/tipos";
 import { Cargando, cn } from "@/components/ui";
+import { fechaHora } from "@/lib/admin";
 
 type Resumen = { verificaciones_pendientes: number; retiros_pendientes: number; reclamos_abiertos: number };
+type Aviso = { id: string; titulo: string; cuerpo: string; enlace: string; leida: boolean; creado_en: string };
 
+// Menú del panel admin (mismo orden e íconos del prototipo). Las secciones restantes se suman en las siguientes fases.
 const menu = [
-  { href: "/admin", texto: "Resumen", icono: LayoutDashboard },
-  { href: "/admin/vendedoras", texto: "Vendedoras", icono: Users },
-  { href: "/admin/identidades", texto: "Identidades", icono: BadgeCheck, cuenta: "verificaciones_pendientes" as const },
-  { href: "/admin/retiros", texto: "Retiros", icono: Banknote, cuenta: "retiros_pendientes" as const },
-  { href: "/admin/reclamos", texto: "Reclamos", icono: ShieldAlert, cuenta: "reclamos_abiertos" as const },
-  { href: "/admin/auditoria", texto: "Auditoría", icono: FileClock },
+  { href: "/admin", texto: "Inicio", icono: Home },
+  { href: "/admin/vendedores", texto: "Vendedores", icono: Briefcase, cuenta: "verificaciones_pendientes" as const },
+  { href: "/admin/retiros", texto: "Retiros", icono: Wallet, cuenta: "retiros_pendientes" as const },
+  { href: "/admin/reclamos", texto: "Reclamos", icono: Flag, cuenta: "reclamos_abiertos" as const },
+  { href: "/admin/seguridad", texto: "Seguridad", icono: ShieldCheck },
 ];
 
-// Panel del administrador. Solo entra una cuenta con rol admin (la API también lo exige).
 export default function LayoutAdmin({ children }: { children: React.ReactNode }) {
   const ruta = usePathname();
   const router = useRouter();
   const yo = useApi<Usuario>("/me");
-  const { datos: r } = useApi<Resumen>(yo.datos?.rol === "admin" ? `/admin/resumen?${ruta}` : null);
+  const esAdmin = yo.datos?.rol === "admin";
+  const { datos: r } = useApi<Resumen>(esAdmin ? `/admin/resumen?${ruta}` : null);
+  const [abierto, setAbierto] = useState(false);
+  const [campana, setCampana] = useState(false);
+  const avisos = useApi<{ notificaciones: Aviso[] }>(esAdmin ? `/admin/notificaciones?r=${campana}` : null);
+  const noLeidas = avisos.datos?.notificaciones.filter((a) => !a.leida).length ?? 0;
 
   useEffect(() => {
-    if (yo.datos && yo.datos.rol !== "admin") router.replace("/vendedor");
+    if (yo.datos && yo.datos.rol !== "admin") {
+      // Queda registrado como intento de acceso denegado (la API responde 403).
+      api.get("/admin/resumen").catch(() => null);
+      router.replace("/acceso-denegado");
+    }
   }, [yo.datos, router]);
 
-  // Cierre de sesión tras 30 minutos sin actividad (la API también lo exige al renovar la sesión).
-  const ultimaActividad = useRef(Date.now());
+  // Cierre de sesión por inactividad (los minutos se configuran en Seguridad; la API también lo exige).
+  const ultima = useRef(Date.now());
+  const limite = useApi<{ inactividad_min: number }>(esAdmin ? "/admin/seguridad" : null);
   useEffect(() => {
-    const marcar = () => (ultimaActividad.current = Date.now());
-    const eventos = ["mousemove", "keydown", "click", "scroll", "touchstart"];
-    eventos.forEach((e) => window.addEventListener(e, marcar, { passive: true }));
+    const marcar = () => (ultima.current = Date.now());
+    const ev = ["mousemove", "keydown", "click", "scroll", "touchstart"];
+    ev.forEach((e) => window.addEventListener(e, marcar, { passive: true }));
     const t = setInterval(async () => {
-      if (Date.now() - ultimaActividad.current > 30 * 60 * 1000) {
+      const min = limite.datos?.inactividad_min ?? 30;
+      if (Date.now() - ultima.current > min * 60 * 1000) {
         clearInterval(t);
         await sesion("salir").catch(() => null);
         window.location.href = "/ingresar?inactiva=1&siguiente=/admin";
@@ -46,62 +58,116 @@ export default function LayoutAdmin({ children }: { children: React.ReactNode })
     }, 20_000);
     return () => {
       clearInterval(t);
-      eventos.forEach((e) => window.removeEventListener(e, marcar));
+      ev.forEach((e) => window.removeEventListener(e, marcar));
     };
-  }, []);
+  }, [limite.datos?.inactividad_min]);
 
-  if (!yo.datos || yo.datos.rol !== "admin") return <div className="p-10"><Cargando /></div>;
+  if (!esAdmin) return <div className="p-10"><Cargando /></div>;
 
   async function salir() {
     await sesion("salir").catch(() => null);
     router.replace("/ingresar");
   }
+  async function abrirCampana() {
+    setCampana(!campana);
+    if (!campana && noLeidas) await api.get("/admin/notificaciones?marcar=1").catch(() => null);
+  }
   const activo = (h: string) => (h === "/admin" ? ruta === h : ruta.startsWith(h));
+  const iniciales = yo.datos!.nombre.split(" ").filter(Boolean).slice(0, 2).map((p) => p[0]).join("").toUpperCase();
 
   return (
-    <div className="min-h-screen md:pl-64">
-      <aside className="fixed inset-y-0 left-0 z-50 hidden w-64 flex-col bg-pino p-5 text-white md:flex">
-        <Link href="/admin" className="mb-8 flex items-center gap-3">
-          <span className="grid size-11 place-items-center rounded-xl bg-white p-1">
-            <Image src="/logo.png" alt="" width={36} height={36} />
-          </span>
-          <span>
-            <b className="block font-display text-lg leading-none">VendiGo</b>
-            <span className="text-xs text-white/60">Administración</span>
-          </span>
+    <div className="min-h-screen bg-crema">
+      {/* Barra lateral de íconos, como el panel del vendedor y el prototipo */}
+      <aside className={cn("fixed inset-y-3 left-3 z-[200] hidden flex-col rounded-2xl bg-white py-4 shadow-suave ring-1 ring-linea/60 transition-all md:flex", abierto ? "w-60 px-3" : "w-[72px] items-center")}>
+        <Link href="/admin" className={cn("mb-5 flex items-center gap-2", abierto && "px-2")}>
+          <Image src="/logo.png" alt="VendiGo" width={40} height={40} />
+          {abierto && <span className="text-sm font-bold leading-tight text-pino">Panel de<br />administración</span>}
         </Link>
-        <nav className="flex-1 space-y-1">
+        <nav className="flex flex-1 flex-col gap-1.5">
           {menu.map((m) => (
             <Link
               key={m.href}
               href={m.href}
-              className={cn("flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition", activo(m.href) ? "bg-white text-pino" : "text-white/80 hover:bg-white/10")}
+              aria-label={m.texto}
+              className={cn(
+                "group relative flex h-11 items-center gap-3 rounded-xl transition",
+                abierto ? "px-3" : "w-11 justify-center",
+                activo(m.href) ? "bg-coral text-white" : "text-gris hover:bg-pino-claro hover:text-pino",
+              )}
             >
-              <m.icono className="size-[18px]" />
-              <span className="flex-1">{m.texto}</span>
-              {m.cuenta && r && r[m.cuenta] > 0 && <span className="grid min-w-5 place-items-center rounded-full bg-coral px-1.5 text-[11px] font-bold text-white">{r[m.cuenta]}</span>}
+              <m.icono className="size-5 shrink-0" />
+              {abierto && <span className="text-sm font-semibold">{m.texto}</span>}
+              {m.cuenta && r && r[m.cuenta] > 0 && (
+                <span className={cn("grid min-w-5 place-items-center rounded-full bg-pino px-1 text-[11px] font-bold text-white ring-2 ring-white", abierto ? "ml-auto" : "absolute -right-0.5 -top-0.5")}>{r[m.cuenta]}</span>
+              )}
+              {!abierto && (
+                <span className="pointer-events-none absolute left-full ml-3 whitespace-nowrap rounded-lg bg-pino px-3 py-1.5 text-sm font-semibold text-white opacity-0 shadow-lg transition group-hover:opacity-100">{m.texto}</span>
+              )}
             </Link>
           ))}
         </nav>
-        <div className="border-t border-white/10 pt-4 text-sm">
-          <b className="block">{yo.datos.nombre}</b>
-          <span className="text-xs text-white/60">Administrador</span>
-          <button onClick={salir} className="mt-3 flex items-center gap-2 text-white/80 hover:text-white">
-            <LogOut className="size-4" /> Cerrar sesión
-          </button>
+        <div className={cn("flex items-center gap-2", abierto && "px-2")} title={yo.datos!.nombre}>
+          <span className="grid size-9 place-items-center rounded-full bg-coral-claro text-xs font-bold text-tinta">{iniciales}</span>
+          {abierto && <span className="text-xs leading-tight"><b className="block text-tinta">{yo.datos!.nombre}</b><span className="text-gris">Administrador</span></span>}
         </div>
       </aside>
 
-      {/* Menú en celular */}
-      <div className="sticky top-0 z-40 flex gap-1 overflow-x-auto bg-pino px-3 py-2 md:hidden">
-        {menu.map((m) => (
-          <Link key={m.href} href={m.href} className={cn("whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-semibold", activo(m.href) ? "bg-white text-pino" : "text-white/80")}>
-            {m.texto}
-          </Link>
-        ))}
-      </div>
+      <div className={cn("transition-all", abierto ? "md:pl-[264px]" : "md:pl-[96px]")}>
+        <header className="sticky top-0 z-[150] flex h-[74px] items-center gap-3 border-b border-linea/70 bg-crema/95 px-4 backdrop-blur md:px-6">
+          <button onClick={() => setAbierto(!abierto)} className="hidden size-11 place-items-center rounded-full bg-white ring-1 ring-linea md:grid" aria-label="Mostrar u ocultar el menú">
+            <LayoutGrid className="size-5 text-pino" />
+          </button>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              const q = new FormData(e.currentTarget).get("q")?.toString().trim() ?? "";
+              router.push(`/admin/vendedores?q=${encodeURIComponent(q)}`);
+            }}
+            className="relative w-full max-w-[490px]"
+          >
+            <Search className="absolute left-4 top-1/2 size-5 -translate-y-1/2 text-tinta" />
+            <input name="q" placeholder="Buscar usuarios, tiendas, pedidos o transacciones…" className="h-11 w-full rounded-full bg-[#ece9e2] pl-12 pr-4 text-sm outline-none focus:ring-2 focus:ring-pino/30" />
+          </form>
+          <div className="ml-auto flex items-center gap-3">
+            <button onClick={() => window.dispatchEvent(new Event("vg:exportar"))} className="hidden h-9 items-center gap-2 rounded-full bg-white px-4 text-sm font-semibold text-pino ring-1 ring-linea sm:inline-flex">
+              <Download className="size-4" /> Exportar
+            </button>
+            <div className="relative">
+              <button onClick={abrirCampana} className="relative grid size-11 place-items-center rounded-full bg-white ring-1 ring-linea" aria-label="Notificaciones">
+                <Bell className="size-5 text-pino" />
+                {noLeidas > 0 && <span className="absolute -right-0.5 -top-0.5 grid min-w-5 place-items-center rounded-full bg-coral px-1 text-[11px] font-bold text-white">{noLeidas}</span>}
+              </button>
+              {campana && (
+                <div className="absolute right-0 top-14 w-80 rounded-2xl bg-white p-2 shadow-suave ring-1 ring-linea">
+                  {!avisos.datos?.notificaciones.length ? (
+                    <p className="p-3 text-sm text-gris">No tienes avisos.</p>
+                  ) : (
+                    avisos.datos.notificaciones.slice(0, 6).map((a) => (
+                      <Link key={a.id} href={a.enlace || "/admin"} onClick={() => setCampana(false)} className="block rounded-xl px-3 py-2.5 hover:bg-crema">
+                        <b className="block text-sm text-tinta">{a.titulo}</b>
+                        <span className="block text-xs text-gris">{a.cuerpo}</span>
+                        <span className="text-[11px] text-gris">{fechaHora(a.creado_en)}</span>
+                      </Link>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+            <button onClick={salir} className="grid size-11 place-items-center rounded-full bg-white ring-1 ring-linea" aria-label="Cerrar sesión">
+              <LogOut className="size-5 text-pino" />
+            </button>
+          </div>
+        </header>
 
-      <main className="mx-auto max-w-6xl px-4 py-8 md:px-8">{children}</main>
+        {/* Menú en celular */}
+        <nav className="sticky top-[74px] z-40 flex gap-1 overflow-x-auto bg-crema px-3 py-2 md:hidden">
+          {menu.map((m) => (
+            <Link key={m.href} href={m.href} className={cn("whitespace-nowrap rounded-full px-3 py-1.5 text-sm font-semibold", activo(m.href) ? "bg-coral text-white" : "bg-white text-tinta ring-1 ring-linea")}>{m.texto}</Link>
+          ))}
+        </nav>
+
+        <main className="mx-auto max-w-[1280px] space-y-6 px-4 py-8 md:px-10">{children}</main>
+      </div>
     </div>
   );
 }

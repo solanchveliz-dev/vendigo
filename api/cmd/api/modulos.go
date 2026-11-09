@@ -1,6 +1,8 @@
 package main
 
 import (
+	"net/http"
+
 	"context"
 	"log/slog"
 	"time"
@@ -43,6 +45,10 @@ func registrarModulos(app *core.App, api chi.Router) {
 	mAuth.TiendaDe = mTiendas.DeUsuario
 	mPedidos.ValidarCupo = mPlanes.ValidarCupo
 	mBilletera.Confirmar = mAuth.ConfirmarPaso
+	httpx.AlDenegar = func(r *http.Request, u httpx.Usuario) {
+		app.DB.ExecContext(r.Context(), `INSERT INTO accesos_denegados (usuario_id, rol, ruta, ip) VALUES ($1,$2,$3,$4)`,
+			u.ID, u.Rol, r.URL.Path, httpx.IP(r))
+	}
 
 	// Públicas
 	api.Route("/auth", mAuth.RutasPublicas)

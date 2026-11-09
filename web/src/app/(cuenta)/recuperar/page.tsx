@@ -111,7 +111,12 @@ export default function Recuperar() {
       {paso === 2 && (
         <>
           {dev && <Aviso>Modo de prueba: el SMS no se envía y el código se completó solo.</Aviso>}
-          <Campo etiqueta="Código de 6 dígitos" ayuda={`Lo enviamos al ${celular}. Vence en 10 minutos.`}>
+          {!dev && (
+            <Aviso>
+              Si el <b>{celular}</b> tiene una cuenta en VendiGo, te llegó un SMS con el código (vence en 10 minutos). Por seguridad no decimos si un número tiene cuenta o no.
+            </Aviso>
+          )}
+          <Campo etiqueta="Código de 6 dígitos">
             <Entrada
               value={codigo}
               onChange={(e) => setCodigo(e.target.value.replace(/\D/g, "").slice(0, 6))}

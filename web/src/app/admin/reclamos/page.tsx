@@ -1,14 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { ShieldAlert } from "lucide-react";
+import { CheckCircle2, Circle, Crown, Flag, Lock, XCircle } from "lucide-react";
 import { api, ErrorApi, useApi } from "@/lib/api";
 import { soles } from "@/lib/formato";
 import { fechaHora } from "@/lib/admin";
-import { Area, Boton, Cargando, Insignia, Modal, Vacio, cn, useAvisar } from "@/components/ui";
+import { Area, Boton, Cargando, Modal, cn, useAvisar } from "@/components/ui";
+import { Indicador, Nota, Titulo, useExportar } from "@/components/admin/ui";
 
 type Reclamo = {
   id: string;
+  pedido_id: string;
   codigo: string;
   tienda: string;
   comprador: string;
@@ -24,36 +26,65 @@ type Reclamo = {
   respondido_en: string | null;
   resuelto_en: string | null;
   liberado: boolean;
+  entrega: string;
+  agencia: string;
+  numero_orden: string;
+  boleta: boolean;
+  reputacion: string;
+  cliente_reclamos_antes: number;
+  tienda_reclamos_perdidos: number;
+  confirmado_por: string;
 };
+type Datos = { reclamos: Reclamo[]; indicadores: { retenido_centimos: number; retenido_pedidos: number; abiertos: number; ingresos_planes_mes_centimos: number } };
 
-const MOTIVOS: Record<string, string> = { no_llego: "No llegó", danado: "Llegó dañado", distinto: "Es distinto a lo publicado", incompleto: "Llegó incompleto", otro: "Otro" };
-const ESTADOS: Record<string, { t: string; tono: "aviso" | "pino" | "ok" | "error" }> = {
-  abierto: { t: "Esperando a la tienda", tono: "aviso" },
-  en_revision: { t: "Por decidir", tono: "pino" },
-  a_favor_comprador: { t: "A favor del comprador", tono: "error" },
-  a_favor_vendedor: { t: "A favor de la tienda", tono: "ok" },
-};
+const MOTIVOS: Record<string, string> = { no_llego: "No me llegó", danado: "Llegó dañado", distinto: "Es distinto a lo publicado", incompleto: "Llegó incompleto", otro: "Otro" };
+const ESTADOS: Record<string, string> = { abierto: "Esperando a la tienda", en_revision: "Por decidir", a_favor_comprador: "Devuelto al cliente", a_favor_vendedor: "Liberado a la tienda" };
+const REP: Record<string, string> = { nueva: "tienda nueva", buena: "buena reputación", excelente: "reputación excelente" };
+
+function Caja({ titulo, children }: { titulo: string; children: React.ReactNode }) {
+  return (
+    <div className="rounded-2xl p-4 ring-1 ring-linea">
+      <p className="mb-1.5 text-[13px] text-gris">{titulo}</p>
+      <div className="space-y-0.5 text-sm text-tinta">{children}</div>
+    </div>
+  );
+}
 
 function Fotos({ urls }: { urls: string[] }) {
-  if (!urls.length) return null;
+  if (!urls.length) return <p className="text-xs text-gris">Sin fotos</p>;
   return (
     <div className="mt-2 flex flex-wrap gap-2">
       {urls.map((u, i) => (
-        <a key={i} href={u} target="_blank" rel="noreferrer">
-          <img src={u} alt="" className="size-20 rounded-xl bg-crema object-cover ring-1 ring-linea" />
-        </a>
+        <a key={i} href={u} target="_blank" rel="noreferrer"><img src={u} alt="" className="size-16 rounded-xl bg-crema object-cover ring-1 ring-linea" /></a>
       ))}
+    </div>
+  );
+}
+
+function Check({ ok, titulo, detalle }: { ok: boolean | null; titulo: string; detalle: string }) {
+  return (
+    <div className="flex gap-2.5">
+      {ok === true ? <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-ok" /> : ok === false ? <XCircle className="mt-0.5 size-5 shrink-0 text-error" /> : <Circle className="mt-0.5 size-5 shrink-0 text-gris" />}
+      <span>
+        <b className="block text-sm text-tinta">{titulo}</b>
+        <span className="text-xs text-gris">{detalle}</span>
+      </span>
     </div>
   );
 }
 
 export default function Reclamos() {
   const [todos, setTodos] = useState(false);
-  const { datos, recargar } = useApi<{ reclamos: Reclamo[] }>(`/admin/reclamos?estado=${todos ? "todos" : "abiertos"}`);
+  const { datos, recargar } = useApi<Datos>(`/admin/reclamos?estado=${todos ? "todos" : "abiertos"}`);
   const [decidir, setDecidir] = useState<{ c: Reclamo; aFavor: "comprador" | "vendedor" } | null>(null);
   const [nota, setNota] = useState("");
   const [enviando, setEnviando] = useState(false);
   const avisar = useAvisar();
+
+  useExportar("reclamos", () => [
+    ["Pedido", "Comprador", "Tienda", "Monto (S/)", "Motivo", "Estado", "Abierto", "Decisión"],
+    ...(datos?.reclamos ?? []).map((c) => [c.codigo, c.comprador, c.tienda, (c.total_centimos / 100).toFixed(2), MOTIVOS[c.motivo] ?? c.motivo, ESTADOS[c.estado] ?? c.estado, c.creado_en.slice(0, 16).replace("T", " "), c.nota_admin]),
+  ]);
 
   async function confirmar() {
     if (!decidir) return;
@@ -70,83 +101,95 @@ export default function Reclamos() {
     }
   }
 
+  if (!datos) return <Cargando />;
+  const k = datos.indicadores;
+
   return (
-    <div className="space-y-5">
-      <div>
-        <div className="mb-2 h-1 w-8 rounded-full bg-coral" />
-        <h1 className="text-[34px] font-extrabold text-pino">Reclamos</h1>
-        <p className="text-sm text-gris">Cuando la tienda y el comprador no se ponen de acuerdo, decides con las pruebas de ambos.</p>
+    <>
+      <Titulo titulo="Reclamos y pagos retenidos" detalle="El dinero de cada pedido queda retenido hasta la entrega. Si hay reclamo, comparas las pruebas de ambas partes y decides." />
+      <div className="grid gap-5 md:grid-cols-3">
+        <Indicador titulo="Pagos retenidos" valor={soles(k.retenido_centimos)} detalle={`${k.retenido_pedidos} pedidos`} icono={<Lock className="size-[18px]" />} />
+        <Indicador oscuro titulo="Reclamos abiertos" valor={k.abiertos} detalle="Responde en 24 a 48 h" icono={<Flag className="size-[18px]" />} />
+        <Indicador titulo="Ingresos por planes" valor={soles(k.ingresos_planes_mes_centimos)} detalle="Este mes" icono={<Crown className="size-[18px]" />} />
       </div>
+
       <div className="flex w-fit gap-1 rounded-full bg-white p-1 ring-1 ring-linea">
-        {[[false, "Abiertos"], [true, "Todos"]].map(([k, t]) => (
-          <button key={String(k)} onClick={() => setTodos(k as boolean)} className={cn("h-9 rounded-full px-4 text-sm font-semibold", todos === k ? "bg-pino text-white" : "text-tinta")}>
-            {t as string}
-          </button>
+        {([[false, "Abiertos"], [true, "Todos"]] as const).map(([v, t]) => (
+          <button key={t} onClick={() => setTodos(v)} className={cn("h-9 rounded-full px-4 text-sm font-semibold", todos === v ? "bg-pino text-white" : "text-tinta")}>{t}</button>
         ))}
       </div>
-      {!datos ? (
-        <Cargando />
-      ) : !datos.reclamos.length ? (
-        <Vacio icono={<ShieldAlert className="size-6" />} titulo="Sin reclamos" detalle="No hay reclamos en esta lista." />
-      ) : (
-        <div className="space-y-4">
-          {datos.reclamos.map((c) => {
-            const abierto = c.estado === "abierto" || c.estado === "en_revision";
-            return (
-              <article key={c.id} className="rounded-[22px] bg-white p-6 shadow-suave ring-1 ring-linea/60">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <b className="text-lg text-tinta">{c.codigo}</b> <span className="text-sm text-gris">· {c.tienda} · {soles(c.total_centimos)}</span>
-                    <p className="text-xs text-gris">Abierto el {fechaHora(c.creado_en)}</p>
-                  </div>
-                  <Insignia tono={ESTADOS[c.estado]?.tono ?? "aviso"}>{ESTADOS[c.estado]?.t ?? c.estado}</Insignia>
-                </div>
-                <div className="mt-4 grid gap-4 md:grid-cols-2">
-                  <div className="rounded-2xl bg-crema/60 p-4">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-gris">Comprador · {c.comprador}</p>
-                    <b className="mt-1 block text-tinta">{MOTIVOS[c.motivo] ?? c.motivo}</b>
-                    <p className="text-sm text-tinta">{c.descripcion || "Sin descripción."}</p>
-                    <Fotos urls={c.fotos} />
-                  </div>
-                  <div className="rounded-2xl bg-crema/60 p-4">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-gris">Tienda {c.respondido_en ? `· respondió el ${fechaHora(c.respondido_en)}` : ""}</p>
-                    <p className="mt-1 text-sm text-tinta">{c.respuesta_vendedor || "Todavía no responde."}</p>
-                    <Fotos urls={c.evidencias} />
-                  </div>
-                </div>
-                {c.nota_admin && <p className="mt-3 text-sm text-gris"><b className="text-tinta">Decisión:</b> {c.nota_admin}</p>}
-                {abierto && (
-                  <div className="mt-4 flex flex-wrap justify-end gap-2">
-                    <Boton variante="secundario" tamano="sm" onClick={() => { setNota(""); setDecidir({ c, aFavor: "vendedor" }); }}>A favor de la tienda</Boton>
-                    <Boton variante="peligro" tamano="sm" onClick={() => { setNota(""); setDecidir({ c, aFavor: "comprador" }); }} disabled={c.liberado}>
-                      A favor del comprador
-                    </Boton>
-                  </div>
-                )}
-              </article>
-            );
-          })}
-        </div>
-      )}
 
-      <Modal abierto={!!decidir} onCerrar={() => setDecidir(null)} titulo={decidir?.aFavor === "comprador" ? "Resolver a favor del comprador" : "Resolver a favor de la tienda"}>
+      {!datos.reclamos.length ? (
+        <p className="rounded-[22px] bg-white p-6 text-sm text-gris ring-1 ring-linea/70">{todos ? "Todavía no hay reclamos." : "No hay reclamos abiertos. 🎉"}</p>
+      ) : (
+        datos.reclamos.map((c) => {
+          const abierto = c.estado === "abierto" || c.estado === "en_revision";
+          const guia = c.entrega === "agencia";
+          return (
+            <article key={c.id} className="rounded-[22px] bg-white p-6 ring-1 ring-linea/70">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <b className="text-[17px] text-tinta">{c.codigo} · {c.comprador} → {c.tienda}</b>
+                  <p className="text-sm text-gris">{soles(c.total_centimos)} retenido · “{MOTIVOS[c.motivo] ?? c.motivo}” · {fechaHora(c.creado_en)}</p>
+                </div>
+                <span className="flex items-center gap-1.5 text-sm font-bold text-tinta"><span className="size-1.5 rounded-full bg-current" />{ESTADOS[c.estado] ?? c.estado}</span>
+              </div>
+
+              <div className="mt-4 grid gap-4 md:grid-cols-3">
+                <Caja titulo="Pruebas del cliente">
+                  <p>{c.descripcion || "Sin descripción."}</p>
+                  <Fotos urls={c.fotos} />
+                </Caja>
+                <Caja titulo="Pruebas de la tienda">
+                  {guia && c.numero_orden && <p>Envío {c.agencia}: <b>{c.numero_orden}</b></p>}
+                  {c.respuesta_vendedor ? <p>{c.respuesta_vendedor}</p> : <p className="text-gris">Aún no responde.</p>}
+                  <Fotos urls={c.evidencias} />
+                </Caja>
+                <Caja titulo="Historial">
+                  <p>Cliente: {c.cliente_reclamos_antes} {c.cliente_reclamos_antes === 1 ? "reclamo" : "reclamos"} antes</p>
+                  <p>Tienda: {c.tienda_reclamos_perdidos} {c.tienda_reclamos_perdidos === 1 ? "reclamo perdido" : "reclamos perdidos"} · {REP[c.reputacion] ?? c.reputacion}</p>
+                </Caja>
+              </div>
+
+              <div className="mt-4 rounded-2xl p-4 ring-1 ring-linea">
+                <p className="mb-3 text-[13px] text-gris">Revisión de VendiGo</p>
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                  <Check ok={guia ? !!c.numero_orden : null} titulo="Boleta de envío" detalle={guia ? (c.numero_orden ? `${c.agencia} ${c.numero_orden}${c.boleta ? " · con foto" : ""}` : "La tienda no registró el envío") : "No aplica (no fue por agencia)"} />
+                  <Check ok={c.respuesta_vendedor ? true : null} titulo="Respuesta de la tienda" detalle={c.respondido_en ? `Respondió el ${fechaHora(c.respondido_en)}` : "Por responder"} />
+                  <Check ok={c.evidencias.length || c.fotos.length ? true : null} titulo="Fotos de ambas partes" detalle={`Cliente ${c.fotos.length} · tienda ${c.evidencias.length}`} />
+                  <Check ok={c.confirmado_por ? true : null} titulo="Entrega confirmada" detalle={{ comprador: "El cliente la confirmó", automatico: "Se dio por recibido", vendedor: "Entregado en tienda" }[c.confirmado_por] ?? "Sin confirmar"} />
+                </div>
+              </div>
+
+              {c.nota_admin && <p className="mt-3 text-sm text-gris"><b className="text-tinta">Decisión de VendiGo:</b> {c.nota_admin}</p>}
+              {abierto && (
+                <div className="mt-4 flex flex-wrap justify-end gap-3">
+                  <Boton variante="secundario" onClick={() => { setNota(""); setDecidir({ c, aFavor: "comprador" }); }} disabled={c.liberado}>Devolver al cliente</Boton>
+                  <Boton onClick={() => { setNota(""); setDecidir({ c, aFavor: "vendedor" }); }}>Liberar a la tienda</Boton>
+                </div>
+              )}
+            </article>
+          );
+        })
+      )}
+      <Nota>Si un cliente pierde varios reclamos, se le advierte y luego se limita su cuenta. Lo mismo aplica a las tiendas.</Nota>
+
+      <Modal abierto={!!decidir} onCerrar={() => setDecidir(null)} titulo={decidir?.aFavor === "comprador" ? "Devolver al cliente" : "Liberar a la tienda"}>
         {decidir && (
           <div className="space-y-4">
             <p className="text-sm text-gris">
               {decidir.aFavor === "comprador"
-                ? `Se devuelven ${soles(decidir.c.total_centimos)} al comprador y el pedido ${decidir.c.codigo} se cancela.`
+                ? `Se devuelven ${soles(decidir.c.total_centimos)} al cliente y el pedido ${decidir.c.codigo} se cancela.`
                 : `El pedido ${decidir.c.codigo} queda como entregado y el dinero se libera a la tienda en la fecha prevista.`}
             </p>
-            <Area value={nota} onChange={(e) => setNota(e.target.value)} placeholder="Explica la decisión (la verán la tienda y el comprador)" maxLength={500} />
+            <Area value={nota} onChange={(e) => setNota(e.target.value)} placeholder="Explica la decisión (la verán la tienda y el cliente)" maxLength={500} />
             <div className="flex justify-end gap-2">
               <Boton variante="secundario" onClick={() => setDecidir(null)}>Cancelar</Boton>
-              <Boton variante={decidir.aFavor === "comprador" ? "peligro" : "primario"} onClick={confirmar} cargando={enviando} disabled={nota.trim().length < 10}>
-                Confirmar decisión
-              </Boton>
+              <Boton variante={decidir.aFavor === "comprador" ? "peligro" : "primario"} onClick={confirmar} cargando={enviando} disabled={nota.trim().length < 10}>Confirmar decisión</Boton>
             </div>
           </div>
         )}
       </Modal>
-    </div>
+    </>
   );
 }

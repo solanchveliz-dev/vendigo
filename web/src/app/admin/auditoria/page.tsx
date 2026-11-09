@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useApi } from "@/lib/api";
 import { ACCIONES, fechaHora, type Evento } from "@/lib/admin";
 import { Cargando, Insignia, cn } from "@/components/ui";
+import { Titulo, useExportar } from "@/components/admin/ui";
 
 function detalle(datos: string) {
   if (!datos) return "";
@@ -20,13 +21,10 @@ function detalle(datos: string) {
 export default function Auditoria() {
   const [soloAdmin, setSoloAdmin] = useState(true);
   const { datos } = useApi<{ eventos: Evento[] }>(`/admin/auditoria?quien=${soloAdmin ? "admin" : ""}`);
+  useExportar("auditoria", () => [["Fecha", "Quién", "Rol", "Acción", "Detalle"], ...(datos?.eventos ?? []).map((e) => [e.creado_en.slice(0, 16).replace("T", " "), e.usuario, e.rol, ACCIONES[e.accion] ?? e.accion, detalle(e.datos)])]);
   return (
     <div className="space-y-5">
-      <div>
-        <div className="mb-2 h-1 w-8 rounded-full bg-coral" />
-        <h1 className="text-[34px] font-extrabold text-pino">Auditoría</h1>
-        <p className="text-sm text-gris">Quién hizo qué y cuándo. No se puede editar ni borrar.</p>
-      </div>
+      <Titulo titulo="Auditoría" detalle="Quién hizo qué y cuándo. No se puede editar ni borrar." />
       <div className="flex w-fit gap-1 rounded-full bg-white p-1 ring-1 ring-linea">
         {[[true, "Administradores"], [false, "Todos"]].map(([k, t]) => (
           <button key={String(k)} onClick={() => setSoloAdmin(k as boolean)} className={cn("h-9 rounded-full px-4 text-sm font-semibold", soloAdmin === k ? "bg-pino text-white" : "text-tinta")}>
@@ -39,7 +37,7 @@ export default function Auditoria() {
       ) : !datos.eventos.length ? (
         <p className="text-sm text-gris">Aún no hay acciones registradas.</p>
       ) : (
-        <div className="overflow-x-auto rounded-[22px] bg-white shadow-suave ring-1 ring-linea/60">
+        <div className="overflow-x-auto rounded-[22px] bg-white ring-1 ring-linea/70">
           <table className="w-full min-w-[720px] text-sm">
             <thead>
               <tr className="border-b border-linea text-left text-xs font-semibold text-gris">

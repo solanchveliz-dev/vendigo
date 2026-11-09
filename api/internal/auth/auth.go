@@ -409,7 +409,7 @@ func (m *Modulo) refresh(w http.ResponseWriter, r *http.Request) error {
 	var rol string
 	m.app.DB.QueryRowContext(r.Context(), `SELECT activo, rol FROM usuarios WHERE id=$1`, uid).Scan(&activo, &rol)
 	// Las sesiones de administrador se cierran tras 30 minutos sin uso.
-	if rol == "admin" && time.Since(creado) > inactividadAdmin {
+	if rol == "admin" && time.Since(creado) > m.inactividadAdmin(r.Context()) {
 		return httpx.NuevoError(http.StatusUnauthorized, "sesion_inactiva", "Cerramos tu sesión por inactividad. Vuelve a ingresar.")
 	}
 	if !activo {

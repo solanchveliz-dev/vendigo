@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"database/sql"
 	"net/http"
 	"slices"
@@ -19,10 +20,9 @@ import (
 // 2) /auth/mfa recibe el desafío + el código de la app y recién ahí crea la sesión.
 
 const (
-	desafioDuracion  = 5 * time.Minute
-	desafioIntentos  = 5
-	inactividadAdmin = 30 * time.Minute
-	emisorTOTP       = "VendiGo"
+	desafioDuracion = 5 * time.Minute
+	desafioIntentos = 5
+	emisorTOTP      = "VendiGo"
 )
 
 type respuestaMFA struct {
@@ -167,4 +167,12 @@ func (m *Modulo) mfa(w http.ResponseWriter, r *http.Request) error {
 	s.CodigosRespaldo = respaldoNuevo
 	httpx.OK(w, s)
 	return nil
+}
+
+// inactividadAdmin: minutos sin uso tras los que se cierra la sesión de un administrador
+// (se cambia en Admin → Seguridad; 30 por defecto).
+func (m *Modulo) inactividadAdmin(ctx context.Context) time.Duration {
+	min := 30
+	m.app.DB.QueryRowContext(ctx, `SELECT valor::int FROM ajustes_plataforma WHERE clave='inactividad_admin_min'`).Scan(&min)
+	return time.Duration(min) * time.Minute
 }

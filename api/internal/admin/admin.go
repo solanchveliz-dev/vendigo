@@ -26,6 +26,10 @@ func Nuevo(app *core.App) *Modulo { return &Modulo{app: app} }
 // Rutas se montan en /admin (requieren rol admin).
 func (m *Modulo) Rutas(r chi.Router) {
 	r.Method("GET", "/resumen", httpx.Handler(m.resumen))
+	r.Method("GET", "/panel", httpx.Handler(m.panel))
+	r.Method("GET", "/seguridad", httpx.Handler(m.seguridad))
+	r.Method("PUT", "/ajustes", httpx.Handler(m.guardarAjustes))
+	r.Method("GET", "/notificaciones", httpx.Handler(m.notificaciones))
 	r.Method("GET", "/vendedores", httpx.Handler(m.vendedores))
 	r.Method("GET", "/vendedores/{id}", httpx.Handler(m.vendedor))
 	r.Method("POST", "/vendedores/{id}/suspender", httpx.Handler(m.suspender))
@@ -121,6 +125,7 @@ type Vendedora struct {
 	Pedidos      int        `json:"pedidos"`
 	Ventas       int        `json:"ventas_centimos"`
 	UltimoAcceso *time.Time `json:"ultimo_acceso"`
+	Reputacion   string     `json:"reputacion"`
 }
 
 const consultaVendedoras = `SELECT u.id, u.nombre, u.celular, COALESCE(u.email,''), u.activo, u.suspendido_motivo,
@@ -130,14 +135,14 @@ const consultaVendedoras = `SELECT u.id, u.nombre, u.celular, COALESCE(u.email,'
 	COALESCE((SELECT v.estado FROM verificaciones v WHERE v.tienda_id=t.id ORDER BY v.creado_en DESC LIMIT 1),'sin_enviar'),
 	(SELECT count(*) FROM pedidos p WHERE p.tienda_id=t.id AND p.estado NOT IN ('rechazado','cancelado')),
 	COALESCE((SELECT SUM(total_centimos) FROM pedidos p WHERE p.tienda_id=t.id AND p.pago_estado='pagado' AND p.estado NOT IN ('rechazado','cancelado')),0),
-	(SELECT max(a.creado_en) FROM accesos a WHERE a.usuario_id=u.id AND a.exito)
+	(SELECT max(a.creado_en) FROM accesos a WHERE a.usuario_id=u.id AND a.exito), COALESCE(t.reputacion,'')
 	FROM usuarios u LEFT JOIN tiendas t ON t.usuario_id=u.id
 	WHERE u.rol='vendedor'`
 
 func scanVendedora(s interface{ Scan(...any) error }) (Vendedora, error) {
 	var v Vendedora
 	err := s.Scan(&v.ID, &v.Nombre, &v.Celular, &v.Email, &v.Activo, &v.Motivo, &v.Bloqueada, &v.CreadoEn,
-		&v.TiendaID, &v.Tienda, &v.Slug, &v.Plan, &v.Verificacion, &v.Pedidos, &v.Ventas, &v.UltimoAcceso)
+		&v.TiendaID, &v.Tienda, &v.Slug, &v.Plan, &v.Verificacion, &v.Pedidos, &v.Ventas, &v.UltimoAcceso, &v.Reputacion)
 	return v, err
 }
 
@@ -204,10 +209,50 @@ func (m *Modulo) vendedor(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	var saldos billetera.Saldos
+	type pagoPlan struct {
+		Concepto string    `json:"concepto"`
+		Monto    int       `json:"monto_centimos"`
+		Fecha    time.Time `json:"creado_en"`
+	}
+	pagos := []pagoPlan{}
+	var extra struct {
+		Ciudad     string     `json:"ciudad"`
+		Entrega    []string   `json:"entrega"`
+		Reputacion string     `json:"reputacion"`
+		Reclamos   int        `json:"reclamos"`
+		Perdidos   int        `json:"reclamos_perdidos"`
+		PlanDesde  *time.Time `json:"plan_desde"`
+		VerifID    string     `json:"verificacion_id"`
+	}
+	extra.Entrega = []string{}
 	if v.TiendaID != "" {
 		saldos, _ = billetera.LeerSaldos(ctx, m.app.DB, v.TiendaID)
+		var recojo, agencia, moto, otra bool
+		m.app.DB.QueryRowContext(ctx, `SELECT COALESCE(NULLIF(distrito,'')||', '||ciudad, ciudad), entrega_recojo, entrega_agencia, entrega_motorizado, entrega_otra, reputacion,
+			(SELECT count(*) FROM reclamos c JOIN pedidos p ON p.id=c.pedido_id WHERE p.tienda_id=t.id),
+			(SELECT count(*) FROM reclamos c JOIN pedidos p ON p.id=c.pedido_id WHERE p.tienda_id=t.id AND c.estado='a_favor_comprador'),
+			(SELECT inicio FROM suscripciones s WHERE s.tienda_id=t.id AND s.activa LIMIT 1),
+			COALESCE((SELECT v.id::text FROM verificaciones v WHERE v.tienda_id=t.id ORDER BY v.creado_en DESC LIMIT 1),'')
+			FROM tiendas t WHERE t.id=$1`, v.TiendaID).
+			Scan(&extra.Ciudad, &recojo, &agencia, &moto, &otra, &extra.Reputacion, &extra.Reclamos, &extra.Perdidos, &extra.PlanDesde, &extra.VerifID)
+		for _, e := range []struct {
+			ok bool
+			t  string
+		}{{recojo, "Recojo"}, {agencia, "Agencia"}, {moto, "Motorizado"}, {otra, "Otra"}} {
+			if e.ok {
+				extra.Entrega = append(extra.Entrega, e.t)
+			}
+		}
+		if rows, err := m.app.DB.QueryContext(ctx, `SELECT concepto, monto_centimos, creado_en FROM pagos_plan WHERE tienda_id=$1 ORDER BY creado_en DESC LIMIT 6`, v.TiendaID); err == nil {
+			for rows.Next() {
+				var x pagoPlan
+				rows.Scan(&x.Concepto, &x.Monto, &x.Fecha)
+				pagos = append(pagos, x)
+			}
+			rows.Close()
+		}
 	}
-	httpx.OK(w, map[string]any{"vendedora": v, "accesos": accesos, "historial": historial, "saldos": saldos})
+	httpx.OK(w, map[string]any{"vendedora": v, "accesos": accesos, "historial": historial, "saldos": saldos, "tienda": extra, "pagos_plan": pagos})
 	return nil
 }
 
@@ -399,18 +444,19 @@ func (m *Modulo) retiros(w http.ResponseWriter, r *http.Request) error {
 	if estado == "" {
 		estado = "en_proceso"
 	}
-	rows, err := m.app.DB.QueryContext(r.Context(), `SELECT r.id, r.tienda_id, t.nombre, u.id, u.nombre, r.monto_centimos, r.banco, r.ultimos4,
+	rows, err := m.app.DB.QueryContext(r.Context(), `SELECT r.id, r.numero, r.tienda_id, t.nombre, u.id, u.nombre, r.monto_centimos, r.banco, r.ultimos4,
 		COALESCE(c.titular,''), COALESCE(c.tipo,''), r.estado, r.operacion, r.motivo_rechazo, r.creado_en, r.pagado_en,
 		(SELECT count(*) FROM pedidos p WHERE p.retiro_id=r.id)
 		FROM retiros r JOIN tiendas t ON t.id=r.tienda_id JOIN usuarios u ON u.id=t.usuario_id
 		LEFT JOIN cuentas_bancarias c ON c.tienda_id=r.tienda_id
-		WHERE r.estado=$1 OR $1='todos' ORDER BY r.creado_en DESC LIMIT 100`, estado)
+		WHERE r.estado=$1 OR $1='todos' ORDER BY r.creado_en DESC LIMIT 200`, estado)
 	if err != nil {
 		return err
 	}
 	defer rows.Close()
 	type retiro struct {
 		ID        string     `json:"id"`
+		Numero    int64      `json:"numero"`
 		TiendaID  string     `json:"tienda_id"`
 		Tienda    string     `json:"tienda"`
 		UsuarioID string     `json:"usuario_id"`
@@ -430,13 +476,32 @@ func (m *Modulo) retiros(w http.ResponseWriter, r *http.Request) error {
 	out := []retiro{}
 	for rows.Next() {
 		var x retiro
-		if err := rows.Scan(&x.ID, &x.TiendaID, &x.Tienda, &x.UsuarioID, &x.Vendedora, &x.Monto, &x.Banco, &x.Ultimos4, &x.Titular, &x.TipoCta,
+		if err := rows.Scan(&x.ID, &x.Numero, &x.TiendaID, &x.Tienda, &x.UsuarioID, &x.Vendedora, &x.Monto, &x.Banco, &x.Ultimos4, &x.Titular, &x.TipoCta,
 			&x.Estado, &x.Operacion, &x.Motivo, &x.CreadoEn, &x.PagadoEn, &x.Pedidos); err != nil {
 			return err
 		}
 		out = append(out, x)
 	}
-	httpx.OK(w, map[string]any{"retiros": out})
+	// Indicadores de arriba: en proceso, pagado esta semana y dinero retenido
+	// (saldo disponible de tiendas que aún no tienen su identidad verificada).
+	var k struct {
+		EnProceso      int `json:"en_proceso_centimos"`
+		EnProcesoN     int `json:"en_proceso"`
+		PagadoSemana   int `json:"pagado_semana_centimos"`
+		PagadoSemanaN  int `json:"pagado_semana"`
+		Retenido       int `json:"retenido_centimos"`
+		RetenidoTienda int `json:"retenido_tiendas"`
+	}
+	m.app.DB.QueryRowContext(r.Context(), `SELECT
+		COALESCE((SELECT SUM(monto_centimos) FROM retiros WHERE estado='en_proceso'),0), (SELECT count(*) FROM retiros WHERE estado='en_proceso'),
+		COALESCE((SELECT SUM(monto_centimos) FROM retiros WHERE estado='pagado' AND pagado_en > date_trunc('week', now() AT TIME ZONE 'America/Lima') AT TIME ZONE 'America/Lima'),0),
+		(SELECT count(*) FROM retiros WHERE estado='pagado' AND pagado_en > date_trunc('week', now() AT TIME ZONE 'America/Lima') AT TIME ZONE 'America/Lima'),
+		COALESCE((SELECT SUM(x.s) FROM (SELECT m.tienda_id, SUM(m.monto_centimos) s FROM movimientos m WHERE m.bolsa='disponible'
+			AND NOT EXISTS (SELECT 1 FROM verificaciones v WHERE v.tienda_id=m.tienda_id AND v.estado='aprobada') GROUP BY m.tienda_id HAVING SUM(m.monto_centimos)>0) x),0),
+		(SELECT count(*) FROM (SELECT m.tienda_id FROM movimientos m WHERE m.bolsa='disponible'
+			AND NOT EXISTS (SELECT 1 FROM verificaciones v WHERE v.tienda_id=m.tienda_id AND v.estado='aprobada') GROUP BY m.tienda_id HAVING SUM(m.monto_centimos)>0) y)`).
+		Scan(&k.EnProceso, &k.EnProcesoN, &k.PagadoSemana, &k.PagadoSemanaN, &k.Retenido, &k.RetenidoTienda)
+	httpx.OK(w, map[string]any{"retiros": out, "indicadores": k})
 	return nil
 }
 
@@ -494,38 +559,51 @@ func (m *Modulo) reclamos(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	abiertos := r.URL.Query().Get("estado") != "todos"
 	rows, err := m.app.DB.QueryContext(ctx, `SELECT c.id, p.id, p.codigo, t.nombre, p.comprador_nombre, p.total_centimos, c.motivo, c.descripcion,
-		c.fotos, COALESCE(c.respuesta_vendedor,''), c.evidencias, c.estado, c.nota_admin, c.creado_en, c.respondido_en, c.resuelto_en, p.liberado
-		FROM reclamos c JOIN pedidos p ON p.id=c.pedido_id JOIN tiendas t ON t.id=p.tienda_id
+		c.fotos, COALESCE(c.respuesta_vendedor,''), c.evidencias, c.estado, c.nota_admin, c.creado_en, c.respondido_en, c.resuelto_en, p.liberado,
+		p.entrega, COALESCE(e.agencia,''), COALESCE(e.numero_orden,''), e.boleta_key IS NOT NULL, t.reputacion,
+		(SELECT count(*) FROM reclamos c2 JOIN pedidos p2 ON p2.id=c2.pedido_id WHERE p2.comprador_celular=p.comprador_celular AND c2.id<>c.id),
+		(SELECT count(*) FROM reclamos c3 JOIN pedidos p3 ON p3.id=c3.pedido_id WHERE p3.tienda_id=p.tienda_id AND c3.estado='a_favor_comprador'),
+		COALESCE(p.confirmado_por,'')
+		FROM reclamos c LEFT JOIN envios e ON e.pedido_id=c.pedido_id JOIN pedidos p ON p.id=c.pedido_id JOIN tiendas t ON t.id=p.tienda_id
 		WHERE NOT $1 OR c.estado IN ('abierto','en_revision') ORDER BY c.creado_en DESC LIMIT 100`, abiertos)
 	if err != nil {
 		return err
 	}
 	defer rows.Close()
 	type reclamo struct {
-		ID          string     `json:"id"`
-		PedidoID    string     `json:"pedido_id"`
-		Codigo      string     `json:"codigo"`
-		Tienda      string     `json:"tienda"`
-		Comprador   string     `json:"comprador"`
-		Total       int        `json:"total_centimos"`
-		Motivo      string     `json:"motivo"`
-		Descripcion string     `json:"descripcion"`
-		Fotos       []string   `json:"fotos"`
-		Respuesta   string     `json:"respuesta_vendedor"`
-		Evidencias  []string   `json:"evidencias"`
-		Estado      string     `json:"estado"`
-		Nota        string     `json:"nota_admin"`
-		CreadoEn    time.Time  `json:"creado_en"`
-		Respondido  *time.Time `json:"respondido_en"`
-		Resuelto    *time.Time `json:"resuelto_en"`
-		Liberado    bool       `json:"liberado"`
+		ID             string     `json:"id"`
+		PedidoID       string     `json:"pedido_id"`
+		Codigo         string     `json:"codigo"`
+		Tienda         string     `json:"tienda"`
+		Comprador      string     `json:"comprador"`
+		Total          int        `json:"total_centimos"`
+		Motivo         string     `json:"motivo"`
+		Descripcion    string     `json:"descripcion"`
+		Fotos          []string   `json:"fotos"`
+		Respuesta      string     `json:"respuesta_vendedor"`
+		Evidencias     []string   `json:"evidencias"`
+		Estado         string     `json:"estado"`
+		Nota           string     `json:"nota_admin"`
+		CreadoEn       time.Time  `json:"creado_en"`
+		Respondido     *time.Time `json:"respondido_en"`
+		Resuelto       *time.Time `json:"resuelto_en"`
+		Liberado       bool       `json:"liberado"`
+		Entrega        string     `json:"entrega"`
+		Agencia        string     `json:"agencia"`
+		NumeroOrden    string     `json:"numero_orden"`
+		Boleta         bool       `json:"boleta"`
+		Reputacion     string     `json:"reputacion"`
+		ClienteAntes   int        `json:"cliente_reclamos_antes"`
+		TiendaPerdidos int        `json:"tienda_reclamos_perdidos"`
+		Confirmado     string     `json:"confirmado_por"`
 	}
 	out := []reclamo{}
 	for rows.Next() {
 		var x reclamo
 		var fotos, evid []string
 		if err := rows.Scan(&x.ID, &x.PedidoID, &x.Codigo, &x.Tienda, &x.Comprador, &x.Total, &x.Motivo, &x.Descripcion,
-			pq.Array(&fotos), &x.Respuesta, pq.Array(&evid), &x.Estado, &x.Nota, &x.CreadoEn, &x.Respondido, &x.Resuelto, &x.Liberado); err != nil {
+			pq.Array(&fotos), &x.Respuesta, pq.Array(&evid), &x.Estado, &x.Nota, &x.CreadoEn, &x.Respondido, &x.Resuelto, &x.Liberado,
+			&x.Entrega, &x.Agencia, &x.NumeroOrden, &x.Boleta, &x.Reputacion, &x.ClienteAntes, &x.TiendaPerdidos, &x.Confirmado); err != nil {
 			return err
 		}
 		x.Fotos, x.Evidencias = []string{}, []string{}
@@ -537,7 +615,19 @@ func (m *Modulo) reclamos(w http.ResponseWriter, r *http.Request) error {
 		}
 		out = append(out, x)
 	}
-	httpx.OK(w, map[string]any{"reclamos": out})
+	var k struct {
+		Retenido  int `json:"retenido_centimos"`
+		RetenidoN int `json:"retenido_pedidos"`
+		Abiertos  int `json:"abiertos"`
+		Planes    int `json:"ingresos_planes_mes_centimos"`
+	}
+	m.app.DB.QueryRowContext(ctx, `SELECT
+		COALESCE((SELECT SUM(monto_centimos) FROM movimientos WHERE bolsa='a_liberar'),0),
+		(SELECT count(*) FROM pedidos WHERE pago_estado='pagado' AND NOT liberado AND estado NOT IN ('rechazado','cancelado')),
+		(SELECT count(*) FROM reclamos WHERE estado IN ('abierto','en_revision')),
+		COALESCE((SELECT SUM(monto_centimos) FROM pagos_plan WHERE date_trunc('month', creado_en AT TIME ZONE 'America/Lima') = date_trunc('month', now() AT TIME ZONE 'America/Lima')),0)`).
+		Scan(&k.Retenido, &k.RetenidoN, &k.Abiertos, &k.Planes)
+	httpx.OK(w, map[string]any{"reclamos": out, "indicadores": k})
 	return nil
 }
 
