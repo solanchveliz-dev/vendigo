@@ -55,6 +55,7 @@ export const ACCIONES: Record<string, string> = {
   guardar_agencia: "Guardó una agencia",
   estado_agencia: "Activó o desactivó una agencia",
   editar_configuracion: "Cambió la configuración",
+  responder_libro: "Respondió una hoja del Libro de Reclamaciones",
 };
 
 export const VERIFICACION: Record<string, { texto: string; tono: "ok" | "aviso" | "error" | "neutro" }> = {

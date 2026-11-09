@@ -1,4 +1,5 @@
 import { estiloTema } from "@/lib/tema";
+import { PieLegal } from "@/components/legal/pie";
 import type { Metadata } from "next";
 import { ContarVisita } from "@/components/tienda/contar-visita";
 import { notFound } from "next/navigation";
@@ -246,6 +247,7 @@ export default async function TiendaPublica({ params, searchParams }: { params: 
               <span className="h-px w-20 bg-linea" />
             </div>
             <p className="mt-2 text-sm text-gris">Tienda en VendiGo · {t.enlace.replace(/^https?:\/\//, "")}</p>
+            <PieLegal className="mt-5" />
           </footer>
         </div>
       </main>

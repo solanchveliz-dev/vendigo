@@ -1,5 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
+import { PieLegal } from "@/components/legal/pie";
 
 export default function Inicio() {
   return (
@@ -30,6 +31,7 @@ export default function Inicio() {
           </div>
         </div>
       </main>
+      <footer className="pb-8"><PieLegal /></footer>
     </div>
   );
 }

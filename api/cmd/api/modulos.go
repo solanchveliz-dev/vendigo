@@ -16,6 +16,7 @@ import (
 	"github.com/solanchveliz-dev/vendigo/api/internal/demo"
 	"github.com/solanchveliz-dev/vendigo/api/internal/httpx"
 	"github.com/solanchveliz-dev/vendigo/api/internal/ia"
+	"github.com/solanchveliz-dev/vendigo/api/internal/libro"
 	"github.com/solanchveliz-dev/vendigo/api/internal/pedidos"
 	"github.com/solanchveliz-dev/vendigo/api/internal/planes"
 	"github.com/solanchveliz-dev/vendigo/api/internal/productos"
@@ -58,6 +59,12 @@ func registrarModulos(app *core.App, api chi.Router) {
 		mProductos.RutasPublicas(r)
 		mPlanes.RutasPublicas(r)
 	})
+	// Libro de Reclamaciones: público y con un límite más estricto para evitar abuso.
+	mLibro := libro.Nuevo(app)
+	api.Group(func(r chi.Router) {
+		r.Use(httpx.Limite(20, time.Minute))
+		mLibro.RutasPublicas(r)
+	})
 
 	// Con sesión
 	api.Group(func(r chi.Router) {
@@ -82,6 +89,7 @@ func registrarModulos(app *core.App, api chi.Router) {
 			mAdmin := admin.Nuevo(app)
 			mAdmin.EnviarCodigo = mAuth.GenerarOTP
 			mAdmin.Rutas(a)
+			mLibro.RutasAdmin(a)
 		})
 
 		if app.Cfg.EsDev() {

@@ -27,6 +27,22 @@ export default function Configuracion() {
   const { datos: c, recargar } = useApi<Config>("/admin/configuracion");
   const planes = useApi<{ planes: Plan[] }>("/admin/planes");
   const [correo, setCorreo] = useState("");
+  const prov = useApi<{ razon_social: string; ruc: string; direccion_fiscal: string }>("/legal/proveedor");
+  const [pv, setPv] = useState({ razon_social: "", ruc: "", direccion_fiscal: "" });
+  const [guardandoPv, setGuardandoPv] = useState(false);
+  useEffect(() => { if (prov.datos) setPv({ razon_social: prov.datos.razon_social, ruc: prov.datos.ruc, direccion_fiscal: prov.datos.direccion_fiscal }); }, [prov.datos]);
+  async function guardarPv() {
+    setGuardandoPv(true);
+    try {
+      const r = await api.put<{ mensaje: string }>("/admin/legal/proveedor", pv);
+      avisar(r.mensaje);
+      prov.recargar();
+    } catch (e) {
+      avisar((e as ErrorApi).message, "error");
+    } finally {
+      setGuardandoPv(false);
+    }
+  }
   const [guardando, setGuardando] = useState(false);
   useEffect(() => { if (c) setCorreo(c.correo_soporte); }, [c]);
 
@@ -64,6 +80,19 @@ export default function Configuracion() {
               </label>
             </div>
             <Boton className="mt-4" onClick={guardar} cargando={guardando} disabled={correo.trim() === c.correo_soporte}>Guardar configuración</Boton>
+          </Tarjeta>
+
+          <Tarjeta titulo="Datos del proveedor (Libro de Reclamaciones)">
+            <p className="-mt-2 mb-4 text-sm text-gris">Salen en cada hoja de reclamación. Usa los datos de tu RUC tal como figuran en SUNAT.</p>
+            <div className="grid gap-4 md:grid-cols-[1fr_220px]">
+              <label className="block"><span className="mb-1.5 block text-sm font-semibold text-tinta">Razón social o nombre del titular</span><Entrada value={pv.razon_social} onChange={(e) => setPv({ ...pv, razon_social: e.target.value })} maxLength={150} /></label>
+              <label className="block"><span className="mb-1.5 block text-sm font-semibold text-tinta">RUC</span><Entrada value={pv.ruc} inputMode="numeric" onChange={(e) => setPv({ ...pv, ruc: e.target.value.replace(/\D/g, "").slice(0, 11) })} /></label>
+            </div>
+            <label className="mt-4 block"><span className="mb-1.5 block text-sm font-semibold text-tinta">Dirección fiscal</span><Entrada value={pv.direccion_fiscal} onChange={(e) => setPv({ ...pv, direccion_fiscal: e.target.value })} maxLength={200} /></label>
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <Boton onClick={guardarPv} cargando={guardandoPv} disabled={!prov.datos || JSON.stringify(pv) === JSON.stringify({ razon_social: prov.datos.razon_social, ruc: prov.datos.ruc, direccion_fiscal: prov.datos.direccion_fiscal })}>Guardar datos</Boton>
+              <a href="/libro-reclamaciones" target="_blank" className="text-sm font-semibold text-pino underline">Ver Libro de Reclamaciones</a>
+            </div>
           </Tarjeta>
 
           <Tarjeta titulo="Tiendas y entrega">

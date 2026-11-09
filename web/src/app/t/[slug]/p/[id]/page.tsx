@@ -1,4 +1,5 @@
 import { estiloTema } from "@/lib/tema";
+import { PieLegal } from "@/components/legal/pie";
 import type { Metadata } from "next";
 import { ContarVisita } from "@/components/tienda/contar-visita";
 import Link from "next/link";
@@ -240,6 +241,7 @@ export default async function ProductoPublico({ params, searchParams }: Params &
             <p className="mt-1 max-w-sm text-sm text-gris">Solo opinan quienes compraron. Aparecen cuando reciben su pedido.</p>
           </div>
         </section>
+        <PieLegal className="mt-14 border-t border-linea pt-6" />
       </main>
     </div>
   );
