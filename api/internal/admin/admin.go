@@ -71,6 +71,11 @@ func (m *Modulo) Rutas(r chi.Router) {
 	r.Method("PUT", "/planes/{id}", httpx.Handler(m.guardarPlan))
 	r.Method("GET", "/reportes", httpx.Handler(m.reportes))
 	r.Method("GET", "/reportes/csv", httpx.Handler(m.reporteCSV))
+	r.Method("GET", "/incidencias", httpx.Handler(m.incidencias))
+	r.Method("POST", "/incidencias", httpx.Handler(m.crearIncidencia))
+	r.Method("GET", "/incidencias/{n}", httpx.Handler(m.incidencia))
+	r.Method("POST", "/incidencias/{n}/estado", httpx.Handler(m.estadoIncidencia))
+	r.Method("POST", "/incidencias/{n}/nota", httpx.Handler(m.notaIncidencia))
 }
 
 func adminID(ctx context.Context) string {
@@ -115,6 +120,7 @@ func (m *Modulo) resumen(w http.ResponseWriter, r *http.Request) error {
 		RetirosMonto   int `json:"retiros_pendientes_centimos"`
 		Reclamos       int `json:"reclamos_abiertos"`
 		Bloqueos       int `json:"cuentas_bloqueadas"`
+		Incidencias    int `json:"incidencias_abiertas"`
 	}
 	err := m.app.DB.QueryRowContext(r.Context(), `SELECT
 		(SELECT count(*) FROM usuarios WHERE rol='vendedor'),
@@ -124,8 +130,9 @@ func (m *Modulo) resumen(w http.ResponseWriter, r *http.Request) error {
 		(SELECT count(*) FROM retiros WHERE estado='en_proceso'),
 		(SELECT COALESCE(SUM(monto_centimos),0) FROM retiros WHERE estado='en_proceso'),
 		(SELECT count(*) FROM reclamos WHERE estado IN ('abierto','en_revision')),
-		(SELECT count(*) FROM usuarios WHERE bloqueado_hasta > now())`).
-		Scan(&d.Vendedoras, &d.Suspendidas, &d.NuevasSemana, &d.Verificaciones, &d.Retiros, &d.RetirosMonto, &d.Reclamos, &d.Bloqueos)
+		(SELECT count(*) FROM usuarios WHERE bloqueado_hasta > now()),
+		(SELECT count(*) FROM incidencias WHERE estado<>'resuelta')`).
+		Scan(&d.Vendedoras, &d.Suspendidas, &d.NuevasSemana, &d.Verificaciones, &d.Retiros, &d.RetirosMonto, &d.Reclamos, &d.Bloqueos, &d.Incidencias)
 	if err != nil {
 		return err
 	}

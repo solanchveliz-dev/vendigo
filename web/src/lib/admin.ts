@@ -50,6 +50,8 @@ export const ACCIONES: Record<string, string> = {
   restaurar_producto: "Habilitó una publicación",
   editar_plan: "Editó un plan",
   descargar_reporte: "Descargó un reporte",
+  abrir_incidencia: "Abrió una incidencia",
+  estado_incidencia: "Cambió el estado de una incidencia",
 };
 
 export const VERIFICACION: Record<string, { texto: string; tono: "ok" | "aviso" | "error" | "neutro" }> = {
@@ -213,3 +215,25 @@ export const GRUPOS_PEDIDO: Record<string, string> = {
   cancelado: "Cancelados",
   reclamo: "Con reclamo",
 };
+
+export type Incidencia = {
+  id: string;
+  numero: number;
+  titulo: string;
+  descripcion: string;
+  tipo: string;
+  prioridad: "alta" | "media" | "baja";
+  estado: "abierta" | "en_revision" | "resuelta";
+  origen: string;
+  reportado_por: string;
+  tienda_id: string | null;
+  tienda: string | null;
+  pedido_id: string | null;
+  pedido: string | null;
+  creado_en: string;
+  resuelta_en: string | null;
+};
+export const TIPO_INCIDENCIA: Record<string, string> = { entrega: "Entrega", producto: "Producto", pago: "Pago", publicacion: "Publicación", cuenta: "Cuenta", otro: "Otro" };
+export const PRIORIDAD: Record<Incidencia["prioridad"], { t: string; tono: Tono }> = { alta: { t: "Alta", tono: "error" }, media: { t: "Media", tono: "aviso" }, baja: { t: "Baja", tono: "neutro" } };
+export const ESTADO_INCIDENCIA: Record<Incidencia["estado"], { t: string; tono: Tono }> = { abierta: { t: "Abierta", tono: "aviso" }, en_revision: { t: "En revisión", tono: "aviso" }, resuelta: { t: "Resuelta", tono: "ok" } };
+export const codigoInc = (n: number) => `INC-${n}`;

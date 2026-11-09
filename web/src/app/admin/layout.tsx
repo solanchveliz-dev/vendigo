@@ -4,13 +4,13 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { Bell, Download, Flag, Home, LayoutGrid, LogOut, Search, ShieldCheck, Wallet, Briefcase, Users, Store, Package, ShoppingBag, CreditCard, Crown, BarChart3 } from "lucide-react";
+import { Bell, Download, Flag, Home, LayoutGrid, LogOut, Search, ShieldCheck, Wallet, Briefcase, Users, Store, Package, ShoppingBag, CreditCard, Crown, BarChart3, AlertTriangle } from "lucide-react";
 import { api, sesion, useApi } from "@/lib/api";
 import type { Usuario } from "@/lib/tipos";
 import { Cargando, cn } from "@/components/ui";
 import { fechaHora } from "@/lib/admin";
 
-type Resumen = { verificaciones_pendientes: number; retiros_pendientes: number; reclamos_abiertos: number };
+type Resumen = { verificaciones_pendientes: number; retiros_pendientes: number; reclamos_abiertos: number; incidencias_abiertas: number };
 type Aviso = { id: string; titulo: string; cuerpo: string; enlace: string; leida: boolean; creado_en: string };
 
 // Menú del panel admin (mismo orden e íconos del prototipo). Las secciones restantes se suman en las siguientes fases.
@@ -25,6 +25,7 @@ const menu = [
   { href: "/admin/retiros", texto: "Retiros", icono: Wallet, cuenta: "retiros_pendientes" as const },
   { href: "/admin/suscripciones", texto: "Suscripciones", icono: Crown },
   { href: "/admin/reportes", texto: "Reportes", icono: BarChart3 },
+  { href: "/admin/incidencias", texto: "Incidencias", icono: AlertTriangle, cuenta: "incidencias_abiertas" as const },
   { href: "/admin/reclamos", texto: "Reclamos", icono: Flag, cuenta: "reclamos_abiertos" as const },
   { href: "/admin/seguridad", texto: "Seguridad", icono: ShieldCheck },
 ];

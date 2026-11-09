@@ -10,6 +10,7 @@ import type { PedidoDetalle } from "@/lib/tipos";
 import { Cargando } from "@/components/ui";
 import { Estado, Tarjeta, Titulo } from "@/components/admin/ui";
 import { LineaTiempo } from "@/components/pedidos/pasos";
+import { NuevaIncidencia } from "@/components/admin/nueva-incidencia";
 
 type Respuesta = { pedido: PedidoDetalle; extra: { tienda_id: string; tienda: string; transaccion: string | null } };
 
@@ -70,7 +71,7 @@ export default function DetallePedido({ params }: { params: Promise<{ id: string
             <Link href={`/admin/tiendas/${extra.tienda_id}`} className="hover:text-pino">{extra.tienda}</Link> <ArrowRight className="size-3.5" /> {p.comprador}
           </span>
         }
-        accion={<Estado tono={est.tono}>{est.t}</Estado>}
+        accion={<div className="flex flex-wrap items-center gap-3"><Estado tono={est.tono}>{est.t}</Estado><NuevaIncidencia pedido={p.codigo} /></div>}
       />
 
       <div className="grid items-start gap-5 lg:grid-cols-2">
