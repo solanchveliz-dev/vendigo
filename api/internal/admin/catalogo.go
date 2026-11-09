@@ -139,7 +139,7 @@ func (m *Modulo) retirarProducto(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return err
 		}
-		if err := avisarDueno(r, tx, id, "Retiramos una publicación", "“"+nombre+"” ya no se ve en tu tienda. Motivo: "+conPunto(motivo)+" Si crees que es un error, escríbenos a ayuda@vendigo.pe."); err != nil {
+		if err := avisarDueno(r, tx, id, "Retiramos una publicación", "“"+nombre+"” ya no se ve en tu tienda. Motivo: "+conPunto(motivo)+" Si crees que es un error, escríbenos a "+m.correoSoporte(ctx)+"."); err != nil {
 			return err
 		}
 		m.app.Auditar(ctx, tx, adminID(ctx), "retirar_producto", "producto", id, map[string]string{"motivo": motivo, "producto": nombre})

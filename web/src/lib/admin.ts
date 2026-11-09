@@ -52,6 +52,9 @@ export const ACCIONES: Record<string, string> = {
   descargar_reporte: "Descargó un reporte",
   abrir_incidencia: "Abrió una incidencia",
   estado_incidencia: "Cambió el estado de una incidencia",
+  guardar_agencia: "Guardó una agencia",
+  estado_agencia: "Activó o desactivó una agencia",
+  editar_configuracion: "Cambió la configuración",
 };
 
 export const VERIFICACION: Record<string, { texto: string; tono: "ok" | "aviso" | "error" | "neutro" }> = {

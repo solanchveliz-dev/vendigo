@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { Bell, Download, Flag, Home, LayoutGrid, LogOut, Search, ShieldCheck, Wallet, Briefcase, Users, Store, Package, ShoppingBag, CreditCard, Crown, BarChart3, AlertTriangle } from "lucide-react";
+import { Bell, Download, Flag, Home, LayoutGrid, LogOut, Search, ShieldCheck, Wallet, Briefcase, Users, Store, Package, ShoppingBag, CreditCard, Crown, BarChart3, AlertTriangle, MapPin, Settings } from "lucide-react";
 import { api, sesion, useApi } from "@/lib/api";
 import type { Usuario } from "@/lib/tipos";
 import { Cargando, cn } from "@/components/ui";
@@ -23,11 +23,13 @@ const menu = [
   { href: "/admin/pedidos", texto: "Pedidos", icono: ShoppingBag },
   { href: "/admin/pagos", texto: "Pagos", icono: CreditCard },
   { href: "/admin/retiros", texto: "Retiros", icono: Wallet, cuenta: "retiros_pendientes" as const },
+  { href: "/admin/agencias", texto: "Agencias", icono: MapPin },
   { href: "/admin/suscripciones", texto: "Suscripciones", icono: Crown },
   { href: "/admin/reportes", texto: "Reportes", icono: BarChart3 },
   { href: "/admin/incidencias", texto: "Incidencias", icono: AlertTriangle, cuenta: "incidencias_abiertas" as const },
   { href: "/admin/reclamos", texto: "Reclamos", icono: Flag, cuenta: "reclamos_abiertos" as const },
   { href: "/admin/seguridad", texto: "Seguridad", icono: ShieldCheck },
+  { href: "/admin/configuracion", texto: "Configuración", icono: Settings },
 ];
 
 export default function LayoutAdmin({ children }: { children: React.ReactNode }) {
@@ -158,6 +160,7 @@ export default function LayoutAdmin({ children }: { children: React.ReactNode })
                       </Link>
                     ))
                   )}
+                  <Link href="/admin/notificaciones" onClick={() => setCampana(false)} className="mt-1 block rounded-xl px-3 py-2 text-center text-sm font-bold text-pino hover:bg-crema">Ver todas</Link>
                 </div>
               )}
             </div>

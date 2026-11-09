@@ -664,7 +664,8 @@ func (m *Modulo) avisarEquipoNuevo(r *http.Request, usuarioID string) {
 // avisoSeguridad deja un aviso en la campana de la persona (siempre llega, no se puede apagar).
 func avisoSeguridad(ctx context.Context, q core.Ejecutor, usuarioID, titulo, cuerpo string) {
 	q.ExecContext(ctx, `INSERT INTO notificaciones (usuario_id, titulo, cuerpo, enlace, tipo)
-		SELECT id, $2, $3, CASE WHEN rol='admin' THEN '/admin' ELSE '/vendedor/configuracion' END, 'pagos' FROM usuarios WHERE id=$1`, usuarioID, titulo, cuerpo)
+		SELECT id, $2, $3, CASE WHEN rol='admin' THEN '/admin/seguridad' ELSE '/vendedor/configuracion' END,
+		CASE WHEN rol='admin' THEN 'seguridad' ELSE 'pagos' END FROM usuarios WHERE id=$1`, usuarioID, titulo, cuerpo)
 }
 
 // Equipo describe el navegador y sistema a partir del User-Agent ("Chrome en Mac").

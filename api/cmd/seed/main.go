@@ -83,6 +83,7 @@ func main() {
 		}
 		visitasDemo(ctx, conexion)
 		historialDemo(ctx, conexion)
+		agenciasDemo(ctx, conexion)
 		fmt.Println("Los datos de prueba ya existen. Usuario: 999888777 · Contraseña: vendigo123")
 		fmt.Println("Administrador de prueba: admin@vendigo.pe · Contraseña: Admin2026 (la primera vez configura tu app de autenticación)")
 		return
@@ -157,6 +158,7 @@ func main() {
 	})
 	visitasDemo(ctx, conexion)
 	historialDemo(ctx, conexion)
+	agenciasDemo(ctx, conexion)
 	fmt.Printf("Datos de prueba listos (%d imágenes subidas).\nUsuario: 999888777 · Contraseña: vendigo123\n", subidas)
 	fmt.Println("Administrador de prueba: admin@vendigo.pe · Contraseña: Admin2026 (la primera vez configura tu app de autenticación)")
 }
@@ -321,4 +323,31 @@ func adminDemo(ctx context.Context, conexion *sql.DB) {
 	hash, _ := seguridad.HashPassword("Admin2026")
 	conexion.ExecContext(ctx, `INSERT INTO usuarios (nombre, celular, email, password_hash, rol, celular_verificado)
 		VALUES ('Equipo VendiGo', '900000001', 'admin@vendigo.pe', $1, 'admin', true)`, hash)
+}
+
+// agenciasDemo carga algunas sedes de agencias para la demo (solo si no hay ninguna).
+// El admin las revisa, edita o desactiva desde "Agencias".
+func agenciasDemo(ctx context.Context, conexion *sql.DB) {
+	var hay bool
+	conexion.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM agencias_sedes)`).Scan(&hay)
+	if hay {
+		return
+	}
+	sedes := [][4]string{
+		{"Shalom", "Lima", "Shalom Jesús María", "Av. Brasil 1250, Jesús María"},
+		{"Shalom", "Lima", "Shalom Los Olivos", "Av. Universitaria 7020, Los Olivos"},
+		{"Shalom", "Lima", "Shalom Surco", "Av. Tomás Marsano 3050, Surco"},
+		{"Shalom", "Lima", "Shalom La Victoria", "Av. Aviación 820, La Victoria"},
+		{"Shalom", "Arequipa", "Shalom Arequipa Centro", "Av. Parra 205, Arequipa"},
+		{"Shalom", "Trujillo", "Shalom Trujillo", "Av. América Norte 1540, Trujillo"},
+		{"Shalom", "Cusco", "Shalom Cusco", "Av. de la Cultura 1720, Cusco"},
+		{"Shalom", "Piura", "Shalom Piura", "Av. Sánchez Cerro 1450, Piura"},
+		{"Olva Courier", "Lima", "Olva Miraflores", "Av. Benavides 1180, Miraflores"},
+		{"Olva Courier", "Arequipa", "Olva Arequipa", "Calle San Juan de Dios 310, Arequipa"},
+		{"Marvisur", "Arequipa", "Marvisur Arequipa", "Av. Salaverry 115, Arequipa"},
+		{"Marvisur", "Lima", "Marvisur Lima", "Av. 28 de Julio 1250, La Victoria"},
+	}
+	for _, s := range sedes {
+		conexion.ExecContext(ctx, `INSERT INTO agencias_sedes (agencia, ciudad, nombre, direccion) VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING`, s[0], s[1], s[2], s[3])
+	}
 }
