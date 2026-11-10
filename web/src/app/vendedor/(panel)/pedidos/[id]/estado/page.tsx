@@ -43,7 +43,7 @@ export default function EstadoPedidoPagina({ params }: { params: Promise<{ id: s
         <div className="mb-2 h-1 w-8 rounded-full bg-coral" />
         <h1 className="text-[34px] font-extrabold leading-tight text-pino">Quién hace cada paso</h1>
         <p className="text-sm text-gris">
-          Pedido {p.codigo} · {nombreEntrega[p.entrega]} · {p.pago_estado === "pendiente" ? "Paga al recibir" : "Pago protegido con Culqi"}
+          Pedido {p.codigo} · {nombreEntrega[p.entrega]} · {p.pago?.texto ?? ""}
         </p>
       </div>
       <AvisoAccion pedido={p} ocupado={ocupado} alAceptar={aceptar} alRechazar={irAlPedido} alEntregar={irAlPedido} alResponder={irAlPedido} />

@@ -3,7 +3,7 @@
 import { api } from "./api";
 
 type Subida = { key: string; url_subida: string; url_publica?: string };
-export type TipoArchivo = "producto" | "logo" | "portada" | "historia" | "boleta" | "dni" | "reclamo";
+export type TipoArchivo = "producto" | "logo" | "portada" | "historia" | "pago_qr" | "devolucion" | "boleta" | "dni" | "reclamo";
 
 // Reduce la foto en el navegador antes de subirla (más rápido y gasta menos datos).
 async function reducir(archivo: File, maximo = 1600): Promise<Blob> {

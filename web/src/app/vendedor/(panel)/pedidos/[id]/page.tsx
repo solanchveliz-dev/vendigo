@@ -10,6 +10,7 @@ import type { PedidoDetalle } from "@/lib/tipos";
 import { Aviso, Boton, Campo, Cargando, Entrada, Area, Modal, Tarjeta, useAvisar } from "@/components/ui";
 import { EstadoPedido } from "@/components/pedidos/estado";
 import { AvisoAccion, LineaTiempo } from "@/components/pedidos/pasos";
+import { TarjetaPago } from "@/components/pagos/tarjeta-pago";
 import { iconoEntrega } from "@/components/pedidos/tabla";
 import { TarjetaAyuda } from "@/components/pedidos/ayuda";
 import { usePanel } from "@/components/panel/contexto";
@@ -62,7 +63,6 @@ export default function DetallePedido({ params }: { params: Promise<{ id: string
 
   if (!p) return <Cargando />;
   const IconoEnt = iconoEntrega[p.entrega];
-  const pagoTexto = p.pago_estado === "devuelto" ? "Devuelto" : p.pago_estado === "pendiente" ? "Paga al recibir" : p.liberado ? "Cobrado" : "Pago confirmado";
 
   return (
     <div className="space-y-5">
@@ -105,7 +105,7 @@ export default function DetallePedido({ params }: { params: Promise<{ id: string
               <p className="mt-2 text-sm">{p.reclamo_detalle.descripcion}</p>
               {p.reclamo_detalle.respuesta_vendedor && (
                 <Aviso className="mt-3">
-                  Tu respuesta: “{p.reclamo_detalle.respuesta_vendedor}”. VendiGo revisa las pruebas ({p.reclamo_detalle.evidencias.length}) y te avisará. El dinero sigue bloqueado.
+                  Tu respuesta: “{p.reclamo_detalle.respuesta_vendedor}”. VendiGo revisa las pruebas ({p.reclamo_detalle.evidencias.length}) y te avisará.
                 </Aviso>
               )}
             </Tarjeta>
@@ -238,40 +238,22 @@ export default function DetallePedido({ params }: { params: Promise<{ id: string
             </div>
           </Tarjeta>
 
-          <Tarjeta>
-            <h2 className="mb-2 text-lg font-extrabold text-tinta">Pago</h2>
-            <Dato k="Estado" v={<span className="rounded-full bg-arena px-2.5 py-0.5 text-xs font-semibold">{pagoTexto}</span>} />
-            <Dato k="Forma" v={p.pago_estado === "pendiente" ? "Paga al recibir, desde su app" : "Pago protegido con Culqi"} />
-            <Dato k="Método" v={nombrePago[p.metodo_pago]} />
-            <p className="mt-2 text-xs text-gris">El dinero se libera a tu cuenta cuando tu cliente recibe su pedido.</p>
-          </Tarjeta>
-
-          <Tarjeta>
-            <h2 className="mb-2 text-lg font-extrabold text-tinta">Tu cobro</h2>
-            <Dato k="Pagó tu cliente" v={soles(p.total_centimos)} />
-            {p.comision_pasarela_centimos > 0 && <Dato k="Costo de Culqi" v={`-${soles(p.comision_pasarela_centimos)}`} />}
-            <div className="mt-2 flex items-baseline justify-between border-t border-linea pt-3">
-              <span className="font-display text-lg font-extrabold">Te llega</span>
-              <span className="font-display text-2xl font-extrabold text-pino">{soles(p.pago_estado === "pendiente" ? p.total_centimos : p.neto_centimos)}</span>
-            </div>
-            <p className="mt-2 flex items-center gap-1.5 text-xs text-gris">
-              <Lock className="size-3.5" />
-              {p.pago_estado === "devuelto"
-                ? "Se devolvió al cliente"
-                : p.pago_estado === "pendiente"
-                  ? "El cliente paga al recibir"
-                  : p.liberado
-                    ? "Liberado: ya está en Mis cobros"
-                    : p.liberar_en
-                      ? `Se libera el ${fecha(p.liberar_en)}`
-                      : "Se libera después de la entrega"}
-            </p>
-          </Tarjeta>
+          <TarjetaPago
+            pedido={p}
+            informarPago={(recibido, referencia) => accion("pago", { recibido, referencia }, recibido ? "Listo: registramos que recibiste el pago." : "Le avisamos al cliente que no te llegó el pago.")}
+            informarDevolucion={(evidencia_key, nota) => accion("devolucion", { evidencia_key, nota }, "Devolución informada. El cliente la verá en su seguimiento.")}
+          />
         </div>
       </div>
 
-      <ModalRechazo abierto={modal === "rechazar"} cerrar={() => setModal("")} enviar={(motivo) => accion("rechazar", { motivo }, "Pedido rechazado. Se devolvió el dinero al cliente.")} />
-      <ModalRecojo abierto={modal === "recojo"} cerrar={() => setModal("")} enviar={(codigo) => accion("entregar-recojo", { codigo }, "Pedido entregado.")} />
+      <ModalRechazo abierto={modal === "rechazar"} cerrar={() => setModal("")} pagado={!!p.pago && ["informado_tienda", "comprobante_enviado"].includes(p.pago.estado)} enviar={(motivo) => accion("rechazar", { motivo }, "Pedido rechazado. Le avisamos al cliente.")} />
+      <ModalEntregar
+        abierto={modal === "recojo"}
+        cerrar={() => setModal("")}
+        pagaAlRecibir={p.pago?.estado === "paga_al_recibir"}
+        monto={p.total_centimos}
+        enviar={(codigo, pago_recibido) => accion("entregar", { codigo, pago_recibido }, "Pedido entregado.")}
+      />
       <ModalReclamo
         abierto={modal === "reclamo"}
         cerrar={() => setModal("")}
@@ -293,7 +275,7 @@ export default function DetallePedido({ params }: { params: Promise<{ id: string
   );
 }
 
-function ModalRechazo({ abierto, cerrar, enviar }: { abierto: boolean; cerrar: () => void; enviar: (m: string) => Promise<boolean> }) {
+function ModalRechazo({ abierto, cerrar, enviar, pagado }: { abierto: boolean; cerrar: () => void; enviar: (m: string) => Promise<boolean>; pagado: boolean }) {
   const [motivo, setMotivo] = useState("");
   const opciones = ["Me quedé sin stock", "No hago envíos a esa ciudad", "No puedo atenderlo a tiempo"];
   return (
@@ -305,7 +287,7 @@ function ModalRechazo({ abierto, cerrar, enviar }: { abierto: boolean; cerrar: (
           </button>
         ))}
         <Entrada value={opciones.includes(motivo) ? "" : motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Otro motivo" />
-        <Aviso>Le devolvemos al cliente todo su dinero por el mismo medio de pago.</Aviso>
+        <Aviso>{pagado ? "Como el cliente ya te pagó, tendrás que devolverle su dinero e informarlo con tu captura." : "El cliente todavía no pagó, así que no hay nada que devolver."}</Aviso>
         <Boton bloque variante="peligro" disabled={!motivo.trim()} onClick={() => enviar(motivo)}>
           Rechazar pedido
         </Boton>
@@ -314,14 +296,21 @@ function ModalRechazo({ abierto, cerrar, enviar }: { abierto: boolean; cerrar: (
   );
 }
 
-function ModalRecojo({ abierto, cerrar, enviar }: { abierto: boolean; cerrar: () => void; enviar: (c: string) => Promise<boolean> }) {
+function ModalEntregar({ abierto, cerrar, enviar, pagaAlRecibir, monto }: { abierto: boolean; cerrar: () => void; enviar: (c: string, pago: boolean) => Promise<boolean>; pagaAlRecibir: boolean; monto: number }) {
   const [codigo, setCodigo] = useState("");
+  const [pago, setPago] = useState(false);
   return (
     <Modal abierto={abierto} onCerrar={cerrar} titulo="Entregar al cliente">
       <div className="space-y-4">
-        <p className="text-sm text-gris">Pídele al cliente el código de recojo que aparece en su pedido.</p>
+        <p className="text-sm text-gris">Pídele al cliente el código de entrega de 4 dígitos que aparece en su seguimiento.</p>
         <Entrada value={codigo} onChange={(e) => setCodigo(e.target.value.replace(/\D/g, "").slice(0, 4))} inputMode="numeric" className="h-14 text-center font-display text-2xl tracking-[0.5em]" placeholder="••••" />
-        <Boton bloque variante="acento" disabled={codigo.length !== 4} onClick={() => enviar(codigo)}>
+        {pagaAlRecibir && (
+          <label className="flex items-start gap-3 rounded-xl bg-arena/60 p-3 text-sm">
+            <input type="checkbox" checked={pago} onChange={(e) => setPago(e.target.checked)} className="mt-0.5 size-4 accent-[var(--color-pino)]" />
+            <span>Ya recibí el pago de <b>{soles(monto)}</b> (Yape, Plin o efectivo).</span>
+          </label>
+        )}
+        <Boton bloque variante="acento" disabled={codigo.length !== 4} onClick={() => enviar(codigo, pago)}>
           Confirmar entrega
         </Boton>
       </div>

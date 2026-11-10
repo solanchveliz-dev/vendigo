@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { CheckCircle2, Circle, Crown, Flag, Lock, XCircle } from "lucide-react";
+import { CheckCircle2, Circle, Crown, Flag, RefreshCw, XCircle } from "lucide-react";
+import { DEVOLUCION } from "@/components/pagos/estado";
 import { api, ErrorApi, useApi } from "@/lib/api";
 import { soles } from "@/lib/formato";
 import { fechaHora } from "@/lib/admin";
@@ -25,7 +26,7 @@ type Reclamo = {
   creado_en: string;
   respondido_en: string | null;
   resuelto_en: string | null;
-  liberado: boolean;
+  devolucion: string;
   entrega: string;
   agencia: string;
   numero_orden: string;
@@ -35,7 +36,7 @@ type Reclamo = {
   tienda_reclamos_perdidos: number;
   confirmado_por: string;
 };
-type Datos = { reclamos: Reclamo[]; indicadores: { retenido_centimos: number; retenido_pedidos: number; abiertos: number; ingresos_planes_mes_centimos: number } };
+type Datos = { reclamos: Reclamo[]; indicadores: { devoluciones_pendientes_centimos: number; devoluciones_pendientes: number; abiertos: number; ingresos_planes_mes_centimos: number } };
 
 const MOTIVOS: Record<string, string> = { no_llego: "No me llegó", danado: "Llegó dañado", distinto: "Es distinto a lo publicado", incompleto: "Llegó incompleto", otro: "Otro" };
 const ESTADOS: Record<string, string> = { abierto: "Esperando a la tienda", en_revision: "Por decidir", a_favor_comprador: "Devuelto al cliente", a_favor_vendedor: "Liberado a la tienda" };
@@ -106,9 +107,9 @@ export default function Reclamos() {
 
   return (
     <>
-      <Titulo titulo="Reclamos y pagos retenidos" detalle="El dinero de cada pedido queda retenido hasta la entrega. Si hay reclamo, comparas las pruebas de ambas partes y decides." />
+      <Titulo titulo="Reclamos" detalle="Comparas las pruebas del cliente y de la tienda y decides. VendiGo no guarda el dinero: si das la razón al cliente, la tienda debe devolverle lo que pagó." />
       <div className="grid gap-5 md:grid-cols-3">
-        <Indicador titulo="Pagos retenidos" valor={soles(k.retenido_centimos)} detalle={`${k.retenido_pedidos} pedidos`} icono={<Lock className="size-[18px]" />} />
+        <Indicador titulo="Devoluciones pendientes" valor={k.devoluciones_pendientes} detalle={`${soles(k.devoluciones_pendientes_centimos)} que las tiendas deben devolver`} icono={<RefreshCw className="size-[18px]" />} alerta={k.devoluciones_pendientes > 0} />
         <Indicador oscuro titulo="Reclamos abiertos" valor={k.abiertos} detalle="Responde en 24 a 48 h" icono={<Flag className="size-[18px]" />} />
         <Indicador titulo="Ingresos por planes" valor={soles(k.ingresos_planes_mes_centimos)} detalle="Este mes" icono={<Crown className="size-[18px]" />} />
       </div>
@@ -130,7 +131,7 @@ export default function Reclamos() {
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <b className="text-[17px] text-tinta">{c.codigo} · {c.comprador} → {c.tienda}</b>
-                  <p className="text-sm text-gris">{soles(c.total_centimos)} retenido · “{MOTIVOS[c.motivo] ?? c.motivo}” · {fechaHora(c.creado_en)}</p>
+                  <p className="text-sm text-gris">{soles(c.total_centimos)} · “{MOTIVOS[c.motivo] ?? c.motivo}” · {fechaHora(c.creado_en)}</p>
                 </div>
                 <span className="flex items-center gap-1.5 text-sm font-bold text-tinta"><span className="size-1.5 rounded-full bg-current" />{ESTADOS[c.estado] ?? c.estado}</span>
               </div>
@@ -162,10 +163,11 @@ export default function Reclamos() {
               </div>
 
               {c.nota_admin && <p className="mt-3 text-sm text-gris"><b className="text-tinta">Decisión de VendiGo:</b> {c.nota_admin}</p>}
+              {c.devolucion && <p className="mt-2 text-sm text-gris"><b className="text-tinta">Devolución:</b> {DEVOLUCION[c.devolucion as keyof typeof DEVOLUCION] ?? c.devolucion}</p>}
               {abierto && (
                 <div className="mt-4 flex flex-wrap justify-end gap-3">
-                  <Boton variante="secundario" onClick={() => { setNota(""); setDecidir({ c, aFavor: "comprador" }); }} disabled={c.liberado}>Devolver al cliente</Boton>
-                  <Boton onClick={() => { setNota(""); setDecidir({ c, aFavor: "vendedor" }); }}>Liberar a la tienda</Boton>
+                  <Boton variante="secundario" onClick={() => { setNota(""); setDecidir({ c, aFavor: "comprador" }); }} >Dar la razón al cliente</Boton>
+                  <Boton onClick={() => { setNota(""); setDecidir({ c, aFavor: "vendedor" }); }}>Dar la razón a la tienda</Boton>
                 </div>
               )}
             </article>
@@ -174,13 +176,13 @@ export default function Reclamos() {
       )}
       <Nota>Si un cliente pierde varios reclamos, se le advierte y luego se limita su cuenta. Lo mismo aplica a las tiendas.</Nota>
 
-      <Modal abierto={!!decidir} onCerrar={() => setDecidir(null)} titulo={decidir?.aFavor === "comprador" ? "Devolver al cliente" : "Liberar a la tienda"}>
+      <Modal abierto={!!decidir} onCerrar={() => setDecidir(null)} titulo={decidir?.aFavor === "comprador" ? "Dar la razón al cliente" : "Dar la razón a la tienda"}>
         {decidir && (
           <div className="space-y-4">
             <p className="text-sm text-gris">
               {decidir.aFavor === "comprador"
-                ? `Se devuelven ${soles(decidir.c.total_centimos)} al cliente y el pedido ${decidir.c.codigo} se cancela.`
-                : `El pedido ${decidir.c.codigo} queda como entregado y el dinero se libera a la tienda en la fecha prevista.`}
+                ? `El pedido ${decidir.c.codigo} se cancela. Si el cliente ya pagó, la tienda debe devolverle ${soles(decidir.c.total_centimos)} e informarlo con su comprobante.`
+                : `El reclamo se cierra y el pedido ${decidir.c.codigo} queda como entregado.`}
             </p>
             <Area value={nota} onChange={(e) => setNota(e.target.value)} placeholder="Explica la decisión (la verán la tienda y el cliente)" maxLength={500} />
             <div className="flex justify-end gap-2">

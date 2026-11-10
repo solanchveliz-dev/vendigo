@@ -26,8 +26,8 @@ export const ACCIONES: Record<string, string> = {
   aprobar_identidad: "Aprobó una identidad",
   rechazar_identidad: "Rechazó una identidad",
   ver_documento: "Vio un documento de identidad",
-  retiro_pagado: "Registró una transferencia",
-  retiro_rechazado: "Rechazó un retiro",
+  retiro_pagado: "Registró una transferencia (sistema anterior)",
+  retiro_rechazado: "Rechazó un retiro (sistema anterior)",
   resolver_reclamo: "Resolvió un reclamo",
   crear_admin: "Se creó una cuenta admin",
   activar_mfa: "Activó la verificación en dos pasos",
@@ -43,8 +43,16 @@ export const ACCIONES: Record<string, string> = {
   reactivar_tienda: "Reactivó una tienda",
   cambiar_password: "Cambió su contraseña",
   recuperar_password: "Recuperó su contraseña",
-  retiro: "Pidió un retiro",
-  devolver_reclamo: "Devolvió el dinero de un reclamo",
+  retiro: "Pidió un retiro (sistema anterior)",
+  devolver_reclamo: "Dio la razón al cliente en un reclamo",
+  informar_devolucion: "Informó una devolución al cliente",
+  confirmar_pago_plan: "Confirmó el pago de un plan",
+  rechazar_pago_plan: "Rechazó el pago de un plan",
+  pedir_plan: "Pidió un cambio de plan",
+  cambiar_plan: "Cambió de plan",
+  datos_pago_tienda: "Cambió cómo le pagan sus clientes",
+  crear_tienda: "Creó su tienda",
+  enviar_verificacion: "Envió su identidad para revisión",
   responder_reclamo: "Respondió un reclamo",
   retirar_producto: "Retiró una publicación",
   restaurar_producto: "Habilitó una publicación",
@@ -186,7 +194,7 @@ export type PedidoAdmin = {
 };
 
 export const ENTREGA: Record<string, string> = { agencia: "Agencia", motorizado: "Motorizado", recojo: "Recojo" };
-export const METODO_PAGO: Record<string, string> = { yape: "Yape", tarjeta: "Tarjeta", pagoefectivo: "PagoEfectivo", al_recibir: "Paga al recibir" };
+export const METODO_PAGO: Record<string, string> = { yape_directo: "Yape a la tienda", plin_directo: "Plin a la tienda", efectivo: "Efectivo al recibir", yape: "Yape", tarjeta: "Tarjeta", pagoefectivo: "PagoEfectivo", al_recibir: "Paga al recibir" };
 
 // Estado del pedido como lo lee el admin (una sola etiqueta por fila).
 export function estadoPedidoAdmin(p: Pick<PedidoAdmin, "estado" | "entrega" | "agencia" | "pago_estado" | "reclamo">): { t: string; tono: Tono; grupo: string } {
@@ -201,7 +209,7 @@ export function estadoPedidoAdmin(p: Pick<PedidoAdmin, "estado" | "entrega" | "a
     case "enviado":
       return p.entrega === "agencia"
         ? { t: `Enviado por ${p.agencia || "agencia"}`, tono: "ok", grupo: "en_camino" }
-        : { t: p.pago_estado === "pendiente" ? "En camino · paga al recibir" : "En camino", tono: "ok", grupo: "en_camino" };
+        : { t: p.pago_estado === "paga_al_recibir" ? "En camino · paga al recibir" : "En camino", tono: "ok", grupo: "en_camino" };
     case "entregado":
       return { t: "Entregado y pagado", tono: "ok", grupo: "entregado" };
     case "rechazado":

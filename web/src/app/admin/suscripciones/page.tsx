@@ -7,6 +7,7 @@ import { useApi } from "@/lib/api";
 import { soles } from "@/lib/formato";
 import { RUBROS, fecha } from "@/lib/admin";
 import { Cargando } from "@/components/ui";
+import { PagosPlan } from "@/components/admin/pagos-plan";
 import { Estado, Indicador, Paginacion, Titulo, useExportar } from "@/components/admin/ui";
 
 type Suscripcion = {
@@ -68,6 +69,7 @@ export default function Suscripciones() {
         <Cargando />
       ) : (
         <>
+          <PagosPlan />
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             {datos.planes.map((p) => {
               const activas = datos.suscripciones.filter((s) => s.plan_id === p.id && s.estado === "activa");

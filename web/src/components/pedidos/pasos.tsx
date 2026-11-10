@@ -10,25 +10,26 @@ type Paso = { titulo: string; cliente: string; quien: "cliente" | "tienda"; como
 
 // Los 4 pasos de cada pedido según cómo se entrega (los mismos que ve el cliente en su app).
 export function pasosPedido(p: PedidoDetalle): { pasos: Paso[]; actual: number; cancelado: boolean } {
-  const pagaAlRecibir = p.pago_estado === "pendiente";
+  const pagaAlRecibir = p.pago?.momento === "al_recibir";
+  const fechaPago = p.pago?.informado_en ?? (p.pago?.estado === "de_prueba" ? p.creado_en : null);
   const nombre = p.comprador.split(" ")[0];
   const pasos: Paso[] =
     p.entrega === "agencia"
       ? [
-          { titulo: "Pagado y protegido", cliente: "Pagaste con Culqi. Tu dinero queda retenido hasta que recibas tu pedido.", quien: "cliente", como: "Paga con Yape, tarjeta o PagoEfectivo", fecha: p.creado_en },
+          { titulo: "Pago a la tienda", cliente: "Pagas directo a la tienda con Yape o Plin, envías tu comprobante y la tienda lo confirma.", quien: "cliente", como: "Te paga a tu Yape/Plin; tú confirmas que te llegó", fecha: fechaPago },
           { titulo: "Pedido aceptado", cliente: "La tienda está preparando tu pedido.", quien: "tienda", como: "Un toque: “Aceptar pedido”", fecha: p.aceptado_en },
           { titulo: `Enviado por ${p.envio?.agencia || p.agencia || "agencia"}`, cliente: "Recibes el código para recoger en tu agencia.", quien: "tienda", como: "“Ya lo envié” + código o foto", fecha: p.enviado_en },
           { titulo: "Entregado", cliente: "Lo confirmas tú o se confirma solo a los 7 días.", quien: "cliente", como: "Toca “Ya lo recibí” o se confirma solo en 7 días", fecha: p.entregado_en },
         ]
       : p.entrega === "motorizado"
         ? [
-            { titulo: pagaAlRecibir ? "Pedido hecho" : "Pagado y protegido", cliente: pagaAlRecibir ? "Pagas cuando lo recibas, desde tu app." : "Pagaste con Culqi. Tu dinero queda retenido hasta que recibas tu pedido.", quien: "cliente", como: pagaAlRecibir ? "Pide y paga al recibir" : "Paga con Yape, tarjeta o PagoEfectivo", fecha: p.creado_en },
+            { titulo: pagaAlRecibir ? "Pedido hecho" : "Pago a la tienda", cliente: pagaAlRecibir ? "Pagas directo a la tienda cuando lo recibas." : "Pagas directo a la tienda con Yape o Plin y la tienda lo confirma.", quien: "cliente", como: pagaAlRecibir ? "Pide y paga al recibir" : "Te paga a tu Yape/Plin; tú confirmas que te llegó", fecha: pagaAlRecibir ? p.creado_en : fechaPago },
             { titulo: "Pedido aceptado", cliente: "La tienda está preparando tu pedido.", quien: "tienda", como: "Un toque: “Aceptar pedido”", fecha: p.aceptado_en },
             { titulo: "En camino", cliente: p.envio?.motorizado_nombre ? `Lo lleva ${p.envio.motorizado_nombre} (${p.envio.motorizado_celular}).` : "Ves quién lo lleva y su celular.", quien: "tienda", como: "“Ya salió” + quién lo lleva", fecha: p.enviado_en },
-            { titulo: pagaAlRecibir ? "Entregado y pagado" : "Entregado", cliente: pagaAlRecibir ? "Pagas desde tu app al recibir. Si no llega, no pagas." : "Lo confirmas tú al recibirlo.", quien: "cliente", como: pagaAlRecibir ? "Paga desde su app al recibir" : "Toca “Ya lo recibí”", fecha: p.entregado_en },
+            { titulo: "Entregado", cliente: pagaAlRecibir ? "Pagas al recibir y das tu código de entrega. Si no llega, no pagas." : "Das tu código de entrega al recibirlo.", quien: "tienda", como: pagaAlRecibir ? "Pide el código y cobra al entregar" : "Pide el código de entrega al cliente", fecha: p.entregado_en },
           ]
         : [
-            { titulo: "Pagado y reservado", cliente: "Pagaste con Culqi. Tu pedido queda reservado.", quien: "cliente", como: "Paga con Yape, tarjeta o PagoEfectivo", fecha: p.creado_en },
+            { titulo: pagaAlRecibir ? "Pedido reservado" : "Pago a la tienda", cliente: pagaAlRecibir ? "Tu pedido queda reservado; pagas al recoger." : "Pagas directo a la tienda con Yape o Plin y la tienda lo confirma.", quien: "cliente", como: pagaAlRecibir ? "Reserva y paga al recoger" : "Te paga a tu Yape/Plin; tú confirmas que te llegó", fecha: pagaAlRecibir ? p.creado_en : fechaPago },
             { titulo: "Pedido aceptado", cliente: "La tienda está preparando tu pedido.", quien: "tienda", como: "Un toque: “Aceptar pedido”", fecha: p.aceptado_en },
             { titulo: "Listo para recoger", cliente: "Te avisamos cuando puedas pasar por la tienda.", quien: "tienda", como: "“Ya está listo”", fecha: p.estado === "listo_recojo" || p.estado === "entregado" ? p.eventos.find((e) => e.estado === "listo_recojo")?.fecha ?? null : null },
             { titulo: "Entregado", cliente: `Muestras tu código de 4 dígitos al recoger.`, quien: "tienda", como: `Pide el código a ${nombre} y toca “Entregar”`, fecha: p.entregado_en },
@@ -71,7 +72,8 @@ export function LineaTiempo({ pedido, modo = "cliente" }: { pedido: PedidoDetall
       })}
       {cancelado && (
         <li className="mt-2 rounded-xl bg-error/10 px-4 py-3 text-sm text-error">
-          Pedido {pedido.estado === "rechazado" ? "rechazado" : "cancelado"}{pedido.motivo_cancelacion ? `: ${pedido.motivo_cancelacion}` : ""}. Se le devolvió el dinero al cliente.
+          Pedido {pedido.estado === "rechazado" ? "rechazado" : "cancelado"}{pedido.motivo_cancelacion ? `: ${pedido.motivo_cancelacion}` : ""}.
+          {pedido.devoluciones?.some((d) => d.estado === "pendiente_tienda") ? " La tienda debe devolver el pago." : pedido.devoluciones?.length ? " Devolución informada." : ""}
         </li>
       )}
     </ol>
@@ -104,18 +106,29 @@ export function AvisoAccion({
   let botones: React.ReactNode = null;
   let tono = "bg-aviso-claro/70 ring-aviso/30";
 
-  if (p.acciones.includes("responder_reclamo")) {
+  if (p.acciones.includes("informar_devolucion")) {
+    icono = <Flag className="size-5" />;
+    titulo = "Devuelve el dinero al cliente";
+    texto = <>Devuélvele a {nombre} su pago por el mismo medio (Yape, Plin o efectivo) y toca “Informar devolución” en la tarjeta de Devolución.</>;
+    tono = "bg-error/10 ring-error/30";
+  } else if (p.acciones.includes("responder_reclamo")) {
     icono = <Flag className="size-5" />;
     titulo = "Responde el reclamo";
-    texto = <>Envía tu prueba (la boleta de envío se adjunta sola). Mientras tanto, el dinero de este pedido queda bloqueado.</>;
+    texto = <>Envía tu prueba (la boleta de envío se adjunta sola). VendiGo revisa ambas partes y decide.</>;
     botones = <Link href={`/vendedor/cobros/reclamo/${p.id}`}><Boton variante="acento">Responder reclamo</Boton></Link>;
     tono = "bg-error/10 ring-error/30";
+  } else if (p.acciones.includes("confirmar_pago") && p.estado !== "por_aceptar") {
+    icono = <Lock className="size-5" />;
+    titulo = p.pago?.estado === "comprobante_enviado" ? "Revisa el pago" : "Esperando el pago";
+    texto = p.pago?.estado === "comprobante_enviado"
+      ? <>{nombre} envió su comprobante de <b>{soles(p.total_centimos)}</b>. Revisa tu Yape/Plin y toca “Revisar el pago” en la tarjeta Pago.</>
+      : <>{nombre} debe pagarte <b>{soles(p.total_centimos)}</b> por Yape o Plin. Envía el pedido recién cuando confirmes que te llegó.</>;
   } else if (p.estado === "por_aceptar") {
     icono = <Lock className="size-5" />;
     titulo = "Acepta el pedido";
     texto = (
       <>
-        {nombre} {p.pago_estado === "pendiente" ? "pagará" : "ya pagó"} <b>{soles(p.total_centimos)}</b>{p.pago_estado === "pendiente" ? " al recibir." : " con pago protegido."} Si no puedes atenderlo, se le devuelve todo su dinero.
+        {nombre} {p.pago?.momento === "al_recibir" ? "te pagará" : "debe pagarte"} <b>{soles(p.total_centimos)}</b>{p.pago?.momento === "al_recibir" ? " al recibir." : " directo a tu Yape/Plin antes del envío."} Acepta si tienes el producto.
       </>
     );
     botones = (
@@ -145,12 +158,15 @@ export function AvisoAccion({
     titulo = `${nombre} vendrá a recoger`;
     texto = <>Cuando llegue, pídele su código de 4 dígitos y toca “Entregar al cliente”.</>;
     botones = <Boton onClick={alEntregar}>Entregar al cliente</Boton>;
+  } else if (p.estado === "enviado" && p.entrega === "motorizado") {
+    icono = <Bike className="size-5" />;
+    titulo = "Entrega con el código";
+    texto = <>Al entregar, pídele a {nombre} su código de 4 dígitos{p.pago?.estado === "paga_al_recibir" ? " y cobra el pago" : ""}.</>;
+    botones = <Boton onClick={alEntregar}>Entregar al cliente</Boton>;
   } else if (p.estado === "enviado") {
     icono = <Check className="size-5" />;
     titulo = "No tienes que hacer nada más";
-    texto = p.entrega === "motorizado" && p.pago_estado === "pendiente"
-      ? <>{nombre} paga desde su app cuando lo reciba. Te avisamos al instante.</>
-      : <>{nombre} confirmará cuando lo reciba; si no, se confirma solo en 7 días y se libera tu dinero.</>;
+    texto = <>{nombre} confirmará cuando lo reciba; si no, se confirma solo a los 7 días.</>;
     tono = "bg-pino-claro ring-pino/20";
   } else {
     return null;

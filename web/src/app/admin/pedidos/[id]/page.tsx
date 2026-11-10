@@ -5,16 +5,16 @@ import { use } from "react";
 import { ArrowRight, Bike, ChevronRight, Flag, Image as Foto, Package, Store } from "lucide-react";
 import { useApi } from "@/lib/api";
 import { fecha, soles } from "@/lib/formato";
-import { METODO_PAGO, estadoPedidoAdmin } from "@/lib/admin";
+import { estadoPedidoAdmin } from "@/lib/admin";
 import type { PedidoDetalle } from "@/lib/tipos";
 import { Cargando } from "@/components/ui";
 import { Estado, Tarjeta, Titulo } from "@/components/admin/ui";
 import { LineaTiempo } from "@/components/pedidos/pasos";
+import { TarjetaPago } from "@/components/pagos/tarjeta-pago";
 import { NuevaIncidencia } from "@/components/admin/nueva-incidencia";
 
-type Respuesta = { pedido: PedidoDetalle; extra: { tienda_id: string; tienda: string; transaccion: string | null } };
+type Respuesta = { pedido: PedidoDetalle; extra: { tienda_id: string; tienda: string } };
 
-const PAGO: Record<string, string> = { pagado: "Pagado", pendiente: "Pendiente (paga al recibir)", devuelto: "Devuelto al comprador" };
 const RECLAMO: Record<string, string> = { abierto: "Abierto", en_revision: "En revisión", a_favor_comprador: "Resuelto a favor del comprador", a_favor_vendedor: "Resuelto a favor de la tienda" };
 
 function Filas({ filas }: { filas: [string, React.ReactNode][] }) {
@@ -98,22 +98,7 @@ export default function DetallePedido({ params }: { params: Promise<{ id: string
             </div>
           </Tarjeta>
 
-          <Tarjeta titulo="Pago">
-            <Filas
-              filas={[
-                ["Método", METODO_PAGO[p.metodo_pago] ?? p.metodo_pago],
-                ["Estado", PAGO[p.pago_estado] ?? p.pago_estado],
-                ["Transacción", extra.transaccion || "—"],
-                ...((p.pago_estado === "devuelto"
-                  ? [["Recibe la tienda", "Nada: el dinero volvió al comprador"]]
-                  : [
-                      ["Comisión pasarela", soles(p.comision_pasarela_centimos)],
-                      ["Recibe la tienda", soles(p.neto_centimos)],
-                      ["Liberación", p.liberado ? "Ya está disponible para la tienda" : p.liberar_en ? fecha(p.liberar_en, true) : "Cuando se entregue"],
-                    ]) as [string, React.ReactNode][]),
-              ]}
-            />
-          </Tarjeta>
+          <TarjetaPago pedido={p} />
 
           <Tarjeta titulo="Comprador">
             <Filas

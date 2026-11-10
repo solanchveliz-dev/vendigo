@@ -61,7 +61,7 @@ export default function Verificacion() {
       <div>
         <div className="mb-2 h-1 w-8 rounded-full bg-coral" />
         <h1 className="text-[34px] font-extrabold leading-tight text-pino">Verifica tu identidad</h1>
-        <p className="text-sm text-gris">Necesaria para retirar tu dinero. Así nadie puede usar tu tienda para estafar. Se hace una sola vez.</p>
+        <p className="text-sm text-gris">Da confianza a tus clientes y evita que alguien use tu tienda para estafar. Se hace una sola vez.</p>
       </div>
       {datos.estado === "aprobada" ? (
         <div className="flex items-center gap-4 rounded-[22px] bg-white p-6 shadow-suave ring-1 ring-linea/60">
@@ -69,7 +69,7 @@ export default function Verificacion() {
           <div>
             <p className="font-display text-lg font-extrabold text-tinta">Identidad verificada</p>
             <p className="text-sm text-gris">
-              {datos.nombre_completo} · {datos.tipo_documento?.toUpperCase()} •••• {datos.ultimos4} · desde el {fecha(datos.creado_en)}. Ya puedes retirar tu dinero.
+              {datos.nombre_completo} · {datos.tipo_documento?.toUpperCase()} •••• {datos.ultimos4} · desde el {fecha(datos.creado_en)}. Tu identidad ya está verificada.
             </p>
           </div>
         </div>

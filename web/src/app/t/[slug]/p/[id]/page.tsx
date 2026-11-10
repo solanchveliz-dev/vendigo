@@ -34,7 +34,7 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
   if (!d) return { title: "Producto no encontrado" };
   return {
     title: `${d.producto.nombre} · ${d.tienda.nombre}`,
-    description: d.producto.descripcion || `${d.producto.nombre} en ${d.tienda.nombre}. Compra con pago protegido en VendiGo.`,
+    description: d.producto.descripcion || `${d.producto.nombre} en ${d.tienda.nombre}. Pide con seguimiento en VendiGo.`,
     openGraph: { images: d.producto.imagenes[0] ? [d.producto.imagenes[0].url] : [] },
   };
 }
@@ -48,7 +48,7 @@ export default async function ProductoPublico({ params, searchParams }: Params &
   const lugar = t.distrito || t.ciudad;
 
   const confianza = [
-    { icono: <ShieldCheck className="size-5" />, titulo: "Pago protegido", texto: "Yape o tarjeta en la app" },
+    { icono: <ShieldCheck className="size-5" />, titulo: "Pagas a la tienda", texto: "Yape, Plin o efectivo, sin intermediarios" },
     { icono: <Check className="size-5" />, titulo: "Ves cada paso", texto: "Te avisamos cómo va tu pedido" },
     t.politicas
       ? { icono: <RefreshCw className="size-5" />, titulo: "Cambios", texto: t.politicas.length > 40 ? t.politicas.slice(0, 40) + "…" : t.politicas }
@@ -113,7 +113,7 @@ export default async function ProductoPublico({ params, searchParams }: Params &
               )}
             </p>
 
-            <CompraProducto producto={p} pausada={t.pausada} />
+            <CompraProducto producto={p} slug={t.slug} pausada={t.pausada} />
 
             <div className="mt-6 grid gap-3 sm:grid-cols-3">
               {confianza.map((c) => (

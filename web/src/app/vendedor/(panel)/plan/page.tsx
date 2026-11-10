@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useState } from "react";
 import { ArrowRight, Check, ReceiptText, ShoppingBag, Sparkles, X } from "lucide-react";
+import type { PagoPlan, PagoVendiGo } from "@/lib/pagos-plan";
+import { YapeVendiGo } from "@/components/panel/yape-vendigo";
 import { api, ErrorApi, useApi } from "@/lib/api";
 import { fecha, soles } from "@/lib/formato";
 import type { Creditos, Plan, UsoPlan } from "@/lib/tipos";
@@ -15,9 +17,9 @@ function beneficios(p: Plan): [string, boolean][] {
   const ia = `IA: ${p.creditos_ia.toLocaleString("es-PE")} créditos al mes (≈${Math.floor(p.creditos_ia / 3).toLocaleString("es-PE")} productos con foto)`;
   switch (p.id) {
     case "gratis":
-      return [[ventas, true], ["Pago protegido con Culqi", true], [productos, true], [ia, true], ["Estadísticas básicas", true], ["Sugerencias de la semana", false], ["Pronóstico y analista de ventas", false]];
+      return [[ventas, true], ["Pedidos con seguimiento", true], [productos, true], [ia, true], ["Estadísticas básicas", true], ["Sugerencias de la semana", false], ["Pronóstico y analista de ventas", false]];
     case "emprende":
-      return [[ventas, true], ["Pago protegido con Culqi", true], [productos, true], [ia, true], ["Sugerencias de la semana", true], ["Pronóstico y analista de ventas con IA", true]];
+      return [[ventas, true], ["Pedidos con seguimiento", true], [productos, true], [ia, true], ["Sugerencias de la semana", true], ["Pronóstico y analista de ventas con IA", true]];
     case "crece":
       return [[ventas, true], ["Todo lo de Emprende", true], [productos, true], [ia, true], ["Sugerencias de la semana completas", true], ["Analítica de 3 meses", true]];
     default:
@@ -36,6 +38,7 @@ export default function TuSuscripcion() {
   const uso = useApi<UsoPlan>("/vendedor/plan");
   const planes = useApi<{ planes: Plan[] }>("/planes");
   const ia = useApi<Creditos>("/vendedor/ia");
+  const pagos = useApi<{ pagos: PagoPlan[]; pago_vendigo: PagoVendiGo }>("/vendedor/plan/pagos");
   const avisar = useAvisar();
   const [elegido, setElegido] = useState<Plan | null>(null);
   const [extra, setExtra] = useState(false);
@@ -50,9 +53,11 @@ export default function TuSuscripcion() {
     if (!elegido) return;
     setOcupado(true);
     try {
-      uso.setDatos(await api.post<UsoPlan>("/vendedor/plan", { plan_id: elegido.id }));
+      const nuevo = await api.post<UsoPlan>("/vendedor/plan", { plan_id: elegido.id });
+      uso.setDatos(nuevo);
       ia.recargar();
-      avisar(`Listo: ahora estás en el plan ${elegido.nombre}.`);
+      pagos.recargar();
+      avisar(nuevo.plan.id === elegido.id ? `Listo: ahora estás en el plan ${elegido.nombre}.` : `Pedido registrado. Yapea ${soles(elegido.precio_centimos)} a VendiGo y activamos tu plan al confirmarlo.`);
       setElegido(null);
     } catch (e) {
       avisar((e as ErrorApi).message, "error");
@@ -65,7 +70,8 @@ export default function TuSuscripcion() {
     setOcupado(true);
     try {
       uso.setDatos(await api.post<UsoPlan>("/vendedor/plan/ventas-extra"));
-      avisar("Listo: tienes 20 ventas más este mes.");
+      pagos.recargar();
+      avisar("Pedido registrado. Yapea S/ 5.00 a VendiGo y sumamos tus 20 ventas al confirmarlo.");
       setExtra(false);
     } catch (e) {
       avisar((e as ErrorApi).message, "error");
@@ -80,6 +86,7 @@ export default function TuSuscripcion() {
   const subtitulo = `Plan actual: ${actual.nombre}${actual.precio_centimos ? ` · ${soles(actual.precio_centimos).replace(".00", "")} al mes` : " · sin costo"}${
     u.mes_gratis && u.proximo_cobro ? ` · primer mes gratis hasta el ${fecha(u.proximo_cobro)}` : u.proximo_cobro ? ` · próximo cobro el ${fecha(u.proximo_cobro)}` : ""
   }`;
+  const pendiente = pagos.datos?.pagos.find((p) => p.estado === "pendiente");
   const sube = elegido && orden(elegido) > orden(actual);
   const gratisMes = elegido && elegido.precio_centimos > 0 && u.puede_mes_gratis;
   const sobran = elegido?.productos_max != null && u.productos_publicados > elegido.productos_max ? u.productos_publicados - elegido.productos_max : 0;
@@ -96,6 +103,8 @@ export default function TuSuscripcion() {
           <Boton variante="secundario"><ReceiptText className="size-4" /> Pagos de tu plan</Boton>
         </Link>
       </div>
+
+      {pendiente && <YapeVendiGo pago={pendiente} vendigo={pagos.datos?.pago_vendigo ?? null} />}
 
       <div className="grid items-start gap-5 lg:grid-cols-2">
         <section className="rounded-[22px] bg-white p-5 shadow-suave ring-1 ring-linea/60">
@@ -186,10 +195,11 @@ export default function TuSuscripcion() {
             {u.puede_mes_gratis && " El primer mes de tu primer plan de pago es gratis."}
           </p>
           <div className="text-sm">
-            <p className="pb-2">Lo único que se descuenta de cada venta pagada en la app:</p>
-            <div className="flex justify-between border-t border-linea py-2"><span>Costo de Culqi por pago (referencial)</span><b>3,44 % + S/ 0.69</b></div>
-            <div className="flex justify-between border-t border-linea py-2"><span>Mínimo por pago</span><b>S/ 3.50</b></div>
-            <p className="pt-1 text-xs text-gris">Con motorizado, el cliente paga al recibir y no hay costo de Culqi.</p>
+            <p className="pb-2">Tus ventas y tu plan van por separado:</p>
+            <div className="flex justify-between border-t border-linea py-2"><span>Tus clientes te pagan</span><b>Directo a ti (Yape, Plin o efectivo)</b></div>
+            <div className="flex justify-between border-t border-linea py-2"><span>Comisión de VendiGo por venta</span><b>0 %</b></div>
+            <div className="flex justify-between border-t border-linea py-2"><span>Tu plan</span><b>Lo yapeas a VendiGo</b></div>
+            <p className="pt-1 text-xs text-gris">VendiGo no recibe ni guarda el dinero de tus ventas.</p>
           </div>
         </div>
       </section>
@@ -213,12 +223,12 @@ export default function TuSuscripcion() {
               {elegido.precio_centimos === 0
                 ? `Vuelves al plan Gratis hoy: ${elegido.ventas_mes} ventas al mes y sin pronóstico ni analista de ventas.`
                 : gratisMes
-                  ? `El cambio es inmediato y tu primer mes es gratis. Luego pagas ${soles(elegido.precio_centimos)} al mes. Puedes cambiar cuando quieras.`
-                  : `El cambio es inmediato. Pagas ${soles(elegido.precio_centimos)} al mes desde hoy.`}
+                  ? `El cambio es inmediato y tu primer mes es gratis. Luego pagas ${soles(elegido.precio_centimos)} al mes con Yape a VendiGo. Puedes cambiar cuando quieras.`
+                  : `Yapeas ${soles(elegido.precio_centimos)} a VendiGo y tu plan se activa cuando el equipo confirme el pago (te avisamos).`}
               {sobran > 0 && ` Tienes ${u.productos_publicados} productos publicados y este plan permite ${elegido.productos_max}: no podrás publicar nuevos hasta ocultar ${sobran}.`}
             </div>
             <div className="flex flex-wrap gap-2">
-              <Boton variante="acento" cargando={ocupado} onClick={cambiar}>{sube ? "Mejorar plan" : "Cambiar plan"}</Boton>
+              <Boton variante="acento" cargando={ocupado} onClick={cambiar} disabled={!!pendiente && elegido.precio_centimos > 0 && !gratisMes}>{sube ? "Mejorar plan" : "Cambiar plan"}</Boton>
               <Boton variante="secundario" onClick={() => setElegido(null)}>Volver</Boton>
             </div>
           </div>
@@ -226,9 +236,9 @@ export default function TuSuscripcion() {
       </Modal>
 
       <Modal abierto={extra} onCerrar={() => setExtra(false)} titulo="¿Comprar 20 ventas más?">
-        <p className="text-sm text-gris">Se suman a tu cupo de este mes y el pago de S/ 5.00 aparece en Pagos de tu plan. Las ventas extra no pasan al mes siguiente.</p>
+        <p className="text-sm text-gris">Yapeas S/ 5.00 a VendiGo y, cuando el equipo confirme el pago, se suman a tu cupo de este mes. Las ventas extra no pasan al mes siguiente.</p>
         <div className="mt-4 flex gap-2">
-          <Boton cargando={ocupado} onClick={comprarExtra}>Comprar por S/ 5</Boton>
+          <Boton cargando={ocupado} onClick={comprarExtra} disabled={!!pendiente}>Pedir por S/ 5</Boton>
           <Boton variante="secundario" onClick={() => setExtra(false)}>Cancelar</Boton>
         </div>
       </Modal>

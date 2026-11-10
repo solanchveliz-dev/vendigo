@@ -57,7 +57,7 @@ function TarjetaPlan({ plan, alGuardar }: { plan: Plan; alGuardar: () => void })
     ventas == null ? "Ventas ilimitadas" : `${ventas} ventas al mes`,
     productos == null ? "Productos ilimitados" : `Hasta ${productos} productos`,
     `IA: ${ia.toLocaleString("es-PE")} créditos al mes`,
-    "Pago protegido con Culqi",
+    "Pedidos con seguimiento",
   ];
 
   async function guardar() {

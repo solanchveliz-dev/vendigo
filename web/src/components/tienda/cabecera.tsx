@@ -15,7 +15,7 @@ export function CabeceraPublica() {
         </Link>
         <div className="flex items-center gap-3">
           <span className="hidden items-center gap-1.5 text-sm font-semibold text-ok sm:inline-flex">
-            <ShieldCheck className="size-4" /> Pago protegido
+            <ShieldCheck className="size-4" /> Pedido con seguimiento
           </span>
           <Link href="/registro" className="rounded-full bg-pino px-5 py-2.5 text-sm font-bold text-white transition hover:bg-pino-2">
             Crea tu tienda

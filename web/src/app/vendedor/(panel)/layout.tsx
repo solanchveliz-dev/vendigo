@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { BarChart3, Bell, ClipboardList, Crown, Home, LogOut, MessageCircleQuestion, Package, ShieldCheck, Sparkles, Store, Wallet, Landmark, Search, Share2, Plus, Users, Settings } from "lucide-react";
+import { BarChart3, Bell, ClipboardList, Crown, Home, LogOut, MessageCircleQuestion, Package, ShieldCheck, Sparkles, Store, Wallet, Smartphone, Search, Share2, Plus, Users, Settings } from "lucide-react";
 import { api, sesion, useApi } from "@/lib/api";
 import type { Usuario } from "@/lib/tipos";
 import { cn, Cargando } from "@/components/ui";
@@ -17,7 +17,7 @@ const menu = [
   { href: "/vendedor/productos", texto: "Productos", icono: Package },
   { href: "/vendedor/clientes", texto: "Clientes", icono: Users },
   { href: "/vendedor/consultas", texto: "Consultas", icono: MessageCircleQuestion, cuenta: "consultas" },
-  { href: "/vendedor/cobros", texto: "Mis cobros", icono: Wallet, cuenta: "reclamos" },
+  { href: "/vendedor/cobros", texto: "Mis ventas", icono: Wallet, cuenta: "reclamos" },
   { href: "/vendedor/analitica", texto: "Analítica", icono: BarChart3 },
   { href: "/vendedor/ia", texto: "Herramientas IA", icono: Sparkles },
   { href: "/vendedor/tienda", texto: "Mi tienda", icono: Store },
@@ -140,8 +140,8 @@ export default function LayoutPanel({ children }: { children: React.ReactNode })
                     <p className="font-semibold">{yo.datos.nombre}</p>
                     <p className="text-sm text-gris">{yo.datos.celular}</p>
                   </div>
-                  <Link href="/vendedor/cuenta-bancaria" className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-crema">
-                    <Landmark className="size-4" /> Cuenta para tus cobros
+                  <Link href="/vendedor/tienda/pagos" className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-crema">
+                    <Smartphone className="size-4" /> Cómo te pagan
                   </Link>
                   <Link href="/vendedor/verificacion" className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-crema">
                     <ShieldCheck className="size-4" /> Verificar identidad

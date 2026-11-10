@@ -5,12 +5,13 @@ import { ChevronRight, ReceiptText } from "lucide-react";
 import { useApi } from "@/lib/api";
 import { soles } from "@/lib/formato";
 import { Boton, Cargando, Vacio } from "@/components/ui";
-import { METODOS, type PagoPlan } from "@/lib/pagos-plan";
+import { ESTADO_PAGO_PLAN, METODOS, type PagoPlan, type PagoVendiGo } from "@/lib/pagos-plan";
+import { YapeVendiGo } from "@/components/panel/yape-vendigo";
 
 
 // "Pagos de tu plan": lo que la tienda le paga a VendiGo (mensualidad y extras).
 export default function PagosDelPlan() {
-  const { datos } = useApi<{ pagos: PagoPlan[] }>("/vendedor/plan/pagos");
+  const { datos } = useApi<{ pagos: PagoPlan[]; pago_vendigo: PagoVendiGo }>("/vendedor/plan/pagos");
 
   return (
     <div className="space-y-5">
@@ -20,8 +21,9 @@ export default function PagosDelPlan() {
       <div>
         <div className="mb-2 h-1 w-8 rounded-full bg-coral" />
         <h1 className="text-[34px] font-extrabold leading-tight text-pino">Pagos de tu plan</h1>
-        <p className="text-sm text-gris">Lo que le pagas a VendiGo por tu plan. Cada pago tiene su comprobante.</p>
+        <p className="text-sm text-gris">Lo que le pagas a VendiGo por tu plan. Es aparte de tus ventas: tus clientes te pagan directo a ti.</p>
       </div>
+      {datos?.pagos.filter((p) => p.estado === "pendiente").map((p) => <YapeVendiGo key={p.id} pago={p} vendigo={datos.pago_vendigo} />)}
 
       {!datos ? (
         <Cargando />
@@ -48,14 +50,15 @@ export default function PagosDelPlan() {
                   <td className="px-5 py-3.5">{p.monto_centimos ? METODOS[p.metodo] ?? p.metodo : "—"}</td>
                   <td className="px-5 py-3.5 text-right font-bold">{soles(p.monto_centimos)}</td>
                   <td className="px-5 py-3.5">
-                    <span className={p.monto_centimos ? "rounded-full bg-pino-claro px-2.5 py-1 text-xs font-bold text-pino" : "rounded-full bg-arena px-2.5 py-1 text-xs font-bold text-gris"}>
-                      ● {p.monto_centimos ? "Pagado" : "Gratis"}
+                    <span className={p.monto_centimos ? `rounded-full px-2.5 py-1 text-xs font-bold ${ESTADO_PAGO_PLAN[p.estado].clase}` : "rounded-full bg-arena px-2.5 py-1 text-xs font-bold text-gris"}>
+                      ● {p.monto_centimos ? ESTADO_PAGO_PLAN[p.estado].t : "Gratis"}
                     </span>
+                    {p.estado === "rechazado" && p.motivo_rechazo && <span className="mt-1 block text-xs text-error">{p.motivo_rechazo}</span>}
                   </td>
                   <td className="px-5 py-3.5 text-right">
-                    {p.monto_centimos > 0 && (
+                    {p.monto_centimos > 0 && p.estado === "confirmado" && (
                       <Link href={`/vendedor/plan/pagos/${p.id}`}>
-                        <Boton variante="secundario" tamano="sm"><ReceiptText className="size-4" /> Comprobante</Boton>
+                        <Boton variante="secundario" tamano="sm"><ReceiptText className="size-4" /> Constancia</Boton>
                       </Link>
                     )}
                   </td>

@@ -6,7 +6,7 @@ import { api, ErrorApi, useApi } from "@/lib/api";
 import { Boton, Cargando, Entrada, useAvisar } from "@/components/ui";
 import { Tarjeta, Titulo } from "@/components/admin/ui";
 
-type Config = { correo_soporte: string; inactividad_min: number; agencias: string[]; sedes_activas: number };
+type Config = { correo_soporte: string; planes_yape: string; planes_titular: string; inactividad_min: number; agencias: string[]; sedes_activas: number };
 type Plan = { id: string; nombre: string; creditos_ia: number };
 
 function Fila({ titulo, detalle, children }: { titulo: string; detalle?: React.ReactNode; children?: React.ReactNode }) {
@@ -44,12 +44,14 @@ export default function Configuracion() {
     }
   }
   const [guardando, setGuardando] = useState(false);
-  useEffect(() => { if (c) setCorreo(c.correo_soporte); }, [c]);
+  const [yape, setYape] = useState("");
+  const [titular, setTitular] = useState("");
+  useEffect(() => { if (c) { setCorreo(c.correo_soporte); setYape(c.planes_yape); setTitular(c.planes_titular); } }, [c]);
 
   async function guardar() {
     setGuardando(true);
     try {
-      const r = await api.put<{ mensaje: string }>("/admin/configuracion", { correo_soporte: correo });
+      const r = await api.put<{ mensaje: string }>("/admin/configuracion", { correo_soporte: correo, planes_yape: yape.trim(), planes_titular: titular.trim() });
       avisar(r.mensaje);
       recargar();
     } catch (e) {
@@ -76,10 +78,19 @@ export default function Configuracion() {
               <label className="block">
                 <span className="mb-1.5 block text-sm font-semibold text-tinta">Moneda</span>
                 <Entrada value="Soles (PEN)" disabled />
-                <span className="mt-1 block text-xs text-gris">Culqi cobra en soles.</span>
+                <span className="mt-1 block text-xs text-gris">Todos los precios se muestran en soles.</span>
+              </label>
+              <label className="block">
+                <span className="mb-1.5 block text-sm font-semibold text-tinta">Yape de VendiGo (cobro de planes)</span>
+                <Entrada inputMode="numeric" maxLength={9} value={yape} onChange={(e) => setYape(e.target.value.replace(/\D/g, ""))} placeholder="9XXXXXXXX" />
+                <span className="mt-1 block text-xs text-gris">Las tiendas pagan aquí su plan. Solo se usa para planes, nunca para ventas.</span>
+              </label>
+              <label className="block">
+                <span className="mb-1.5 block text-sm font-semibold text-tinta">Titular del Yape</span>
+                <Entrada value={titular} onChange={(e) => setTitular(e.target.value)} maxLength={80} placeholder="Nombre que ve la tienda al yapear" />
               </label>
             </div>
-            <Boton className="mt-4" onClick={guardar} cargando={guardando} disabled={correo.trim() === c.correo_soporte}>Guardar configuración</Boton>
+            <Boton className="mt-4" onClick={guardar} cargando={guardando} disabled={correo.trim() === c.correo_soporte && yape.trim() === c.planes_yape && titular.trim() === c.planes_titular}>Guardar configuración</Boton>
           </Tarjeta>
 
           <Tarjeta titulo="Datos del proveedor (Libro de Reclamaciones)">

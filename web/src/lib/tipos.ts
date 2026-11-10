@@ -41,6 +41,13 @@ export type Tienda = {
   dias_liberacion: number;
   enlace: string;
   pausada: boolean;
+  yape_numero: string;
+  plin_numero: string;
+  pago_titular: string;
+  pago_qr_key: string | null;
+  pago_qr_url: string;
+  acepta_efectivo: boolean;
+  metodos_pago: string[];
   tema_color: string;
   tema_fuente: string;
   prefijo_pedido: string;
@@ -78,12 +85,11 @@ export type PedidoResumen = {
   estado_texto: string;
   metodo_pago: string;
   pago_estado: string;
+  pago_texto: string;
   total_centimos: number;
   items: number;
   producto: string;
   imagen_url: string;
-  liberar_en: string | null;
-  liberado: boolean;
   reclamo: string | null;
   creado_en: string;
 };
@@ -113,7 +119,7 @@ export type PedidoDetalle = PedidoResumen & {
   nota_comprador: string;
   subtotal_centimos: number;
   envio_centimos: number;
-  comision_pasarela_centimos: number;
+  comision_reportada_centimos: number; // solo si un proveedor de pagos la informa (VendiGo cobra 0 %)
   neto_centimos: number;
   motivo_cancelacion: string;
   confirmado_por: string | null;
@@ -137,6 +143,34 @@ export type PedidoDetalle = PedidoResumen & {
   pedidos_cliente: number;
   motorizados_guardados: { nombre: string; celular: string }[];
   ayuda: Ayuda | null;
+  pago: PagoInfo | null;
+  devoluciones: Devolucion[];
+  codigo_entrega?: string;
+};
+
+// El comprador le paga directo a la tienda; VendiGo solo registra el estado.
+export type PagoInfo = {
+  estado: "pendiente" | "comprobante_enviado" | "paga_al_recibir" | "informado_tienda" | "no_recibido" | "confirmado" | "rechazado" | "reembolsado" | "de_prueba";
+  texto: string;
+  origen: "tienda" | "proveedor" | "prueba";
+  metodo: string;
+  metodo_texto: string;
+  momento: "antes" | "al_recibir";
+  monto_centimos: number;
+  referencia: string;
+  comprobante_url: string;
+  informado_en: string | null;
+  eventos: { estado: string; texto: string; detalle: string; fecha: string }[];
+};
+
+export type Devolucion = {
+  origen: "cancelacion" | "reclamo";
+  monto_centimos: number;
+  estado: "pendiente_tienda" | "informada_tienda" | "confirmada_proveedor" | "de_prueba";
+  evidencia_url: string;
+  nota: string;
+  informada_en: string | null;
+  creado_en: string;
 };
 
 export type Ayuda = {
@@ -150,7 +184,7 @@ export type Ayuda = {
   creado_en: string;
 };
 
-export type Saldos = { a_liberar_centimos: number; disponible_centimos: number; retirado_centimos: number };
+export type Cobros = { pagos_por_confirmar: number; pagos_por_confirmar_centimos: number; devoluciones_pendientes: number };
 
 export type Plan = { id: string; nombre: string; precio_centimos: number; ventas_mes: number | null; creditos_ia: number; productos_max: number | null };
 export type UsoPlan = {

@@ -766,7 +766,7 @@ func (m *Modulo) reclamos(w http.ResponseWriter, r *http.Request) error {
 		Motivo      string    `json:"motivo"`
 		MotivoTexto string    `json:"motivo_texto"`
 		Estado      string    `json:"estado"`
-		Bloqueado   int       `json:"bloqueado_centimos"`
+		Bloqueado   int       `json:"total_centimos"`
 		CreadoEn    time.Time `json:"creado_en"`
 	}
 	out := []fila{}

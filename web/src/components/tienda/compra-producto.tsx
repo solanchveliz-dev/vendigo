@@ -1,6 +1,9 @@
 "use client";
 
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { agregarAlCarrito } from "@/lib/carrito";
 import { Heart, Minus, Plus, ShoppingBag, TrendingUp, Zap } from "lucide-react";
 import { soles } from "@/lib/formato";
 import type { Producto } from "@/lib/tipos";
@@ -39,7 +42,9 @@ export function GaleriaProducto({ producto: p }: { producto: Producto }) {
 }
 
 // Precio, opciones, cantidad y botones de compra.
-export function CompraProducto({ producto: p, pausada = false }: { producto: Producto; pausada?: boolean }) {
+export function CompraProducto({ producto: p, slug, pausada = false }: { producto: Producto; slug: string; pausada?: boolean }) {
+  const router = useRouter();
+  const [agregado, setAgregado] = useState(false);
   const [opcion, setOpcion] = useState(() => Math.max(0, p.variantes.findIndex((v) => v.stock > 0)));
   const [cantidad, setCantidad] = useState(1);
   const [aviso, setAviso] = useState("");
@@ -51,6 +56,19 @@ export function CompraProducto({ producto: p, pausada = false }: { producto: Pro
   const det = (p.detalles ?? {}) as { colores?: [string, string][]; grupos?: { label: string }[] };
   const etiquetaOpciones = det.grupos?.[0]?.label ?? (p.variantes.length && det.colores?.length && !det.grupos?.length ? "Color" : "Opciones");
   const dias = p.oferta ? Math.max(0, Math.ceil((new Date(p.oferta.termina_en).getTime() - Date.now()) / 86400000)) : 0;
+
+  function agregar() {
+    agregarAlCarrito(slug, {
+      producto_id: p.id,
+      variante_id: variante?.id ?? "",
+      cantidad,
+      nombre: p.nombre,
+      variante: variante?.nombre ?? "",
+      precio_centimos: precio,
+      imagen_url: p.imagenes[0]?.url ?? "",
+      stock,
+    });
+  }
 
   function pronto(texto: string) {
     setAviso(texto);
@@ -124,14 +142,20 @@ export function CompraProducto({ producto: p, pausada = false }: { producto: Pro
       )}
       <div className="mt-5 flex gap-3">
         <button
-          onClick={() => pronto("Muy pronto podrás comprar desde aquí.")}
+          onClick={() => {
+            agregar();
+            router.push(`/t/${slug}/comprar`);
+          }}
           disabled={stock === 0 || pausada}
           className="inline-flex h-[52px] min-w-0 flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-full bg-pino px-4 font-bold text-white transition hover:bg-pino-2 disabled:opacity-50"
         >
           <Zap className="size-5 shrink-0" /> Comprar ahora
         </button>
         <button
-          onClick={() => pronto("Muy pronto podrás agregar productos a tu pedido.")}
+          onClick={() => {
+            agregar();
+            setAgregado(true);
+          }}
           disabled={stock === 0 || pausada}
           aria-label="Agregar a mi pedido"
           className="inline-flex h-[52px] min-w-[52px] items-center justify-center gap-2 whitespace-nowrap rounded-full bg-coral px-4 font-bold sm:px-7 text-white transition hover:opacity-90 disabled:opacity-50"
@@ -147,6 +171,12 @@ export function CompraProducto({ producto: p, pausada = false }: { producto: Pro
         </button>
       </div>
       {aviso && <p className="mt-2 text-center text-sm font-semibold text-gris">{aviso}</p>}
+      {agregado && (
+        <p className="mt-3 flex flex-wrap items-center justify-center gap-2 rounded-2xl bg-pino-claro px-4 py-2.5 text-sm font-semibold text-pino">
+          Agregado a tu pedido.
+          <Link href={`/t/${slug}/comprar`} className="underline underline-offset-2">Ver mi pedido</Link>
+        </p>
+      )}
     </>
   );
 }

@@ -148,7 +148,7 @@ export default function EnviarPedido({ params }: { params: Promise<{ id: string 
       <Check className="mt-0.5 size-4 shrink-0" />
       <span>
         Después de esto <b>no tienes que hacer nada más</b>.{" "}
-        {p.pago_estado === "pendiente" ? `Te avisamos apenas ${nombre} pague.` : `${nombre} confirmará cuando lo reciba; si no, se confirma solo en 7 días.`}
+        {p.entrega === "motorizado" ? `Al entregar, pídele a ${nombre} su código de 4 dígitos${p.pago?.estado === "paga_al_recibir" ? " y cobra el pago" : ""}.` : `${nombre} confirmará cuando lo reciba; si no, se confirma solo en 7 días.`}
       </span>
     </div>
   );
@@ -284,10 +284,10 @@ export default function EnviarPedido({ params }: { params: Promise<{ id: string 
               </label>
             </div>
           )}
-          {p.pago_estado === "pendiente" && (
+          {p.pago?.estado === "paga_al_recibir" && (
             <div className="flex gap-3 rounded-2xl bg-aviso-claro px-4 py-3 text-sm text-tinta">
               <Wallet className="mt-0.5 size-4 shrink-0 text-aviso" />
-              <span>{nombre} paga <b>{soles(p.total_centimos)}</b> desde su app cuando lo reciba. Tu motorizado no tiene que cobrar en efectivo.</span>
+              <span>{nombre} paga <b>{soles(p.total_centimos)}</b> al recibir ({p.pago.metodo_texto}). Tu motorizado cobra y pide el código de entrega.</span>
             </div>
           )}
           {errorBox}

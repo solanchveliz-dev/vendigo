@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { Bike, Check, ChevronRight, Info, Landmark, MapPin, Package, Plus, Printer, Store } from "lucide-react";
+import { Bike, Check, ChevronRight, Info, MapPin, Smartphone, Package, Plus, Printer, Store } from "lucide-react";
 import { api, ErrorApi, useApi } from "@/lib/api";
 import { agencias } from "@/lib/catalogos";
 import { aCentimos } from "@/lib/formato";
@@ -10,12 +10,10 @@ import type { Entrega, Tienda } from "@/lib/tipos";
 import { Aviso, Boton, Campo, Cargando, Entrada, Interruptor, Modal, Selector, cn, useAvisar } from "@/components/ui";
 
 const DIAS = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
-type Cuenta = { banco: string; ultimos4: string };
 
 // "¿Cómo entregas y cómo te pagan?" igual que en el prototipo.
 export default function EntregaYPagos() {
   const { datos: t, setDatos } = useApi<Tienda>("/vendedor/tienda");
-  const cuenta = useApi<{ cuenta: Cuenta | null }>("/vendedor/cuenta-bancaria");
   const avisar = useAvisar();
   const [e, setE] = useState<Entrega | null>(null);
   const [costos, setCostos] = useState({ agencia: "", moto: "" });
@@ -190,14 +188,14 @@ export default function EntregaYPagos() {
 
         <section className="rounded-[22px] bg-white p-5 shadow-suave ring-1 ring-linea/60">
           <h3 className="text-lg font-extrabold text-tinta">Cómo te pagan</h3>
-          <p className="mt-1 text-sm text-gris">Tus clientes pagan con Culqi (Yape, tarjeta o PagoEfectivo). El dinero se libera a tu cuenta cuando reciben su pedido.</p>
-          <Link href="/vendedor/cuenta-bancaria" className="mt-3 flex items-center gap-3 rounded-2xl bg-crema/70 px-4 py-3 ring-1 ring-linea hover:ring-pino/40">
-            <span className="grid size-10 place-items-center rounded-xl bg-white text-pino"><Landmark className="size-5" /></span>
+          <p className="mt-1 text-sm text-gris">Tus clientes te pagan directo a ti. VendiGo no recibe ni guarda tu dinero.</p>
+          <Link href="/vendedor/tienda/pagos" className="mt-3 flex items-center gap-3 rounded-2xl bg-crema/70 px-4 py-3 ring-1 ring-linea hover:ring-pino/40">
+            <span className="grid size-10 place-items-center rounded-xl bg-white text-pino"><Smartphone className="size-5" /></span>
             <span className="min-w-0 flex-1">
               <b className="block text-sm text-tinta">
-                {cuenta.datos?.cuenta ? `${cuenta.datos.cuenta.banco} •••• ${cuenta.datos.cuenta.ultimos4}` : "Aún no agregas tu cuenta"}
+                {t.metodos_pago?.length ? t.metodos_pago.map((m) => ({ yape_directo: "Yape", plin_directo: "Plin", efectivo: "Efectivo" })[m] ?? m).join(" · ") : "Aún no configuras cómo te pagan"}
               </b>
-              <span className="text-xs text-gris">{cuenta.datos?.cuenta ? "Aquí llega tu dinero" : "Agrégala para poder retirar tu dinero"}</span>
+              <span className="text-xs text-gris">{t.metodos_pago?.length ? "Toca para cambiar tus datos de pago" : "Agrega tu Yape, Plin o acepta efectivo para recibir pedidos"}</span>
             </span>
             <ChevronRight className="size-4 text-gris" />
           </Link>
@@ -215,9 +213,9 @@ export default function EntregaYPagos() {
         <div id="cartel" className="rounded-2xl border-2 border-dashed border-pino/30 p-6 text-center">
           <p className="font-display text-2xl font-extrabold text-pino">{t.nombre}</p>
           <p className="mt-3 text-lg font-bold text-tinta">¿Reservaste por VendiGo?</p>
-          <p className="mt-1 text-gris">Muéstranos tu código de 4 dígitos y paga el resto desde tu app.</p>
+          <p className="mt-1 text-gris">Muéstranos tu código de 4 dígitos. Si aún no pagaste, puedes pagar aquí con Yape, Plin o efectivo.</p>
           {e.adelanto_pct > 0 && <p className="mt-3 text-sm text-gris">Si no recoges el día elegido, el adelanto ({e.adelanto_pct}%) queda para la tienda.</p>}
-          <p className="mt-4 inline-flex items-center gap-1.5 text-sm font-semibold text-ok"><Check className="size-4" /> Pago protegido por VendiGo</p>
+          <p className="mt-4 inline-flex items-center gap-1.5 text-sm font-semibold text-ok"><Check className="size-4" /> Pedido con seguimiento VendiGo</p>
         </div>
         <Boton bloque className="mt-4" onClick={() => window.print()}><Printer className="size-4" /> Imprimir</Boton>
       </Modal>

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { AlertTriangle, CalendarDays, ChevronRight, ClipboardList, Crown, Eye, Lock, MessageCircleQuestion, MessagesSquare, Package, Pencil, Plus, QrCode, Sparkles, Star, TrendingUp, Truck, Users } from "lucide-react";
+import { AlertTriangle, CalendarDays, ChevronRight, ClipboardList, Crown, Eye, Wallet, MessageCircleQuestion, MessagesSquare, Package, Pencil, Plus, QrCode, Sparkles, Star, TrendingUp, Truck, Users } from "lucide-react";
 import { useApi } from "@/lib/api";
 import { soles } from "@/lib/formato";
 import type { PedidoResumen, Producto, Tienda, UsoPlan } from "@/lib/tipos";
@@ -121,10 +121,10 @@ export default function Inicio() {
           <ChevronRight className="size-4 text-gris" />
         </Link>
         <Link href="/vendedor/cobros" className="flex items-center gap-4 rounded-xl bg-white p-4 shadow-suave ring-1 ring-linea/60 hover:ring-pino/30">
-          <span className="grid size-10 place-items-center rounded-xl bg-crema text-pino"><Lock className="size-5" /></span>
+          <span className="grid size-10 place-items-center rounded-xl bg-crema text-pino"><Wallet className="size-5" /></span>
           <span className="flex-1">
-            <span className="block font-semibold">{soles(r.saldos.a_liberar_centimos)} a liberar</span>
-            <span className="block text-sm text-gris">Se libera al entregar · {soles(r.saldos.disponible_centimos)} disponible</span>
+            <span className="block font-semibold">{r.cobros.pagos_por_confirmar ? `${r.cobros.pagos_por_confirmar} ${r.cobros.pagos_por_confirmar === 1 ? "pago" : "pagos"} por revisar` : "Pagos al día"}</span>
+            <span className="block text-sm text-gris">{r.cobros.pagos_por_confirmar ? `${soles(r.cobros.pagos_por_confirmar_centimos)} · revisa tu Yape o Plin` : "Te pagan directo a ti"}{r.cobros.devoluciones_pendientes ? ` · ${r.cobros.devoluciones_pendientes} devolución pendiente` : ""}</span>
           </span>
           <ChevronRight className="size-4 text-gris" />
         </Link>

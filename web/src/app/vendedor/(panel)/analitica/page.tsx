@@ -363,9 +363,9 @@ export default function AnaliticaPagina() {
               icono={<Wallet className="size-[18px]" />}
             />
             <Indicador
-              titulo="Ingresos netos"
+              titulo="Ingresos"
               valor={soles(a.neto_centimos)}
-              detalle="Después de costos de pago"
+              detalle="Sin comisión de VendiGo"
               icono={<ReceiptText className="size-[18px]" />}
             />
             <Indicador

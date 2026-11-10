@@ -9,11 +9,10 @@ import { EstadoPedido } from "./estado";
 
 export const iconoEntrega = { recojo: Store, agencia: Package, motorizado: Bike };
 
+// Estado del pago que el cliente le hace directo a la tienda.
 export function textoPago(p: PedidoResumen) {
-  if (p.pago_estado === "devuelto") return { texto: "Devuelto", tono: "error" as const };
-  if (p.pago_estado === "pendiente") return { texto: "Paga al recibir", tono: "neutro" as const };
-  if (p.liberado) return { texto: "Cobrado", tono: "ok" as const };
-  return { texto: "Pago confirmado", tono: "pino" as const };
+  const tono = ({ informado_tienda: "ok", confirmado: "ok", paga_al_recibir: "neutro", de_prueba: "neutro", pendiente: "aviso", comprobante_enviado: "aviso", no_recibido: "error", rechazado: "error" } as const)[p.pago_estado as "pendiente"] ?? "neutro";
+  return { texto: p.pago_texto || p.pago_estado, tono };
 }
 
 const siguiente: Record<string, string> = {
@@ -24,6 +23,9 @@ const siguiente: Record<string, string> = {
 
 export function siguientePaso(p: PedidoResumen) {
   if (p.reclamo === "abierto") return "Ver reclamo";
+  if (p.pago_estado === "comprobante_enviado") return "Revisar pago";
+  if (p.estado === "preparando" && ["pendiente", "no_recibido"].includes(p.pago_estado)) return "Esperando pago";
+  if (p.estado === "enviado" && p.entrega === "motorizado") return "Entregar";
   if (p.estado === "preparando" && p.entrega === "recojo") return "Ya está listo";
   if (p.estado === "preparando" && p.entrega === "motorizado") return "Ya salió";
   return siguiente[p.estado];
@@ -31,7 +33,7 @@ export function siguientePaso(p: PedidoResumen) {
 
 // El despacho (agencia, motorizado o recojo listo) tiene su propia pantalla, como en el prototipo.
 export function enlacePaso(p: PedidoResumen) {
-  if (p.estado === "preparando" && p.reclamo !== "abierto") return `/vendedor/pedidos/${p.id}/enviar`;
+  if (p.estado === "preparando" && p.reclamo !== "abierto" && !["pendiente", "comprobante_enviado", "no_recibido"].includes(p.pago_estado)) return `/vendedor/pedidos/${p.id}/enviar`;
   return `/vendedor/pedidos/${p.id}`;
 }
 

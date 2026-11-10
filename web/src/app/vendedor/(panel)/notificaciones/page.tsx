@@ -70,7 +70,7 @@ export default function Notificaciones() {
       {!datos ? (
         <Cargando />
       ) : !datos.notificaciones.length ? (
-        <Vacio icono={<Bell className="size-6" />} titulo="Sin notificaciones" detalle="Te avisaremos de pedidos nuevos, preguntas, stock bajo y pagos liberados." />
+        <Vacio icono={<Bell className="size-6" />} titulo="Sin notificaciones" detalle="Te avisaremos de pedidos nuevos, preguntas, stock bajo y pagos por revisar." />
       ) : (
         <div className="rounded-[22px] bg-white px-5 py-3 shadow-suave ring-1 ring-linea/60">
           {datos.notificaciones.map((n) => (

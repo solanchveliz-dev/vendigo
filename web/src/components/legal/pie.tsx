@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { BookOpen } from "lucide-react";
 
-// Enlaces legales que deben verse en las páginas públicas (Culqi e Indecopi los piden).
+// Enlaces legales que deben verse en las páginas públicas (Indecopi los pide).
 export function PieLegal({ className = "" }: { className?: string }) {
   return (
     <nav className={`flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-sm text-gris ${className}`}>

@@ -89,10 +89,10 @@ export default function ResponderReclamo({ params }: { params: Promise<{ pedidoI
   }
 
   const pasos = [
-    { t: "Reclamo enviado", d: "El dinero quedó retenido" },
+    { t: "Reclamo enviado", d: "El cliente abrió el caso" },
     { t: "La tienda responde", d: abierto ? (horas > 0 ? `Tienes ${horas} h` : "Responde lo antes posible") : reclamo.respondido_en ? `Respondiste el ${fecha(reclamo.respondido_en)}` : "" },
     { t: "VendiGo revisa", d: reclamo.estado === "en_revision" ? "Revisando tus pruebas" : "" },
-    { t: "Resuelto", d: reclamo.estado === "a_favor_vendedor" ? "A tu favor: el dinero se libera" : reclamo.estado === "a_favor_comprador" ? "Se devolvió el dinero al cliente" : "" },
+    { t: "Resuelto", d: reclamo.estado === "a_favor_vendedor" ? "A tu favor: el pedido queda entregado" : reclamo.estado === "a_favor_comprador" ? "A favor del cliente: debes devolverle su pago" : "" },
   ];
 
   return (
@@ -110,7 +110,7 @@ export default function ResponderReclamo({ params }: { params: Promise<{ pedidoI
           <p className="font-display text-lg font-extrabold text-tinta">{nombre}: “{reclamo.motivo_texto}”</p>
           {reclamo.descripcion && <p className="text-sm text-tinta">{reclamo.descripcion}</p>}
           <p className="mt-1 flex items-center gap-1 text-xs text-tinta/70">
-            <Lock className="size-3.5" /> {resuelto ? "Reclamo resuelto." : `Tu pago de ${soles(p.total_centimos)} sigue retenido hasta que se resuelva.`}
+            <Lock className="size-3.5" /> {resuelto ? "Reclamo resuelto." : `Pedido de ${soles(p.total_centimos)}. Si VendiGo le da la razón al cliente, deberás devolverle lo que te pagó.`}
           </p>
           {reclamo.fotos.length > 0 && (
             <div className="mt-2 flex gap-2">

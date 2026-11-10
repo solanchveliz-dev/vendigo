@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext } from "react";
-import type { Saldos, Usuario } from "@/lib/tipos";
+import type { Cobros, Usuario } from "@/lib/tipos";
 
 export type Resumen = {
   pedidos: { por_aceptar: number; por_enviar: number; recogen: number; en_camino: number };
@@ -16,7 +16,7 @@ export type Resumen = {
   clientes: number;
   productos_publicados: number;
   semana: { fecha: string; total_centimos: number }[];
-  saldos: Saldos;
+  cobros: Cobros;
 };
 
 export type Panel = { usuario: Usuario; resumen: Resumen | null; recargarResumen: () => void };

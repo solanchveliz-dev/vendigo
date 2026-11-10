@@ -109,7 +109,7 @@ export default function PanelAdmin() {
       </div>
       <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-5">
         <Indicador titulo="Pedidos (mes)" valor={num(k.pedidos_mes)} detalle={variacion === null ? "Primer mes" : `${variacion >= 0 ? "+" : ""}${variacion}% vs. mes pasado`} icono={<Package className="size-[18px]" />} />
-        <Indicador titulo="Pagos registrados" valor={num(k.pagos)} detalle={`${k.pagos_confirmados_pct.toLocaleString("es-PE", { maximumFractionDigits: 1 })}% confirmados`} icono={<CreditCard className="size-[18px]" />} />
+        <Indicador titulo="Pagos registrados" valor={num(k.pagos)} detalle={`${k.pagos_confirmados_pct.toLocaleString("es-PE", { maximumFractionDigits: 1 })}% ya informados por la tienda`} icono={<CreditCard className="size-[18px]" />} />
         <Indicador titulo="Ventas registradas" valor={solesCorto(k.ventas_centimos)} detalle="Pagadas directo a emprendedores" icono={<TrendingUp className="size-[18px]" />} />
         <Indicador titulo="Ingresos por planes" valor={solesCorto(k.ingresos_planes_mes_centimos)} detalle={`${k.tiendas_pagando} pagando · ${k.tiendas_gratis} gratis`} icono={<Crown className="size-[18px]" />} />
         <Indicador titulo="Reclamos abiertos" valor={num(k.reclamos_abiertos)} detalle={k.reclamos_abiertos ? "Atender hoy" : "Todo al día"} alerta={k.reclamos_abiertos > 0} icono={<Flag className="size-[18px]" />} />
