@@ -212,4 +212,4 @@ export type UsoPlan = {
   productos_publicados: number;
 };
 
-export type Creditos = { del_plan: number; extra: number; usados: number; quedan: number; costos: Record<string, number> };
+export type Creditos = { del_plan: number; extra: number; usados: number; quedan: number; costos: Record<string, number>; culqi_publica?: string };

@@ -222,6 +222,20 @@ func AplicarPlan(ctx context.Context, tx *sql.Tx, tid, planID string, mesGratis 
 	return err
 }
 
+// Créditos de IA extra: compra opcional cuando a la tienda se le acaban los del plan.
+// Solo se pagan con Culqi (a la cuenta de VendiGo) y se entregan recién cuando el cobro se aprueba.
+const (
+	PaqueteCreditosIA = 100
+	PrecioCreditosIA  = 500 // S/ 5
+)
+
+// AplicarCreditosIA suma los créditos del mes cuando Culqi aprobó su pago.
+func AplicarCreditosIA(ctx context.Context, tx *sql.Tx, tid string, monto int) error {
+	_, err := tx.ExecContext(ctx, `INSERT INTO creditos_extra (tienda_id, cantidad, monto_centimos, periodo) VALUES ($1,$2,$3,$4)`,
+		tid, PaqueteCreditosIA, monto, inicioMes().Format("2006-01-02"))
+	return err
+}
+
 // AplicarVentasExtra suma el paquete de ventas del mes cuando VendiGo confirmó su pago.
 func AplicarVentasExtra(ctx context.Context, tx *sql.Tx, tid string, monto int) error {
 	_, err := tx.ExecContext(ctx, `INSERT INTO ventas_extra (tienda_id, cantidad, monto_centimos, periodo) VALUES ($1,$2,$3,$4)`,

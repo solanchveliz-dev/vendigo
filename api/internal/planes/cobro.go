@@ -18,6 +18,7 @@ import (
 )
 
 // CobroVendiGo: los métodos con los que las tiendas le pagan a VendiGo (planes, ventas extra e impulsos).
+// Los créditos de IA extra solo se pagan con Culqi.
 // Los configura el admin. Las tiendas pagan por fuera (Yape, Plin, tarjeta o transferencia) y registran
 // en la app el n.° de operación; el admin lo compara y confirma.
 type CobroVendiGo struct {
@@ -94,6 +95,11 @@ func (m *Modulo) informarPago(w http.ResponseWriter, r *http.Request) error {
 	if len(in.Referencia) < 4 || len(in.Referencia) > 40 {
 		return httpx.Invalido("Escribe el número de operación de tu pago.")
 	}
+	var tipo string
+	m.app.DB.QueryRowContext(ctx, `SELECT tipo FROM pagos_plan WHERE id::text=$1 AND tienda_id=$2`, chi.URLParam(r, "id"), tid).Scan(&tipo)
+	if tipo == "creditos_ia" {
+		return httpx.Conflicto("solo_culqi", "Los créditos de IA se pagan con Culqi (tarjeta o Yape) y se activan al instante.")
+	}
 	res, err := m.app.DB.ExecContext(ctx, `UPDATE pagos_plan SET metodo=$3, referencia_tienda=$4 WHERE id::text=$1 AND tienda_id=$2 AND estado='pendiente'`,
 		chi.URLParam(r, "id"), tid, in.Metodo, in.Referencia)
 	if err != nil {
@@ -109,7 +115,7 @@ func (m *Modulo) informarPago(w http.ResponseWriter, r *http.Request) error {
 // ConfirmarPago marca un pago a VendiGo como confirmado y aplica lo comprado (plan, ventas extra o impulso).
 // porAdmin es el admin que lo revisó (vacío si lo confirmó Culqi); cargo es el id del cargo de Culqi.
 func ConfirmarPago(ctx context.Context, tx *sql.Tx, id, referencia, porAdmin, cargo string) (int, error) {
-	var tid, tipo, concepto string
+	var tid, tipo, concepto, refTienda string
 	var planID, productoID sql.NullString
 	var monto, dias int
 	var admin any
@@ -118,8 +124,8 @@ func ConfirmarPago(ctx context.Context, tx *sql.Tx, id, referencia, porAdmin, ca
 	}
 	err := tx.QueryRowContext(ctx, `UPDATE pagos_plan SET estado='confirmado', referencia=$2, confirmado_por=$3, confirmado_en=now(),
 		metodo = CASE WHEN $4 <> '' THEN 'culqi' ELSE metodo END, proveedor = CASE WHEN $4 <> '' THEN 'culqi' ELSE proveedor END
-		WHERE id::text=$1 AND estado='pendiente' RETURNING tienda_id, tipo, plan_id, monto_centimos, concepto, producto_id, dias`, id, referencia, admin, cargo).
-		Scan(&tid, &tipo, &planID, &monto, &concepto, &productoID, &dias)
+		WHERE id::text=$1 AND estado='pendiente' RETURNING tienda_id, tipo, plan_id, monto_centimos, concepto, producto_id, dias, referencia_tienda`, id, referencia, admin, cargo).
+		Scan(&tid, &tipo, &planID, &monto, &concepto, &productoID, &dias, &refTienda)
 	if core.SinFilas(err) {
 		return 0, httpx.Conflicto("no_aplica", "Este pago ya fue revisado.")
 	}
@@ -127,6 +133,11 @@ func ConfirmarPago(ctx context.Context, tx *sql.Tx, id, referencia, porAdmin, ca
 		return 0, err
 	}
 	switch {
+	case tipo == "creditos_ia" && cargo == "" && !strings.HasPrefix(refTienda, "chr_"):
+		// Solo Culqi: el admin únicamente puede confirmar si hubo un cobro de Culqi que no se llegó a aplicar.
+		err = httpx.Conflicto("solo_culqi", "Los créditos de IA solo se pagan con Culqi y este pedido no tiene un cobro de Culqi. Recházalo.")
+	case tipo == "creditos_ia":
+		err = AplicarCreditosIA(ctx, tx, tid, monto)
 	case tipo == "ventas_extra":
 		err = AplicarVentasExtra(ctx, tx, tid, monto)
 	case tipo == "destacado" && productoID.Valid:

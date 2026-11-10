@@ -13,16 +13,15 @@ import (
 
 	"github.com/solanchveliz-dev/vendigo/api/internal/core"
 	"github.com/solanchveliz-dev/vendigo/api/internal/httpx"
+	"github.com/solanchveliz-dev/vendigo/api/internal/planes"
 	"github.com/solanchveliz-dev/vendigo/api/internal/tiendas"
 )
 
 // La IA no responde mensajes: automatiza tareas del vendedor. Cada herramienta gasta créditos del plan.
 var Costos = map[string]int{"publicar_con_foto": 3, "leer_boleta": 2, "crear_post": 1, "analista_ventas": 2, "resumen_opiniones": 0}
 
-const (
-	paqueteCreditos = 100
-	paquetePrecio   = 500
-)
+// El paquete extra (100 créditos por S/ 5) se define en planes: es un pago a VendiGo, solo con Culqi.
+const paqueteCreditos = planes.PaqueteCreditosIA
 
 type Modulo struct {
 	app       *core.App
@@ -56,6 +55,8 @@ type Creditos struct {
 	Usados int            `json:"usados"`
 	Quedan int            `json:"quedan"`
 	Costos map[string]int `json:"costos"`
+	// Llave pública de Culqi para comprar créditos extra (vacía si el cobro con Culqi no está configurado).
+	CulqiPublica string `json:"culqi_publica"`
 }
 
 func (m *Modulo) leer(ctx context.Context, q core.Ejecutor, tid string) (Creditos, error) {
@@ -79,8 +80,15 @@ func (m *Modulo) estado(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
+	if m.culqiListo() {
+		c.CulqiPublica = m.app.Cfg.CulqiPublica
+	}
 	httpx.OK(w, c)
 	return nil
+}
+
+func (m *Modulo) culqiListo() bool {
+	return m.app.Cfg.CulqiPublica != "" && m.app.Cfg.CulqiSecreta != ""
 }
 
 // usar valida los créditos, ejecuta la herramienta y solo descuenta si salió bien.
@@ -307,23 +315,30 @@ func separarPosts(txt, enlace string) map[string]string {
 	return out
 }
 
+// comprarCreditos crea el pago de +100 créditos para cobrarlo con Culqi. NO entrega los créditos:
+// se suman recién cuando Culqi aprueba el cobro (POST /vendedor/plan/pagos/{id}/culqi → planes.ConfirmarPago).
 func (m *Modulo) comprarCreditos(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
+	if !m.culqiListo() {
+		return httpx.Conflicto("sin_culqi", "La compra de créditos con Culqi todavía no está disponible.")
+	}
 	tid, err := tiendas.ID(ctx, m.app)
 	if err != nil {
 		return err
 	}
+	var id string
 	err = m.app.EnTransaccion(ctx, func(tx *sql.Tx) error {
-		if _, err := tx.ExecContext(ctx, `INSERT INTO creditos_extra (tienda_id, cantidad, monto_centimos, periodo) VALUES ($1,$2,$3,$4)`,
-			tid, paqueteCreditos, paquetePrecio, inicioMes().Format("2006-01-02")); err != nil {
+		// Un intento anterior que no llegó a cobrarse se reemplaza por este.
+		if _, err := tx.ExecContext(ctx, `DELETE FROM pagos_plan WHERE tienda_id=$1 AND tipo='creditos_ia' AND estado='pendiente' AND referencia_tienda=''`, tid); err != nil {
 			return err
 		}
-		_, err := tx.ExecContext(ctx, `INSERT INTO pagos_plan (tienda_id, concepto, monto_centimos) VALUES ($1,$2,$3)`,
-			tid, fmt.Sprintf("+%d créditos de IA", paqueteCreditos), paquetePrecio)
-		return err
+		return tx.QueryRowContext(ctx, `INSERT INTO pagos_plan (tienda_id, concepto, monto_centimos, metodo, estado, tipo)
+			VALUES ($1,$2,$3,'culqi','pendiente','creditos_ia') RETURNING id::text`,
+			tid, fmt.Sprintf("+%d créditos de IA", paqueteCreditos), planes.PrecioCreditosIA).Scan(&id)
 	})
 	if err != nil {
 		return err
 	}
-	return m.estado(w, r)
+	httpx.OK(w, map[string]any{"id": id, "monto_centimos": planes.PrecioCreditosIA, "creditos": paqueteCreditos})
+	return nil
 }

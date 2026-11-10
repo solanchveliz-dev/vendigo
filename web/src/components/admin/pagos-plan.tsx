@@ -13,7 +13,7 @@ type PagoPlan = {
   tienda_id: string;
   tienda: string;
   concepto: string;
-  tipo: "plan" | "ventas_extra";
+  tipo: "plan" | "ventas_extra" | "destacado" | "creditos_ia";
   monto_centimos: number;
   estado: "pendiente" | "confirmado" | "rechazado";
   referencia: string;

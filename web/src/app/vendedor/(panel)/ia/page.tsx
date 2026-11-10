@@ -3,9 +3,11 @@
 import Link from "next/link";
 import { useState } from "react";
 import { BarChart3, Camera, FileText, Info, MessageSquareQuote, Sparkles } from "lucide-react";
-import { api, ErrorApi, useApi } from "@/lib/api";
+import { api, useApi } from "@/lib/api";
 import type { Creditos, Plan } from "@/lib/tipos";
-import { Aviso, Boton, Cargando, Encabezado, Modal, Tarjeta, useAvisar } from "@/components/ui";
+import type { PagoVendiGo } from "@/lib/pagos-plan";
+import { Aviso, Boton, Cargando, Encabezado, Modal, Tarjeta } from "@/components/ui";
+import { PagarAVendiGo } from "@/components/panel/pagar-vendigo";
 
 const herramientas = [
   { id: "publicar_con_foto", icono: Camera, titulo: "Publicar con foto", texto: "Sube la foto y la IA propone nombre, descripción y categoría.", href: "/vendedor/productos/nuevo", boton: "Publicar un producto" },
@@ -17,24 +19,21 @@ const herramientas = [
 export default function HerramientasIA() {
   const { datos: c, setDatos } = useApi<Creditos>("/vendedor/ia");
   const planes = useApi<{ planes: Plan[] }>("/planes");
-  const avisar = useAvisar();
   const [confirmar, setConfirmar] = useState(false);
-  const [comprando, setComprando] = useState(false);
   if (!c) return <Cargando />;
   const renueva = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1).toLocaleDateString("es-PE", { day: "numeric", month: "long" });
   const total = c.del_plan + c.extra;
 
-  async function comprar() {
-    setComprando(true);
-    try {
-      setDatos(await api.post<Creditos>("/vendedor/ia/creditos-extra"));
-      avisar("Listo: +100 créditos este mes.");
-      setConfirmar(false);
-    } catch (e) {
-      avisar((e as ErrorApi).message, "error");
-    } finally {
-      setComprando(false);
-    }
+  // Los créditos extra se pagan solo con Culqi (tarjeta o Yape) a VendiGo y se suman cuando el cobro se aprueba.
+  const culqi: PagoVendiGo = {
+    yape: "", plin: "", titular: "", tarjeta_link: "", tarjeta_marcas: [], banco: "", cuenta: "", cci: "", banco_titular: "",
+    metodos: c.culqi_publica ? ["culqi"] : [],
+    culqi_publica: c.culqi_publica ?? "",
+  };
+
+  async function creditosListos() {
+    setDatos(await api.get<Creditos>("/vendedor/ia"));
+    setConfirmar(false);
   }
 
   return (
@@ -103,12 +102,23 @@ export default function HerramientasIA() {
         La IA no responde a tus clientes: tu tienda ya muestra precio, stock y envíos para que compren solos. Siempre revisas lo que la IA llena antes de guardarlo.
       </p>
 
-      <Modal abierto={confirmar} onCerrar={() => setConfirmar(false)} titulo="¿Comprar 100 créditos?">
-        <p className="text-sm text-gris">Se suman a los de este mes. El cobro de S/ 5.00 aparece en los pagos de tu plan. Los créditos extra no pasan al mes siguiente.</p>
-        <div className="mt-4 flex gap-2">
-          <Boton cargando={comprando} onClick={comprar}>Comprar por S/ 5</Boton>
-          <Boton variante="secundario" onClick={() => setConfirmar(false)}>Cancelar</Boton>
-        </div>
+      <Modal abierto={confirmar} onCerrar={() => setConfirmar(false)} titulo="Comprar 100 créditos de IA">
+        <p className="mb-4 text-sm text-gris">
+          Pagas S/ 5.00 a VendiGo con tarjeta o Yape en el formulario seguro de Culqi. Los créditos se suman a los de este mes en cuanto se aprueba el pago y no pasan al
+          mes siguiente.
+        </p>
+        {culqi.metodos.length ? (
+          <PagarAVendiGo
+            concepto="+100 créditos de IA"
+            monto={500}
+            vendigo={culqi}
+            crearPago={async () => (await api.post<{ id: string }>("/vendedor/ia/creditos-extra")).id}
+            alListo={creditosListos}
+          />
+        ) : (
+          <Aviso tono="aviso">La compra de créditos con Culqi todavía no está disponible. Escríbenos desde Ayuda.</Aviso>
+        )}
+        <Boton variante="secundario" className="mt-4" onClick={() => setConfirmar(false)}>Cerrar</Boton>
       </Modal>
     </div>
   );
