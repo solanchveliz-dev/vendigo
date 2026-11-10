@@ -47,11 +47,7 @@ function Lista() {
 
   return (
     <>
-      <Encabezado titulo="Productos" detalle={`${datos?.conteo.todos ?? 0} productos${plan.datos ? ` · plan ${plan.datos.plan.nombre}` : ""}`}>
-        <Link href="/vendedor/productos/nuevo">
-          <Boton variante="acento">+ Nuevo producto</Boton>
-        </Link>
-      </Encabezado>
+      <Encabezado titulo="Productos" detalle={`${datos?.conteo.todos ?? 0} productos${plan.datos ? ` · plan ${plan.datos.plan.nombre}` : ""}`} />
       <Tarjeta className="p-0">
         <div className="flex flex-col gap-2 border-b border-linea p-4 sm:flex-row sm:items-center">
           <div className="relative sm:w-72">

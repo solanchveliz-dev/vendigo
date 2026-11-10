@@ -139,7 +139,7 @@ func (m *Modulo) seguimiento(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	httpx.OK(w, map[string]any{"pedido": d, "tienda": t})
+	httpx.OK(w, map[string]any{"pedido": d, "tienda": t, "garantia": pagos.LeerGarantia(r.Context(), m.app.DB)})
 	return nil
 }
 

@@ -5,7 +5,7 @@ import { AlertTriangle, CalendarDays, ChevronRight, ClipboardList, Crown, Eye, W
 import { useApi } from "@/lib/api";
 import { soles } from "@/lib/formato";
 import type { PedidoResumen, Producto, Tienda, UsoPlan } from "@/lib/tipos";
-import { Boton, Cargando, Tarjeta, cn } from "@/components/ui";
+import { Aviso, Boton, Cargando, Tarjeta, cn } from "@/components/ui";
 import { usePanel } from "@/components/panel/contexto";
 import { TablaPedidos } from "@/components/pedidos/tabla";
 
@@ -84,13 +84,18 @@ export default function Inicio() {
 
   return (
     <div className="space-y-5 pt-2">
+      {tienda.datos?.suspendida_garantia && (
+        <Aviso tono="error">
+          Tu tienda está pausada: VendiGo le devolvió el dinero a un cliente porque no se lo devolviste a tiempo. Repón ese monto con Yape a VendiGo y escríbenos desde Ayuda para reactivarla.
+        </Aviso>
+      )}
       <div className="relative flex flex-wrap items-center justify-between gap-4 overflow-hidden rounded-2xl bg-pino px-6 py-7 text-white">
         <div>
           <p className="text-xs font-bold uppercase tracking-widest text-white/70">Tu panel</p>
           <h1 className="mt-1 text-3xl font-extrabold">
             Haz crecer <span className="font-serif italic text-coral">lo que haces</span>
           </h1>
-          <p className="mt-1 text-sm text-white/75">Tus pedidos llegan pagados y ordenados. Hoy solo atiende lo que te toca.</p>
+          <p className="mt-1 text-sm text-white/75">Tus pedidos llegan ordenados. Hoy solo atiende lo que te toca.</p>
         </div>
         <Link href="/vendedor/productos/nuevo">
           <Boton variante="acento">+ Publicar producto</Boton>

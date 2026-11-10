@@ -72,6 +72,9 @@ export function Catalogo({ productos, slug, vista = false }: { productos: Produc
               {p.oferta && (
                 <span className="absolute left-2.5 top-2.5 rounded-md bg-coral px-2 py-0.5 text-xs font-bold text-white">-{p.oferta.descuento_pct}%</span>
               )}
+              {p.destacado_hasta && (
+                <span className="absolute right-2.5 top-2.5 rounded-md bg-pino px-2 py-0.5 text-xs font-bold text-white">Destacado</span>
+              )}
             </div>
             <div className="flex items-end justify-between gap-2 p-3.5">
               <div className="min-w-0">
