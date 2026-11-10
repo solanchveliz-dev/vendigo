@@ -138,7 +138,7 @@ func (m *Modulo) resumen(w http.ResponseWriter, r *http.Request) error {
 		(SELECT count(*) FROM usuarios WHERE rol='vendedor' AND NOT activo),
 		(SELECT count(*) FROM usuarios WHERE rol='vendedor' AND creado_en > now() - interval '7 days'),
 		(SELECT count(*) FROM verificaciones WHERE estado='pendiente'),
-		(SELECT count(*) FROM pagos_plan WHERE estado='pendiente'),
+		(SELECT count(*) FROM pagos_plan WHERE estado='pendiente' AND referencia_tienda LIKE 'chr\_%'), -- cobrados por Culqi sin activar
 		(SELECT count(*) FROM reclamos WHERE estado IN ('abierto','en_revision')),
 		(SELECT count(*) FROM usuarios WHERE bloqueado_hasta > now()),
 		(SELECT count(*) FROM incidencias WHERE estado<>'resuelta')`).

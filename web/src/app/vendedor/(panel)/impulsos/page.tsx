@@ -16,7 +16,7 @@ type Impulso = {
 
 const ESTADO = {
   activo: { t: "Impulsando", c: "bg-pino-claro text-pino" },
-  pendiente: { t: "Esperando confirmación de tu Yape", c: "bg-aviso-claro text-aviso" },
+  pendiente: { t: "Pagado, activándose", c: "bg-aviso-claro text-aviso" },
   terminado: { t: "Terminado", c: "bg-arena text-gris" },
 };
 

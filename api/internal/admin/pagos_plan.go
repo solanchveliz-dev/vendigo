@@ -14,8 +14,9 @@ import (
 	"github.com/solanchveliz-dev/vendigo/api/internal/planes"
 )
 
-// Pagos de planes y ventas extra: aquí VendiGo SÍ es quien vende (su servicio), así que el dinero llega a su
-// propia cuenta. Mientras no haya pasarela, la tienda paga por Yape y el admin confirma que lo recibió.
+// Cobros de VendiGo (planes, ventas extra, impulsos y créditos de IA): aquí VendiGo SÍ es quien vende su servicio,
+// así que el dinero llega a su propia cuenta, siempre con Culqi. Todo se activa solo al aprobarse el cobro;
+// el admin solo activa a mano un cobro que Culqi aprobó y que no se llegó a aplicar, o lo rechaza.
 
 type PagoPlanAdmin struct {
 	ID         string     `json:"id"`
@@ -63,7 +64,7 @@ func (m *Modulo) confirmarPagoPlan(w http.ResponseWriter, r *http.Request) error
 	}
 	in.Referencia = strings.TrimSpace(in.Referencia)
 	if len(in.Referencia) < 4 {
-		return httpx.Invalido("Escribe el número de operación del Yape o transferencia que recibió VendiGo.")
+		return httpx.Invalido("Escribe el código del cobro de Culqi (empieza con chr_).")
 	}
 	id := chi.URLParam(r, "id")
 	err := m.app.EnTransaccion(ctx, func(tx *sql.Tx) error {

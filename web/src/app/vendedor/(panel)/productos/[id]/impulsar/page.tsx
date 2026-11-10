@@ -56,7 +56,7 @@ export default function Impulsar({ params }: { params: Promise<{ id: string }> }
       {!p.activo || p.stock <= 0 ? (
         <Aviso tono="aviso">Solo puedes impulsar productos publicados y con stock.</Aviso>
       ) : pendiente ? (
-        <Aviso tono="aviso">Este producto ya tiene un impulso esperando que VendiGo confirme tu pago. Te avisamos apenas se active.</Aviso>
+        <Aviso tono="aviso">Culqi ya cobró el impulso de este producto y el equipo de VendiGo lo está activando. Te avisamos apenas esté listo.</Aviso>
       ) : (
         <div className="grid items-start gap-5 lg:grid-cols-[1fr_300px]">
           <div className="space-y-4">

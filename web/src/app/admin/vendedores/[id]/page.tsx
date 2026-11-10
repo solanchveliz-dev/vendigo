@@ -16,7 +16,7 @@ type Detalle = {
   historial: Evento[];
   ventas: { vendido_centimos: number; pedidos_entregados: number; pagos_por_confirmar: number; devoluciones_pendientes: number };
   tienda: { ciudad: string; entrega: string[]; reputacion: string; reclamos: number; reclamos_perdidos: number; plan_desde: string | null; verificacion_id: string };
-  pagos_plan: { concepto: string; monto_centimos: number; estado: "pendiente" | "confirmado" | "rechazado"; creado_en: string }[];
+  pagos_plan: { concepto: string; monto_centimos: number; estado: "pendiente" | "confirmado" | "rechazado" | "de_prueba"; creado_en: string }[];
 };
 
 const REPUTACION: Record<string, { t: string; d: string }> = {
@@ -120,15 +120,17 @@ export default function DetalleVendedor({ params }: { params: Promise<{ id: stri
             <Fila k="Entrega">{d.tienda.entrega.join(", ") || "—"}</Fila>
           </dl>
         </Tarjeta>
-        <Tarjeta titulo="Pagos de suscripción">
+        <Tarjeta titulo="Pagos a VendiGo">
           {!d.pagos_plan.length ? (
-            <p className="text-sm text-gris">Todavía no tiene pagos de plan.</p>
+            <p className="text-sm text-gris">Todavía no le pagó nada a VendiGo.</p>
           ) : (
             d.pagos_plan.map((p, i) => (
               <div key={i} className="flex items-center gap-3 border-b border-linea py-3 text-sm last:border-0">
                 <span className="flex-1 text-tinta">{fecha(p.creado_en)} · {p.concepto}</span>
                 <b className="text-tinta">{soles(p.monto_centimos)}</b>
-                <Estado tono={p.estado === "confirmado" ? "ok" : p.estado === "pendiente" ? "aviso" : "error"}>{p.estado === "confirmado" ? "Confirmado" : p.estado === "pendiente" ? "Por confirmar" : "Rechazado"}</Estado>
+                <Estado tono={{ confirmado: "ok", pendiente: "neutro", rechazado: "error", de_prueba: "neutro" }[p.estado] as "ok" | "neutro" | "error"}>
+                  {{ confirmado: "Pagado", pendiente: "Sin pagar", rechazado: "Rechazado", de_prueba: "De prueba" }[p.estado]}
+                </Estado>
               </div>
             ))
           )}

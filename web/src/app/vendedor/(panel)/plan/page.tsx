@@ -57,7 +57,7 @@ export default function TuSuscripcion() {
       uso.setDatos(nuevo);
       ia.recargar();
       pagos.recargar();
-      avisar(nuevo.plan.id === elegido.id ? `Listo: ahora estás en el plan ${elegido.nombre}.` : `Pedido registrado. Paga ${soles(elegido.precio_centimos)} a VendiGo y activamos tu plan al confirmarlo.`);
+      avisar(nuevo.plan.id === elegido.id ? `Listo: ahora estás en el plan ${elegido.nombre}.` : `Paga ${soles(elegido.precio_centimos)} con Culqi y tu plan ${elegido.nombre} se activa al instante.`);
       setElegido(null);
     } catch (e) {
       avisar((e as ErrorApi).message, "error");
@@ -71,7 +71,7 @@ export default function TuSuscripcion() {
     try {
       uso.setDatos(await api.post<UsoPlan>("/vendedor/plan/ventas-extra"));
       pagos.recargar();
-      avisar("Pedido registrado. Paga S/ 5.00 a VendiGo y sumamos tus 20 ventas al confirmarlo.");
+      avisar("Paga S/ 5.00 con Culqi y tus 20 ventas se suman al instante.");
       setExtra(false);
     } catch (e) {
       avisar((e as ErrorApi).message, "error");
@@ -86,7 +86,13 @@ export default function TuSuscripcion() {
   const subtitulo = `Plan actual: ${actual.nombre}${actual.precio_centimos ? ` · ${soles(actual.precio_centimos).replace(".00", "")} al mes` : " · sin costo"}${
     u.mes_gratis && u.proximo_cobro ? ` · primer mes gratis hasta el ${fecha(u.proximo_cobro)}` : u.proximo_cobro ? ` · próximo cobro el ${fecha(u.proximo_cobro)}` : ""
   }`;
-  const pendiente = pagos.datos?.pagos.find((p) => p.estado === "pendiente");
+  // Cobros que la tienda pidió y todavía no pagó (cada uno se paga con Culqi y se activa al aprobarse).
+  const pendientes = pagos.datos?.pagos.filter((p) => p.estado === "pendiente") ?? [];
+  const recargarTodo = () => {
+    uso.recargar();
+    ia.recargar();
+    pagos.recargar();
+  };
   const sube = elegido && orden(elegido) > orden(actual);
   const gratisMes = elegido && elegido.precio_centimos > 0 && u.puede_mes_gratis;
   const sobran = elegido?.productos_max != null && u.productos_publicados > elegido.productos_max ? u.productos_publicados - elegido.productos_max : 0;
@@ -109,7 +115,9 @@ export default function TuSuscripcion() {
         </div>
       </div>
 
-      {pendiente && <PagarAVendiGo key={pendiente.id} concepto={pendiente.concepto} monto={pendiente.monto_centimos} vendigo={pagos.datos?.pago_vendigo ?? null} pagoId={pendiente.id} referenciaInformada={pendiente.referencia_tienda} alListo={pagos.recargar} />}
+      {pendientes.map((x) => (
+        <PagarAVendiGo key={x.id} concepto={x.concepto} monto={x.monto_centimos} vendigo={pagos.datos?.pago_vendigo ?? null} pagoId={x.id} referenciaInformada={x.referencia_tienda} alListo={recargarTodo} />
+      ))}
 
       <div className="grid items-start gap-5 lg:grid-cols-2">
         <section className="rounded-[22px] bg-white p-5 shadow-suave ring-1 ring-linea/60">
@@ -228,12 +236,12 @@ export default function TuSuscripcion() {
               {elegido.precio_centimos === 0
                 ? `Vuelves al plan Gratis hoy: ${elegido.ventas_mes} ventas al mes y sin pronóstico ni analista de ventas.`
                 : gratisMes
-                  ? `El cambio es inmediato y tu primer mes es gratis. Luego pagas ${soles(elegido.precio_centimos)} al mes a VendiGo (Yape, Plin, tarjeta o transferencia). Puedes cambiar cuando quieras.`
-                  : `Pagas ${soles(elegido.precio_centimos)} a VendiGo y tu plan se activa cuando el equipo confirme el pago (te avisamos).`}
+                  ? `El cambio es inmediato y tu primer mes es gratis. Luego pagas ${soles(elegido.precio_centimos)} al mes a VendiGo con Culqi (tarjeta o Yape). Puedes cambiar cuando quieras.`
+                  : `Pagas ${soles(elegido.precio_centimos)} a VendiGo con Culqi (tarjeta o Yape) y tu plan se activa en cuanto se aprueba el pago.`}
               {sobran > 0 && ` Tienes ${u.productos_publicados} productos publicados y este plan permite ${elegido.productos_max}: no podrás publicar nuevos hasta ocultar ${sobran}.`}
             </div>
             <div className="flex flex-wrap gap-2">
-              <Boton variante="acento" cargando={ocupado} onClick={cambiar} disabled={!!pendiente && elegido.precio_centimos > 0 && !gratisMes}>{sube ? "Mejorar plan" : "Cambiar plan"}</Boton>
+              <Boton variante="acento" cargando={ocupado} onClick={cambiar}>{sube ? "Mejorar plan" : "Cambiar plan"}</Boton>
               <Boton variante="secundario" onClick={() => setElegido(null)}>Volver</Boton>
             </div>
           </div>
@@ -241,9 +249,9 @@ export default function TuSuscripcion() {
       </Modal>
 
       <Modal abierto={extra} onCerrar={() => setExtra(false)} titulo="¿Comprar 20 ventas más?">
-        <p className="text-sm text-gris">Pagas S/ 5.00 a VendiGo y, cuando el equipo confirme el pago, se suman a tu cupo de este mes. Las ventas extra no pasan al mes siguiente.</p>
+        <p className="text-sm text-gris">Pagas S/ 5.00 a VendiGo con Culqi (tarjeta o Yape) y las 20 ventas se suman a tu cupo de este mes en cuanto se aprueba el pago. Las ventas extra no pasan al mes siguiente.</p>
         <div className="mt-4 flex gap-2">
-          <Boton cargando={ocupado} onClick={comprarExtra} disabled={!!pendiente}>Pedir por S/ 5</Boton>
+          <Boton cargando={ocupado} onClick={comprarExtra}>Comprar por S/ 5</Boton>
           <Boton variante="secundario" onClick={() => setExtra(false)}>Cancelar</Boton>
         </div>
       </Modal>

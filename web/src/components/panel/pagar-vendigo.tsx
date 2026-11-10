@@ -98,10 +98,12 @@ export function PagarAVendiGo({
         <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-white text-aviso"><Clock className="size-5" /></span>
         <div className="min-w-0 flex-1 space-y-3 text-sm text-tinta">
           <p className="font-bold">Paga a VendiGo: {concepto} · {soles(monto)}</p>
-          {referenciaInformada ? (
+          {referenciaInformada?.startsWith("chr_") ? (
+            <p>Culqi ya cobró este pago ({referenciaInformada}). El equipo de VendiGo lo está activando y te avisa en cuanto esté listo.</p>
+          ) : referenciaInformada ? (
             <p>Ya nos avisaste tu pago (op. {referenciaInformada}). VendiGo lo está revisando y te avisa cuando esté activo.</p>
           ) : !metodos.length ? (
-            <p>VendiGo todavía no configuró cómo recibir pagos. Escríbenos desde Ayuda.</p>
+            <p>El pago con Culqi (tarjeta o Yape) todavía no está activo en VendiGo. Escríbenos desde Ayuda.</p>
           ) : (
             <>
               <div className="flex flex-wrap gap-2">

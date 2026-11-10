@@ -71,8 +71,11 @@ export function CobroVendiGoForm({ inicial, correo, alGuardar }: { inicial: Pago
   }
 
   return (
-    <Tarjeta titulo="Cómo te pagan las tiendas">
-      <p className="mb-4 text-sm text-gris">Métodos para que las tiendas paguen su plan, ventas extra e impulsos. Las tiendas registran su n.° de operación en la app y tú lo confirmas en Suscripciones. Nunca se usan para las ventas.</p>
+    <Tarjeta titulo="Pagos manuales a VendiGo (desactivados)">
+      <p className="mb-4 text-sm text-gris">
+        Las tiendas le pagan a VendiGo solo con Culqi (tarjeta o Yape) y cada compra se activa sola en cuanto Culqi aprueba el cobro. Estos datos de Yape, Plin, tarjeta y banco
+        se guardan, pero ya no se muestran a las tiendas. Las llaves de Culqi van en la configuración del servidor (CULQI_LLAVE_PUBLICA y CULQI_LLAVE_SECRETA), nunca aquí.
+      </p>
       <div className="space-y-3">
         <Bloque icono={<Smartphone className="size-4" />} titulo="Yape" activo={on.yape} cambiar={(v) => setOn({ ...on, yape: v })}>
           <Campo t="Número de Yape"><Entrada inputMode="numeric" maxLength={9} {...x("yape")} placeholder="9XXXXXXXX" /></Campo>

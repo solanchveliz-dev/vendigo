@@ -21,7 +21,7 @@ export default function PagosDelPlan() {
       <div>
         <div className="mb-2 h-1 w-8 rounded-full bg-coral" />
         <h1 className="text-[34px] font-extrabold leading-tight text-pino">Pagos de tu plan</h1>
-        <p className="text-sm text-gris">Lo que le pagas a VendiGo por tu plan. Es aparte de tus ventas: tus clientes te pagan directo a ti.</p>
+        <p className="text-sm text-gris">Lo que le pagas a VendiGo con Culqi: tu plan, ventas extra, impulsos y créditos de IA. Es aparte de tus ventas: tus clientes te pagan directo a ti.</p>
       </div>
       {datos?.pagos.filter((p) => p.estado === "pendiente").map((p) => <PagarAVendiGo key={p.id} concepto={p.concepto} monto={p.monto_centimos} vendigo={datos.pago_vendigo} pagoId={p.id} referenciaInformada={p.referencia_tienda} alListo={recargar} />)}
 

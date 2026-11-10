@@ -17,10 +17,11 @@ import (
 	"github.com/solanchveliz-dev/vendigo/api/internal/tiendas"
 )
 
-// CobroVendiGo: los métodos con los que las tiendas le pagan a VendiGo (planes, ventas extra e impulsos).
-// Los créditos de IA extra solo se pagan con Culqi.
-// Los configura el admin. Las tiendas pagan por fuera (Yape, Plin, tarjeta o transferencia) y registran
-// en la app el n.° de operación; el admin lo compara y confirma.
+// CobroVendiGo: cómo le pagan las tiendas a VendiGo (planes, ventas extra, impulsos y créditos de IA).
+// Regla de negocio: TODO se paga con Culqi (tarjeta o Yape) a la cuenta de VendiGo y se activa solo en cuanto
+// Culqi aprueba el cobro, como al comprar un plan en cualquier app. El admin no confirma pagos: solo revisa
+// el caso raro de un cobro que Culqi aprobó y que no se llegó a activar.
+// Los datos de Yape/Plin/banco de VendiGo se guardan en Configuración, pero ya no se ofrecen a las tiendas.
 type CobroVendiGo struct {
 	Yape          string   `json:"yape"`
 	Plin          string   `json:"plin"`
@@ -74,8 +75,14 @@ func metodoValido(ctx context.Context, q core.Ejecutor, metodo string) error {
 	return nil
 }
 
-// POST /vendedor/plan/pagos/{id}/informar {metodo, referencia}: la tienda avisa que ya pagó y con qué.
+// POST /vendedor/plan/pagos/{id}/informar: el aviso manual de "ya pagué" ya no se usa (solo Culqi).
 func (m *Modulo) informarPago(w http.ResponseWriter, r *http.Request) error {
+	return httpx.Conflicto("solo_culqi", "Los pagos a VendiGo se hacen con Culqi (tarjeta o Yape) y se activan al instante.")
+}
+
+// informarPagoManual era el aviso con n.° de operación de un Yape o transferencia a VendiGo. Se conserva
+// sin ruta por si VendiGo vuelve a aceptar pagos manuales.
+func (m *Modulo) informarPagoManual(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	tid, err := tiendas.ID(ctx, m.app)
 	if err != nil {
@@ -133,9 +140,9 @@ func ConfirmarPago(ctx context.Context, tx *sql.Tx, id, referencia, porAdmin, ca
 		return 0, err
 	}
 	switch {
-	case tipo == "creditos_ia" && cargo == "" && !strings.HasPrefix(refTienda, "chr_"):
-		// Solo Culqi: el admin únicamente puede confirmar si hubo un cobro de Culqi que no se llegó a aplicar.
-		err = httpx.Conflicto("solo_culqi", "Los créditos de IA solo se pagan con Culqi y este pedido no tiene un cobro de Culqi. Recházalo.")
+	case cargo == "" && !strings.HasPrefix(refTienda, "chr_"):
+		// Solo Culqi: el admin únicamente puede activar un pago que Culqi ya cobró y no se llegó a aplicar.
+		err = httpx.Conflicto("solo_culqi", "Los pagos a VendiGo solo se activan con un cobro de Culqi y este no tiene ninguno. Recházalo.")
 	case tipo == "creditos_ia":
 		err = AplicarCreditosIA(ctx, tx, tid, monto)
 	case tipo == "ventas_extra":
@@ -212,12 +219,36 @@ func (m *Modulo) pagarConCulqi(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-// cobro: métodos para pagarle a VendiGo, con Culqi primero si está configurado.
-func (m *Modulo) cobro(ctx context.Context) CobroVendiGo {
-	c := LeerCobro(ctx, m.app.DB)
-	if m.app.Cfg.CulqiPublica != "" && m.app.Cfg.CulqiSecreta != "" {
+// cobro: cómo pagarle a VendiGo. Solo Culqi; si no está configurado, la lista de métodos queda vacía.
+func (m *Modulo) cobro(_ context.Context) CobroVendiGo {
+	c := CobroVendiGo{TarjetaMarcas: []string{}, Metodos: []string{}}
+	if m.culqiListo() {
 		c.CulqiPublica = m.app.Cfg.CulqiPublica
-		c.Metodos = append([]string{"culqi"}, c.Metodos...)
+		c.Metodos = []string{"culqi"}
 	}
 	return c
+}
+
+func (m *Modulo) culqiListo() bool {
+	return m.app.Cfg.CulqiPublica != "" && m.app.Cfg.CulqiSecreta != ""
+}
+
+var errSinCulqi = httpx.Conflicto("sin_culqi", "El pago con Culqi todavía no está disponible. Escríbenos desde Ayuda.")
+
+// responderUso devuelve el plan y el uso de la tienda, más el id del pago a cobrar con Culqi (si se creó uno).
+func (m *Modulo) responderUso(w http.ResponseWriter, r *http.Request, pagoID string) error {
+	ctx := r.Context()
+	tid, err := tiendas.ID(ctx, m.app)
+	if err != nil {
+		return err
+	}
+	u, err := LeerUso(ctx, m.app.DB, tid)
+	if err != nil {
+		return err
+	}
+	httpx.OK(w, struct {
+		Uso
+		PagoID string `json:"pago_id,omitempty"`
+	}{u, pagoID})
+	return nil
 }

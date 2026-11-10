@@ -148,7 +148,7 @@ func (m *Modulo) actual(w http.ResponseWriter, r *http.Request) error {
 }
 
 // cambiar activa otro plan. El primer plan de pago tiene el primer mes gratis.
-// Los planes de pago se activan cuando VendiGo confirma que recibió el pago en su propia cuenta (el admin lo registra).
+// Un plan de pago crea su cobro y se activa solo cuando Culqi lo aprueba (POST /plan/pagos/{id}/culqi).
 func (m *Modulo) cambiar(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	tid, err := tiendas.ID(ctx, m.app)
@@ -166,6 +166,7 @@ func (m *Modulo) cambiar(w http.ResponseWriter, r *http.Request) error {
 	if err := m.app.DB.QueryRowContext(ctx, `SELECT nombre, precio_centimos FROM planes WHERE id=$1 AND disponible`, in.PlanID).Scan(&nombre, &precio); err != nil {
 		return httpx.Invalido("Ese plan no está disponible por ahora. Elige otro.")
 	}
+	var pagoID string
 	err = m.app.EnTransaccion(ctx, func(tx *sql.Tx) error {
 		u, err := LeerUso(ctx, tx, tid)
 		if err != nil {
@@ -174,17 +175,19 @@ func (m *Modulo) cambiar(w http.ResponseWriter, r *http.Request) error {
 		if u.Plan.ID == in.PlanID {
 			return httpx.Conflicto("mismo_plan", "Ya estás en el plan "+nombre+".")
 		}
-		var pendiente bool
-		tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM pagos_plan WHERE tienda_id=$1 AND estado='pendiente')`, tid).Scan(&pendiente)
-		if pendiente {
-			return httpx.Conflicto("pago_pendiente", "Ya tienes un pago de plan por confirmar. Espera a que VendiGo lo revise.")
+		// Un plan elegido antes y que no se llegó a pagar se reemplaza por esta elección.
+		if _, err := tx.ExecContext(ctx, `DELETE FROM pagos_plan WHERE tienda_id=$1 AND tipo='plan' AND estado='pendiente' AND referencia_tienda=''`, tid); err != nil {
+			return err
 		}
 		gratis := precio > 0 && u.PuedeMesGratis
 		usr, _ := httpx.UsuarioDe(ctx)
 		if precio > 0 && !gratis {
-			// Plan de pago: se activa cuando VendiGo confirme que recibió el pago (en su propia cuenta).
-			if _, err := tx.ExecContext(ctx, `INSERT INTO pagos_plan (tienda_id, concepto, monto_centimos, metodo, estado, tipo, plan_id)
-				VALUES ($1,$2,$3,'yape','pendiente','plan',$4)`, tid, "Plan "+nombre, precio, in.PlanID); err != nil {
+			// Plan de pago: se cobra con Culqi y se activa solo al aprobarse el cobro.
+			if !m.culqiListo() {
+				return errSinCulqi
+			}
+			if err := tx.QueryRowContext(ctx, `INSERT INTO pagos_plan (tienda_id, concepto, monto_centimos, metodo, estado, tipo, plan_id)
+				VALUES ($1,$2,$3,'culqi','pendiente','plan',$4) RETURNING id::text`, tid, "Plan "+nombre, precio, in.PlanID).Scan(&pagoID); err != nil {
 				return err
 			}
 			m.app.Auditar(ctx, tx, usr.ID, "pedir_plan", "tienda", tid, map[string]any{"plan": in.PlanID, "monto": precio})
@@ -205,7 +208,7 @@ func (m *Modulo) cambiar(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	return m.actual(w, r)
+	return m.responderUso(w, r, pagoID)
 }
 
 // AplicarPlan activa el plan de la tienda (cuando es gratis, es el mes gratis o VendiGo ya confirmó el pago).
@@ -256,21 +259,23 @@ func (m *Modulo) comprarExtra(w http.ResponseWriter, r *http.Request) error {
 	if u.VentasLimite == nil {
 		return httpx.Conflicto("ilimitado", "Tu plan tiene ventas ilimitadas.")
 	}
+	if !m.culqiListo() {
+		return errSinCulqi
+	}
+	var pagoID string
 	err = m.app.EnTransaccion(ctx, func(tx *sql.Tx) error {
-		var pendiente bool
-		tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM pagos_plan WHERE tienda_id=$1 AND estado='pendiente')`, tid).Scan(&pendiente)
-		if pendiente {
-			return httpx.Conflicto("pago_pendiente", "Ya tienes un pago por confirmar. Espera a que VendiGo lo revise.")
+		// Un pedido anterior de ventas extra que no se llegó a pagar se reemplaza por este.
+		if _, err := tx.ExecContext(ctx, `DELETE FROM pagos_plan WHERE tienda_id=$1 AND tipo='ventas_extra' AND estado='pendiente' AND referencia_tienda=''`, tid); err != nil {
+			return err
 		}
-		// Se suman cuando VendiGo confirme que recibió el pago.
-		_, err := tx.ExecContext(ctx, `INSERT INTO pagos_plan (tienda_id, concepto, monto_centimos, metodo, estado, tipo)
-			VALUES ($1,$2,$3,'yape','pendiente','ventas_extra')`, tid, fmt.Sprintf("+%d ventas", paqueteVentas), paquetePrecio)
-		return err
+		// Se cobra con Culqi y las ventas se suman solo al aprobarse el cobro.
+		return tx.QueryRowContext(ctx, `INSERT INTO pagos_plan (tienda_id, concepto, monto_centimos, metodo, estado, tipo)
+			VALUES ($1,$2,$3,'culqi','pendiente','ventas_extra') RETURNING id::text`, tid, fmt.Sprintf("+%d ventas", paqueteVentas), paquetePrecio).Scan(&pagoID)
 	})
 	if err != nil {
 		return err
 	}
-	return m.actual(w, r)
+	return m.responderUso(w, r, pagoID)
 }
 
 func (m *Modulo) pagos(w http.ResponseWriter, r *http.Request) error {
@@ -301,7 +306,7 @@ func (m *Modulo) pagos(w http.ResponseWriter, r *http.Request) error {
 		rows.Scan(&p.ID, &p.Concepto, &p.Monto, &p.Metodo, &p.Estado, &p.Ref, &p.RefT, &p.Motivo, &p.Fecha)
 		out = append(out, p)
 	}
-	// Datos para pagarle a VendiGo (los configura el admin). El plan se activa cuando VendiGo confirma el pago.
+	// Cómo pagarle a VendiGo: solo Culqi. Lo comprado se activa en cuanto Culqi aprueba el cobro.
 	httpx.OK(w, map[string]any{"pagos": out, "pago_vendigo": m.cobro(ctx)})
 	return nil
 }

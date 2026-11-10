@@ -58,7 +58,7 @@ export default function Suscripciones() {
     <>
       <Titulo
         titulo="Suscripciones"
-        detalle="Planes de las tiendas."
+        detalle="Planes de las tiendas y todo lo que le pagan a VendiGo con Culqi: planes, ventas extra, impulsos y créditos de IA."
         accion={
           <Link href="/admin/planes" className="inline-flex h-11 items-center gap-2 rounded-full bg-pino px-5 text-sm font-bold text-white">
             <Crown className="size-4" /> Gestionar planes

@@ -66,3 +66,38 @@ func TestCreditosIASoloSeEntreganConCobroDeCulqi(t *testing.T) {
 		t.Errorf("tras confirmar el cobro pendiente de Culqi debían ser %d créditos (hay %d)", 2*planes.PaqueteCreditosIA, n)
 	}
 }
+
+// Regla general: ningún cobro de VendiGo (plan, ventas extra, impulso o créditos) se activa sin un cobro de Culqi.
+// Con el cobro aprobado se activa solo, sin que el admin confirme nada.
+func TestCobrosDeVendiGoSoloSeActivanConCulqi(t *testing.T) {
+	necesitaBase(t)
+	ctx := context.Background()
+	tid := crearTienda(t)
+	admin := crearUsuario(t, "admin")
+	ventas := func() int {
+		return numero(t, `SELECT COALESCE(SUM(cantidad), 0) FROM ventas_extra WHERE tienda_id=$1`, tid)
+	}
+	id := texto(t, `INSERT INTO pagos_plan (tienda_id, concepto, monto_centimos, metodo, estado, tipo)
+		VALUES ($1, '+20 ventas', 500, 'culqi', 'pendiente', 'ventas_extra') RETURNING id::text`, tid)
+
+	// Un admin ya no puede activar a mano un pago sin cobro de Culqi (por ejemplo, un Yape informado).
+	err := intentar(t, func(tx *sql.Tx) error {
+		_, err := planes.ConfirmarPago(ctx, tx, id, "12345678", admin, "")
+		return err
+	})
+	if err == nil || !strings.Contains(err.Error(), "Culqi") {
+		t.Errorf("activar ventas extra sin cobro de Culqi debía rechazarse (error: %v)", err)
+	}
+	if n := ventas(); n != 0 {
+		t.Errorf("sin cobro de Culqi no debe sumarse ninguna venta (hay %d)", n)
+	}
+
+	// Con el cobro de Culqi aprobado se suman solas.
+	enTransaccion(t, func(tx *sql.Tx) error {
+		_, err := planes.ConfirmarPago(ctx, tx, id, "chr_ventas", "", "chr_ventas")
+		return err
+	})
+	if n := ventas(); n != 20 {
+		t.Errorf("con el cobro aprobado debían sumarse 20 ventas (hay %d)", n)
+	}
+}
