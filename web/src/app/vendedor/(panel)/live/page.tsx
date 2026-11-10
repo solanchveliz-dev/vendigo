@@ -10,7 +10,7 @@ import { Aviso, Boton, Cargando, Encabezado, Tarjeta, cn, useAvisar } from "@/co
 
 type Producto = { id: string; codigo: number | null; nombre: string; precio_centimos: number; stock: number; imagen_url: string };
 type Separado = { pedido_id: string; codigo: string; comprador: string; producto: string; total_centimos: number; grupo: string; segundos_para_pagar: number; creado_en: string };
-type Live = { activo: boolean; minutos: number; opciones_minutos: number[]; enlace: string; productos: Producto[]; tablero: Separado[] };
+type Live = { activo: boolean; verificada: boolean; minutos: number; opciones_minutos: number[]; enlace: string; productos: Producto[]; tablero: Separado[] };
 
 const COLUMNAS: { grupo: string; titulo: string; ayuda: string }[] = [
   { grupo: "separado", titulo: "Separados", ayuda: "Esperando que paguen" },
@@ -81,6 +81,12 @@ export default function ModoLive() {
     <div className="space-y-5">
       <Encabezado titulo="Modo live" detalle="Vende en tu transmisión de TikTok, Facebook o Instagram: tus clientes separan desde el enlace y tienen unos minutos para pagar." />
 
+      {!live.verificada && (
+        <Aviso tono="aviso">
+          Podrás hacer lives cuando VendiGo apruebe tu DNI: hasta entonces tu tienda no es visible para los compradores.{" "}
+          <Link href="/vendedor/verificacion" className="font-semibold underline">Ver mi verificación</Link>
+        </Aviso>
+      )}
       {live.activo && (
         <Aviso tono="ok">
           <span className="flex flex-wrap items-center gap-2"><Radio className="size-4" /> <b>Estás en vivo.</b> Di en tu transmisión: “Código 12, sepáralo en el enlace”.</span>
@@ -131,11 +137,12 @@ export default function ModoLive() {
                 <Boton variante="secundario" cargando={guardando} onClick={() => guardar(false)}>Terminar live</Boton>
               </>
             ) : (
-              <Boton variante="acento" tamano="lg" cargando={guardando} disabled={!sel.length} onClick={() => guardar(true)}><Radio className="size-4" /> Empezar live</Boton>
+              <Boton variante="acento" tamano="lg" cargando={guardando} disabled={!sel.length || !live.verificada} onClick={() => guardar(true)}><Radio className="size-4" /> Empezar live</Boton>
             )}
           </div>
         </Tarjeta>
 
+        {live.verificada && (
         <Tarjeta className="space-y-3 text-center">
           <p className="text-sm font-semibold text-tinta">Enlace para tu live</p>
           {qr && <img src={qr} alt="Código QR del enlace del live" className="mx-auto size-[200px] rounded-xl" />}
@@ -143,6 +150,7 @@ export default function ModoLive() {
           <Boton variante="secundario" tamano="sm" onClick={() => navigator.clipboard?.writeText(live.enlace).then(() => avisar("Enlace copiado."))}><Copy className="size-4" /> Copiar enlace</Boton>
           <p className="text-xs text-gris">Fíjalo en tu transmisión o muestra el QR en pantalla.</p>
         </Tarjeta>
+        )}
       </div>
 
       {live.tablero.length > 0 && (

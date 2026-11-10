@@ -11,7 +11,7 @@ import type { Tienda } from "@/lib/tipos";
 import { Area, Aviso, Boton, Campo, Entrada, Selector, cn } from "@/components/ui";
 
 type FormaEntrega = "recojo" | "agencia" | "motorizado";
-type Metodo = "yape_directo" | "plin_directo" | "tarjeta_tienda" | "transferencia_tienda";
+type Metodo = "yape_directo" | "plin_directo" | "tarjeta_tienda" | "transferencia_tienda" | "mercadopago";
 type Paso = 1 | 2 | 3;
 
 const ENTREGAS: Record<FormaEntrega, { t: string; d: string; icono: React.ReactNode }> = {
@@ -24,6 +24,7 @@ const METODO: Record<Metodo, { t: string; d: string; icono: React.ReactNode }> =
   plin_directo: { t: "Plin", d: "Al número de la tienda", icono: <Smartphone className="size-5" /> },
   tarjeta_tienda: { t: "Tarjeta", d: "Con el link de pago de la tienda", icono: <CreditCard className="size-5" /> },
   transferencia_tienda: { t: "Transferencia", d: "A la cuenta de la tienda", icono: <Landmark className="size-5" /> },
+  mercadopago: { t: "Mercado Pago", d: "Tarjeta o PagoEfectivo · se confirma solo", icono: <CreditCard className="size-5" /> },
 };
 
 const MARCA: Record<string, string> = { visa: "Visa", mastercard: "Mastercard", amex: "American Express", diners: "Diners Club" };

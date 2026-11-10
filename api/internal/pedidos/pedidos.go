@@ -411,7 +411,8 @@ func (m *Modulo) firmar(ctx context.Context, keys []string) []string {
 // acciones indica qué botones mostrar según el estado (la web y la app no deciden por su cuenta).
 func acciones(d *Detalle) []string {
 	out := []string{}
-	if d.Pago != nil && d.Estado != "rechazado" && d.Estado != "cancelado" {
+	// Con Mercado Pago el pago lo confirma Mercado Pago, no la tienda.
+	if d.Pago != nil && d.Estado != "rechazado" && d.Estado != "cancelado" && d.MetodoPago != "mercadopago" {
 		switch d.Pago.Estado {
 		case "pendiente", "comprobante_enviado", "no_recibido":
 			out = append(out, "confirmar_pago")
@@ -1213,8 +1214,11 @@ func CargarComoComprador(ctx context.Context, app *core.App, token string) (*Det
 	// Lo que puede hacer el comprador ahora.
 	d.Acciones = []string{}
 	if d.Pago != nil && d.Estado != "rechazado" && d.Estado != "cancelado" {
-		switch d.Pago.Estado {
-		case "pendiente", "no_recibido", "comprobante_enviado":
+		switch {
+		case d.MetodoPago == "mercadopago" && d.Pago.Estado == "pendiente":
+			d.Acciones = append(d.Acciones, "pagar_mercadopago") // sin captura: paga en Mercado Pago
+		case d.MetodoPago == "mercadopago":
+		case d.Pago.Estado == "pendiente" || d.Pago.Estado == "no_recibido" || d.Pago.Estado == "comprobante_enviado":
 			d.Acciones = append(d.Acciones, "enviar_comprobante")
 		}
 	}

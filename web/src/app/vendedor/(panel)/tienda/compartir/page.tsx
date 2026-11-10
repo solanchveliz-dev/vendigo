@@ -1,8 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import QRCode from "qrcode";
-import { Download, Info, Link2, Printer, Share2 } from "lucide-react";
+import { Download, Info, Link2, Printer, Share2, ShieldCheck } from "lucide-react";
 import { useApi } from "@/lib/api";
 import type { Tienda } from "@/lib/tipos";
 import { Boton, Cargando, useAvisar } from "@/components/ui";
@@ -14,9 +15,26 @@ export default function Compartir() {
   const [qr, setQr] = useState("");
 
   useEffect(() => {
-    if (t) QRCode.toDataURL(t.enlace, { margin: 1, width: 640, color: { dark: "#1c2b3a" } }).then(setQr);
+    if (t?.identidad_verificada) QRCode.toDataURL(t.enlace, { margin: 1, width: 640, color: { dark: "#1c2b3a" } }).then(setQr);
   }, [t]);
   if (!t) return <Cargando />;
+  // Sin DNI aprobado la tienda no existe para los compradores: compartir el enlace solo llevaría a una página vacía.
+  if (!t.identidad_verificada) {
+    return (
+      <div className="mx-auto max-w-xl rounded-[22px] bg-white p-6 shadow-suave ring-1 ring-linea/60">
+        <span className="grid size-11 place-items-center rounded-xl bg-aviso-claro text-aviso"><ShieldCheck className="size-5" /></span>
+        <h1 className="mt-3 text-2xl font-extrabold text-pino">Todavía no puedes compartir tu tienda</h1>
+        <p className="mt-1 text-sm text-gris">
+          Tus clientes podrán verla cuando VendiGo apruebe tu DNI. Si ya lo enviaste, lo estamos revisando; te avisaremos por SMS.
+          Mientras tanto puedes ver cómo quedará con la vista previa.
+        </p>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Link href="/vendedor/verificacion"><Boton>Ver mi verificación</Boton></Link>
+          <Link href="/vendedor/tienda/vista"><Boton variante="secundario">Vista previa</Boton></Link>
+        </div>
+      </div>
+    );
+  }
   const tienda = t;
   const corto = tienda.enlace.replace(/^https?:\/\//, "");
 

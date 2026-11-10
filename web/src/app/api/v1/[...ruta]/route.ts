@@ -25,6 +25,8 @@ async function reenviar(req: NextRequest, ruta: string[]) {
         "Content-Type": "application/json",
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
         "X-Forwarded-For": req.headers.get("x-forwarded-for") ?? "",
+        // Firma de los avisos de Mercado Pago (la API la valida).
+        ...(req.headers.get("x-signature") ? { "x-signature": req.headers.get("x-signature")!, "x-request-id": req.headers.get("x-request-id") ?? "" } : {}),
       },
       body: cuerpoCon(r),
       cache: "no-store",

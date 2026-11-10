@@ -42,6 +42,9 @@ func PermiteAvanzar(estado string) bool {
 // adelanto es lo que se paga antes de enviar cuando momento es "adelanto" (0 en los demás casos).
 func Registrar(ctx context.Context, tx *sql.Tx, pedidoID, metodo, momento string, monto, adelanto int, prueba bool) error {
 	origen, estado := "tienda", "pendiente"
+	if metodo == "mercadopago" {
+		origen = "proveedor" // lo confirma Mercado Pago, no la tienda
+	}
 	if momento == "al_recibir" {
 		estado = "paga_al_recibir"
 	}
@@ -78,6 +81,9 @@ var transiciones = map[string]map[string]bool{
 	"informado_tienda":    {"pendiente": true, "comprobante_enviado": true, "paga_al_recibir": true, "no_recibido": true, "adelanto_informado": true},
 	"adelanto_informado":  {"pendiente": true, "comprobante_enviado": true, "no_recibido": true},
 	"no_recibido":         {"pendiente": true, "comprobante_enviado": true, "paga_al_recibir": true},
+	// Solo un proveedor (Mercado Pago) llega a "confirmado" o "reembolsado": lo exige también la base de datos.
+	"confirmado":  {"pendiente": true},
+	"reembolsado": {"confirmado": true},
 }
 
 type Cambio struct {

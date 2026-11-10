@@ -244,9 +244,12 @@ func (m *Modulo) comprobante(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return err
 		}
-		var estado string
-		if err := tx.QueryRowContext(ctx, `SELECT estado FROM pedidos WHERE id=$1 FOR UPDATE`, pid).Scan(&estado); err != nil {
+		var estado, metodo string
+		if err := tx.QueryRowContext(ctx, `SELECT estado, metodo_pago FROM pedidos WHERE id=$1 FOR UPDATE`, pid).Scan(&estado, &metodo); err != nil {
 			return err
+		}
+		if metodo == "mercadopago" {
+			return httpx.Conflicto("pago_proveedor", "Este pedido se paga en Mercado Pago: no necesitas subir captura.")
 		}
 		if estado == "cancelado" || estado == "rechazado" {
 			return httpx.Conflicto("pedido_cerrado", "Este pedido ya se cerró (por ejemplo, venció el plazo para pagar). Si ya pagaste, escríbele a la tienda o usa el Libro de Reclamaciones.")

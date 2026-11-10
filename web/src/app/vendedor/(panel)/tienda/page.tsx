@@ -87,6 +87,10 @@ export default function TuTienda() {
   }
 
   async function copiar() {
+    if (!t!.identidad_verificada) {
+      avisar("Tu tienda aún no es visible para los compradores: podrás compartirla cuando VendiGo apruebe tu DNI.", "error");
+      return;
+    }
     await navigator.clipboard.writeText(t!.enlace);
     avisar("Enlace copiado");
   }
@@ -106,11 +110,17 @@ export default function TuTienda() {
       <div className="mb-5 flex flex-wrap items-center gap-3 rounded-2xl bg-pino-claro px-4 py-3 text-pino">
         <Check className="size-5 shrink-0" />
         <p className="min-w-0 flex-1 text-sm">
-          <b>Tu tienda está {pct}% completa.</b> {falta ? `Te falta agregar ${falta}.` : "¡Está lista para recibir clientes!"}
+          <b>Tu tienda está {pct}% completa.</b> {falta ? `Te falta agregar ${falta}.` : t.identidad_verificada ? "¡Está lista para recibir clientes!" : "Será visible para tus clientes cuando VendiGo apruebe tu DNI."}
         </p>
-        <Link href="/vendedor/tienda/compartir">
-          <Boton tamano="sm">Compartir tienda</Boton>
-        </Link>
+        {t.identidad_verificada ? (
+          <Link href="/vendedor/tienda/compartir">
+            <Boton tamano="sm">Compartir tienda</Boton>
+          </Link>
+        ) : (
+          <Link href="/vendedor/verificacion">
+            <Boton tamano="sm" variante="secundario">Ver mi verificación</Boton>
+          </Link>
+        )}
       </div>
 
       {error && <Aviso tono="error" className="mb-5">{error}</Aviso>}

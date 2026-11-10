@@ -131,6 +131,13 @@ func Crear(ctx context.Context, app *core.App, tx *sql.Tx, in PedidoNuevo) (stri
 		if transf == "" && !in.Prueba {
 			return "", "", httpx.Invalido("Esta tienda no recibe transferencias.")
 		}
+	case "mercadopago":
+		// Opcional por tienda: solo si vinculó su cuenta de Mercado Pago. El pago se confirma solo.
+		var vinculada bool
+		tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM tiendas_mercadopago WHERE tienda_id=$1)`, in.TiendaID).Scan(&vinculada)
+		if !vinculada || in.Prueba {
+			return "", "", httpx.Invalido("Esta tienda no recibe pagos con Mercado Pago.")
+		}
 	default:
 		return "", "", httpx.Invalido("Elige cómo vas a pagar.")
 	}
@@ -151,6 +158,9 @@ func Crear(ctx context.Context, app *core.App, tx *sql.Tx, in PedidoNuevo) (stri
 	}
 	if in.PagoAntes && in.MomentoPago == "al_recibir" {
 		in.MomentoPago = "antes"
+	}
+	if in.MetodoPago == "mercadopago" {
+		in.MomentoPago = "antes" // con Mercado Pago se paga completo en línea
 	}
 
 	type linea struct {

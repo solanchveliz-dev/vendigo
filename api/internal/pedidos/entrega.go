@@ -155,6 +155,11 @@ func (m *Modulo) informarPago(w http.ResponseWriter, r *http.Request) error {
 		if estado == "rechazado" || estado == "cancelado" {
 			return httpx.Conflicto("estado_invalido", "Este pedido ya se cerró.")
 		}
+		var metodo string
+		tx.QueryRowContext(ctx, `SELECT metodo_pago FROM pedidos WHERE id::text=$1`, pid).Scan(&metodo)
+		if metodo == "mercadopago" {
+			return httpx.Conflicto("pago_proveedor", "Este pago lo confirma Mercado Pago automáticamente.")
+		}
 		c := pagos.Cambio{Estado: "informado_tienda", Detalle: "La tienda informó que recibió el pago.", Usuario: u.ID, Referencia: strings.TrimSpace(in.Referencia)}
 		texto := "La tienda confirmó que recibió tu pago."
 		var momento, actual string

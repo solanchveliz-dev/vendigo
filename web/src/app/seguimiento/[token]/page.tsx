@@ -33,6 +33,7 @@ function Dato({ k, v, copiar, grande }: { k: string; v: string; copiar?: (v: str
 
 // Datos para pagarle a la tienda según el método que eligió el comprador.
 function DatosPago({ metodo, t, monto, copiar }: { metodo: string; t: TiendaPago; monto: number; copiar: (v: string) => void }) {
+  if (metodo === "mercadopago") return null; // se paga con el botón de Mercado Pago (más abajo)
   if (metodo === "tarjeta_tienda" && t.tarjeta_link) {
     return (
       <div className="mt-3 rounded-2xl bg-crema/70 p-4">
@@ -130,6 +131,13 @@ export default function Seguimiento({ params }: { params: Promise<{ token: strin
   }, [token]);
   const { datos, error, recargar } = useApi<Datos>(`/seguimiento/${token}`);
   const avisar = useAvisar();
+  // Volvió de Mercado Pago (?payment_id=…): se pide revisar el pago en la API sin esperar el aviso (webhook).
+  useEffect(() => {
+    const pago = new URLSearchParams(window.location.search).get("payment_id");
+    if (!pago) return;
+    api.post(`/seguimiento/${token}/mercadopago/verificar`, { payment_id: pago }).catch(() => null).finally(() => recargar());
+    window.history.replaceState(null, "", window.location.pathname);
+  }, [token, recargar]);
   const archivo = useRef<HTMLInputElement>(null);
   const fotos = useRef<HTMLInputElement>(null);
   const [ref, setRef] = useState("");
@@ -275,6 +283,14 @@ export default function Seguimiento({ params }: { params: Promise<{ token: strin
                 )}
                 <DatosPago metodo={pago.metodo} t={t} monto={montoAhora} copiar={copiar} />
 
+                {puede("pagar_mercadopago") && (
+                  <div className="mt-4 space-y-2 border-t border-linea pt-4">
+                    <Boton cargando={ocupado === "mp"} onClick={() => hacer("mp", async () => { const r = await api.post<{ url: string }>(`/seguimiento/${token}/mercadopago`, {}); window.location.href = r.url; })}>
+                      <CreditCard className="size-4" /> Pagar {soles(montoAhora)} con Mercado Pago
+                    </Boton>
+                    <p className="text-xs text-gris">Pagas con tarjeta o PagoEfectivo en Mercado Pago. El dinero va directo a {t.nombre} y el pago se confirma solo: no necesitas subir captura.</p>
+                  </div>
+                )}
                 {puede("enviar_comprobante") && (
                   <div className="mt-4 space-y-3 border-t border-linea pt-4">
                     <p className="text-sm font-semibold text-tinta">Envía tu comprobante</p>

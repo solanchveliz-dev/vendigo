@@ -231,6 +231,8 @@ export default function ComoTePagan() {
           </div>
         </Metodo>
 
+        <MercadoPago />
+
         <div className="flex gap-3 rounded-2xl bg-pino-claro px-4 py-3 text-sm text-pino">
           <ShieldCheck className="mt-0.5 size-5 shrink-0" />
           <span>Tus números, QR, link y cuenta solo los ve el cliente después de hacer su pedido, en su página de seguimiento. No aparecen en tu tienda pública.</span>
@@ -244,6 +246,49 @@ export default function ComoTePagan() {
         </div>
 
         <Boton tamano="lg" onClick={guardar} cargando={guardando}>Guardar</Boton>
+      </div>
+    </div>
+  );
+}
+
+type EstadoMP = { disponible: boolean; vinculada: boolean; vinculada_en?: string; url_autorizacion?: string };
+
+// Mercado Pago es OPCIONAL: la tienda vincula su propia cuenta y sus clientes pueden pagar con tarjeta o
+// PagoEfectivo; el pago se confirma solo. El dinero va directo a la tienda: VendiGo no cobra comisión.
+function MercadoPago() {
+  const avisar = useAvisar();
+  const { datos, recargar } = useApi<EstadoMP>("/vendedor/mercadopago");
+  const [ocupado, setOcupado] = useState(false);
+  if (!datos || !datos.disponible) return null;
+  async function desvincular() {
+    setOcupado(true);
+    try {
+      const r = await api.del<{ mensaje: string }>("/vendedor/mercadopago");
+      avisar(r.mensaje);
+      recargar();
+    } catch (e) {
+      avisar((e as ErrorApi).message, "error");
+    } finally {
+      setOcupado(false);
+    }
+  }
+  return (
+    <div className="rounded-[22px] bg-white p-5 shadow-suave ring-1 ring-linea/60">
+      <div className="flex flex-wrap items-center gap-3">
+        <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-crema text-tinta"><CreditCard className="size-5" /></span>
+        <div className="min-w-0 flex-1">
+          <b className="block text-tinta">Mercado Pago <span className="font-normal text-gris">(opcional)</span></b>
+          <span className="text-sm text-gris">
+            {datos.vinculada
+              ? "Vinculada. Tus clientes pueden pagar con tarjeta o PagoEfectivo y el pago se confirma solo."
+              : "Vincula tu cuenta para cobrar con tarjeta o PagoEfectivo sin revisar capturas. Mercado Pago te cobra su comisión por venta; VendiGo no cobra nada."}
+          </span>
+        </div>
+        {datos.vinculada ? (
+          <Boton variante="secundario" tamano="sm" cargando={ocupado} onClick={desvincular}>Desvincular</Boton>
+        ) : (
+          datos.url_autorizacion && <a href={datos.url_autorizacion}><Boton tamano="sm">Vincular Mercado Pago</Boton></a>
+        )}
       </div>
     </div>
   );

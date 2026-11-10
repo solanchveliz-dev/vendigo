@@ -204,6 +204,14 @@ func (m *Modulo) leer(ctx context.Context, where string, arg any) (Tienda, error
 	if t.TransfCuenta != "" || t.TransfCCI != "" {
 		t.MetodosPago = append(t.MetodosPago, "transferencia_tienda")
 	}
+	// Mercado Pago es opcional: aparece solo si VendiGo lo tiene configurado y la tienda vinculó su cuenta.
+	if m.app.Cfg.MercadoPagoListo() {
+		var mp bool
+		m.app.DB.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM tiendas_mercadopago WHERE tienda_id=$1)`, t.ID).Scan(&mp)
+		if mp {
+			t.MetodosPago = append(t.MetodosPago, "mercadopago")
+		}
+	}
 	if t.HistoriaKey != nil {
 		t.HistoriaURL = m.app.Archivos.URLPublica(*t.HistoriaKey)
 	}

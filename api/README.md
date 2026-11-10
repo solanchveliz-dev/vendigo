@@ -93,3 +93,17 @@ Por defecto todo es gratis y simulado (`OTP_CANAL=log`, `IA_PROVEEDOR=simulado`)
    un SMS que no llega en sandbox = el número no está verificado).
 
 Para volver al modo gratis basta con regresar `OTP_CANAL=log` e `IA_PROVEEDOR=simulado`.
+
+## Mercado Pago (opcional por tienda)
+
+Cada tienda puede vincular **su propia** cuenta de Mercado Pago (Split de Pagos 1:1 con OAuth). El comprador paga en
+el checkout de Mercado Pago, el dinero va directo a la tienda y VendiGo no cobra comisión (`marketplace_fee` = 0).
+El pago se confirma **solo** cuando la API lo consulta en Mercado Pago con el token de la tienda: el webhook avisa,
+pero nunca basta por sí solo. Yape, Plin y transferencia siguen como pago manual.
+
+1. En Mercado Pago Developers → Tus integraciones, crea la aplicación de VendiGo (Checkout Pro, modelo marketplace).
+2. URL de redireccionamiento: `<WEB_URL>/vendedor/mercadopago`. En Webhooks copia la clave secreta.
+3. Completa `MP_CLIENT_ID`, `MP_CLIENT_SECRET` y `MP_WEBHOOK_SECRET` en `api/.env` y deja `MP_PRUEBA=1` mientras pruebes
+   con cuentas de prueba. El webhook necesita una URL pública (`<WEB_URL>/api/v1/mercadopago/webhook`): en local no
+   llega; pruébalo en el servidor.
+4. La vendedora toca **Vincular Mercado Pago** en Mi tienda → Cómo te pagan.

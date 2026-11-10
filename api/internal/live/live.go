@@ -94,12 +94,12 @@ func (m *Modulo) panel(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	var activo bool
+	var activo, verificada bool
 	var minutos int
 	var desde *time.Time
 	var slug string
-	if err := m.app.DB.QueryRowContext(ctx, `SELECT live_activo, live_minutos, live_desde, slug FROM tiendas WHERE id=$1`, tid).
-		Scan(&activo, &minutos, &desde, &slug); err != nil {
+	if err := m.app.DB.QueryRowContext(ctx, `SELECT live_activo, live_minutos, live_desde, slug, tienda_identidad_verificada(id) FROM tiendas WHERE id=$1`, tid).
+		Scan(&activo, &minutos, &desde, &slug, &verificada); err != nil {
 		return err
 	}
 	prods, err := m.productos(ctx, tid, false)
@@ -134,7 +134,7 @@ func (m *Modulo) panel(w http.ResponseWriter, r *http.Request) error {
 		tablero = append(tablero, s)
 	}
 	httpx.OK(w, map[string]any{
-		"activo": activo, "minutos": minutos, "opciones_minutos": Minutos, "desde": desde,
+		"activo": activo, "minutos": minutos, "opciones_minutos": Minutos, "desde": desde, "verificada": verificada,
 		"enlace": m.app.Cfg.WebURL + "/t/" + slug + "/live", "productos": prods, "tablero": tablero,
 	})
 	return rows.Err()
@@ -181,6 +181,14 @@ func (m *Modulo) guardar(w http.ResponseWriter, r *http.Request) error {
 	}
 	if in.Activo && len(in.Productos) == 0 {
 		return httpx.Invalido("Elige al menos un producto para tu live.")
+	}
+	if in.Activo {
+		// Sin DNI aprobado la tienda no es visible: el enlace del live no le abriría a nadie.
+		var verificada bool
+		m.app.DB.QueryRowContext(ctx, `SELECT tienda_identidad_verificada($1)`, tid).Scan(&verificada)
+		if !verificada {
+			return httpx.Conflicto("tienda_sin_verificar", "Podrás hacer lives cuando VendiGo apruebe tu DNI: hasta entonces tu tienda no es visible para los compradores.")
+		}
 	}
 	err = m.app.EnTransaccion(ctx, func(tx *sql.Tx) error {
 		// Al prender el live empieza un tablero nuevo; si ya estaba prendido, se conserva.

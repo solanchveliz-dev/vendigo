@@ -19,6 +19,7 @@ import (
 	"github.com/solanchveliz-dev/vendigo/api/internal/ia"
 	"github.com/solanchveliz-dev/vendigo/api/internal/libro"
 	"github.com/solanchveliz-dev/vendigo/api/internal/live"
+	"github.com/solanchveliz-dev/vendigo/api/internal/mercadopago"
 	"github.com/solanchveliz-dev/vendigo/api/internal/pedidos"
 	"github.com/solanchveliz-dev/vendigo/api/internal/planes"
 	"github.com/solanchveliz-dev/vendigo/api/internal/productos"
@@ -34,6 +35,7 @@ func registrarModulos(app *core.App, api chi.Router) {
 	mBilletera := billetera.Nuevo(app)
 	mPlanes := planes.Nuevo(app)
 	mLive := live.Nuevo(app)
+	mMP := mercadopago.Nuevo(app)
 
 	var proveedor ia.Proveedor = ia.Simulado{}
 	if app.Cfg.IAProveedor == "bedrock" {
@@ -61,6 +63,7 @@ func registrarModulos(app *core.App, api chi.Router) {
 		mProductos.RutasPublicas(r)
 		mPlanes.RutasPublicas(r)
 		mLive.RutasPublicas(r)
+		mMP.RutasPublicas(r)
 	})
 	// Libro de Reclamaciones y compras sin cuenta: públicos y con un límite más estricto para evitar abuso.
 	mLibro := libro.Nuevo(app)
@@ -88,6 +91,7 @@ func registrarModulos(app *core.App, api chi.Router) {
 			mPlanes.RutasVendedor(v)
 			mIA.RutasVendedor(v)
 			mLive.RutasVendedor(v)
+			mMP.RutasVendedor(v)
 		})
 
 		// Panel del administrador: solo cuentas con rol admin (no se pueden crear desde el registro).
