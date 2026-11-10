@@ -74,7 +74,7 @@ export default async function ProductoPublico({ params, searchParams }: Params &
         <nav className="flex items-center gap-1.5 py-6 text-sm text-gris">
           <Link href="/" className="shrink-0 hover:text-tinta">Inicio</Link>
           <ChevronRight className="size-3.5 shrink-0" />
-          <Link href={`/t/${t.slug}`} className="shrink-0 hover:text-tinta">{t.nombre}</Link>
+          <Link href={`/t/${t.slug}${vista ? "?vista=1" : ""}`} className="shrink-0 hover:text-tinta">{t.nombre}</Link>
           <ChevronRight className="size-3.5 shrink-0" />
           <span className="truncate text-tinta">{p.nombre}</span>
         </nav>
@@ -83,7 +83,7 @@ export default async function ProductoPublico({ params, searchParams }: Params &
           <GaleriaProducto producto={p} />
 
           <div>
-            <Link href={`/t/${t.slug}`} className="flex items-center gap-3 rounded-2xl bg-white px-4 py-3 ring-1 ring-linea/60 transition hover:ring-pino/30">
+            <Link href={`/t/${t.slug}${vista ? "?vista=1" : ""}`} className="flex items-center gap-3 rounded-2xl bg-white px-4 py-3 ring-1 ring-linea/60 transition hover:ring-pino/30">
               <span className="size-11 shrink-0 overflow-hidden rounded-full bg-crema">
                 {t.logo_url ? (
                   <img src={t.logo_url} alt="" className="size-full object-cover" />
@@ -113,7 +113,7 @@ export default async function ProductoPublico({ params, searchParams }: Params &
               )}
             </p>
 
-            <CompraProducto producto={p} slug={t.slug} pausada={t.pausada} />
+            <CompraProducto producto={p} slug={t.slug} pausada={t.pausada} vista={vista} />
 
             <div className="mt-6 grid gap-3 sm:grid-cols-3">
               {confianza.map((c) => (

@@ -110,6 +110,7 @@ type Tienda struct {
 	PagoTitular string   `json:"pago_titular"`
 	PagoQRKey   *string  `json:"pago_qr_key"`
 	PagoQRURL   string   `json:"pago_qr_url"`
+	TarjetaLink string   `json:"tarjeta_link"` // link de pago con tarjeta de la propia tienda (opcional)
 	MetodosPago []string `json:"metodos_pago"`
 }
 
@@ -138,7 +139,7 @@ const columnas = `id, nombre, slug, rubro, descripcion, ciudad, distrito, logo_k
 	correo, horario, politicas,
 	instrucciones_recojo, dias_recojo, adelanto_pct, costo_agencia_centimos, entrega_otra, descripcion_otra, pausada, tema_color, tema_fuente, prefijo_pedido,
 	destacado_id, aviso, historia, historia_foto_key, vende_desde,
-	yape_numero, plin_numero, pago_titular, pago_qr_key, recojo_pago, motorizado_pago, motorizado_adelanto_pct`
+	yape_numero, plin_numero, pago_titular, pago_qr_key, recojo_pago, motorizado_pago, motorizado_adelanto_pct, tarjeta_link`
 
 func (m *Modulo) leer(ctx context.Context, where string, arg any) (Tienda, error) {
 	var t Tienda
@@ -150,7 +151,7 @@ func (m *Modulo) leer(ctx context.Context, where string, arg any) (Tienda, error
 		&t.Correo, &t.Horario, &t.Politicas,
 		&e.Instrucciones, pq.Array(&e.DiasRecojo), &e.AdelantoPct, &e.CostoAgencia, &e.Otra, &e.DescripcionOtra, &t.Pausada, &t.TemaColor, &t.TemaFuente, &t.Prefijo,
 		&t.DestacadoID, &t.Aviso, &t.Historia, &t.HistoriaKey, &t.VendeDesde,
-		&t.YapeNumero, &t.PlinNumero, &t.PagoTitular, &t.PagoQRKey, &e.RecojoPago, &e.MotorizadoPago, &e.MotoAdelantoPct)
+		&t.YapeNumero, &t.PlinNumero, &t.PagoTitular, &t.PagoQRKey, &e.RecojoPago, &e.MotorizadoPago, &e.MotoAdelantoPct, &t.TarjetaLink)
 	if core.SinFilas(err) {
 		return t, httpx.ErrNoEncontrado
 	}
@@ -172,6 +173,9 @@ func (m *Modulo) leer(ctx context.Context, where string, arg any) (Tienda, error
 	}
 	if t.PlinNumero != "" {
 		t.MetodosPago = append(t.MetodosPago, "plin_directo")
+	}
+	if t.TarjetaLink != "" {
+		t.MetodosPago = append(t.MetodosPago, "tarjeta_tienda")
 	}
 	if t.HistoriaKey != nil {
 		t.HistoriaURL = m.app.Archivos.URLPublica(*t.HistoriaKey)
@@ -497,7 +501,7 @@ func (m *Modulo) publica(w http.ResponseWriter, r *http.Request) error {
 	// El WhatsApp y el correo son solo para que VendiGo avise a la tienda: no se muestran a los compradores.
 	// Los datos de Yape/Plin se muestran recién en el seguimiento del pedido, al momento de pagar.
 	t.Whatsapp, t.Correo = "", ""
-	t.YapeNumero, t.PlinNumero, t.PagoTitular, t.PagoQRKey, t.PagoQRURL = "", "", "", nil, ""
+	t.YapeNumero, t.PlinNumero, t.PagoTitular, t.PagoQRKey, t.PagoQRURL, t.TarjetaLink = "", "", "", nil, "", ""
 	httpx.OK(w, t)
 	return nil
 }

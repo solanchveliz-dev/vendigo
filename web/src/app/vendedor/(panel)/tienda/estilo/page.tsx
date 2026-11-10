@@ -66,7 +66,7 @@ export default function EstiloTienda() {
         <ArrowLeft className="size-4" /> Tu tienda
       </Link>
       <Encabezado titulo="Estilo de tu tienda" detalle="Dale tu toque: elige tus colores, la letra de los títulos y cómo se numeran tus pedidos.">
-        <a href={`/t/${t.slug}`} target="_blank" rel="noreferrer"><Boton variante="secundario">Ver mi tienda</Boton></a>
+        <Link href="/vendedor/tienda/vista"><Boton variante="secundario">Ver mi tienda</Boton></Link>
         <Boton onClick={guardar} cargando={guardando} disabled={!cambiado}>Guardar cambios</Boton>
       </Encabezado>
 

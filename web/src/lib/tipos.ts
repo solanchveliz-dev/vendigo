@@ -48,6 +48,7 @@ export type Tienda = {
   pago_titular: string;
   pago_qr_key: string | null;
   pago_qr_url: string;
+  tarjeta_link: string;
   metodos_pago: string[];
   tema_color: string;
   tema_fuente: string;

@@ -42,7 +42,7 @@ export function GaleriaProducto({ producto: p }: { producto: Producto }) {
 }
 
 // Precio, opciones, cantidad y botones de compra.
-export function CompraProducto({ producto: p, slug, pausada = false }: { producto: Producto; slug: string; pausada?: boolean }) {
+export function CompraProducto({ producto: p, slug, pausada = false, vista = false }: { producto: Producto; slug: string; pausada?: boolean; vista?: boolean }) {
   const router = useRouter();
   const [agregado, setAgregado] = useState(false);
   const [opcion, setOpcion] = useState(() => Math.max(0, p.variantes.findIndex((v) => v.stock > 0)));
@@ -143,6 +143,7 @@ export function CompraProducto({ producto: p, slug, pausada = false }: { product
       <div className="mt-5 flex gap-3">
         <button
           onClick={() => {
+            if (vista) return pronto("Vista previa: así ven el botón tus clientes. Aquí no se puede comprar.");
             agregar();
             router.push(`/t/${slug}/comprar`);
           }}
@@ -153,6 +154,7 @@ export function CompraProducto({ producto: p, slug, pausada = false }: { product
         </button>
         <button
           onClick={() => {
+            if (vista) return pronto("Vista previa: así ven el botón tus clientes. Aquí no se puede comprar.");
             agregar();
             setAgregado(true);
           }}
@@ -163,7 +165,7 @@ export function CompraProducto({ producto: p, slug, pausada = false }: { product
           <ShoppingBag className="size-5 shrink-0" /> <span className="hidden sm:inline">Agregar</span>
         </button>
         <button
-          onClick={() => pronto("Pronto podrás guardar favoritos con tu cuenta.")}
+          onClick={() => pronto(vista ? "Vista previa: aquí no se puede comprar." : "Pronto podrás guardar favoritos con tu cuenta.")}
           className="grid size-[52px] shrink-0 place-items-center rounded-full bg-white text-tinta ring-1 ring-linea transition hover:text-coral"
           aria-label="Guardar en favoritos"
         >

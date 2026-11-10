@@ -35,6 +35,7 @@ export const DEVOLUCION: Record<Devolucion["estado"], string> = {
 export const METODOS: Record<string, string> = {
   yape_directo: "Yape a la tienda",
   plin_directo: "Plin a la tienda",
+  tarjeta_tienda: "Tarjeta (link de la tienda)",
   efectivo: "Efectivo (pedido antiguo)",
   yape: "Yape",
   tarjeta: "Tarjeta",

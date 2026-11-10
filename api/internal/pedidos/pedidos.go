@@ -1077,6 +1077,7 @@ type TiendaPago struct {
 	Plin     string `json:"plin_numero"`
 	Titular  string `json:"pago_titular"`
 	QRURL    string `json:"pago_qr_url"`
+	Tarjeta  string `json:"tarjeta_link"`
 	Whatsapp string `json:"whatsapp"`
 }
 
@@ -1121,8 +1122,8 @@ func CargarComoComprador(ctx context.Context, app *core.App, token string) (*Det
 	}
 	var t TiendaPago
 	var qr sql.NullString
-	app.DB.QueryRowContext(ctx, `SELECT nombre, slug, yape_numero, plin_numero, pago_titular, pago_qr_key, whatsapp FROM tiendas WHERE id=$1`, tid).
-		Scan(&t.Nombre, &t.Slug, &t.Yape, &t.Plin, &t.Titular, &qr, &t.Whatsapp)
+	app.DB.QueryRowContext(ctx, `SELECT nombre, slug, yape_numero, plin_numero, pago_titular, pago_qr_key, whatsapp, tarjeta_link FROM tiendas WHERE id=$1`, tid).
+		Scan(&t.Nombre, &t.Slug, &t.Yape, &t.Plin, &t.Titular, &qr, &t.Whatsapp, &t.Tarjeta)
 	if qr.Valid {
 		t.QRURL = app.Archivos.URLPublica(qr.String)
 	}

@@ -8,7 +8,7 @@ import Link from "next/link";
 type Filtro = "todos" | "nuevo" | "vendidos";
 
 // Productos de la tienda con filtros: Todos, Lo nuevo y Más vendidos, y las categorías propias de la tienda.
-export function Catalogo({ productos, slug }: { productos: Producto[]; slug: string }) {
+export function Catalogo({ productos, slug, vista = false }: { productos: Producto[]; slug: string; vista?: boolean }) {
   const [filtro, setFiltro] = useState<Filtro>("todos");
   const [categoria, setCategoria] = useState("");
   // Las categorías salen del tipo de cada producto (Aretes, Collares…). Solo se muestran si hay 2 o más.
@@ -64,7 +64,7 @@ export function Catalogo({ productos, slug }: { productos: Producto[]; slug: str
         {lista.map((p) => (
           <Link
             key={p.id}
-            href={`/t/${slug}/p/${p.id}`}
+            href={`/t/${slug}/p/${p.id}${vista ? "?vista=1" : ""}`}
             className="group overflow-hidden rounded-2xl bg-white shadow-suave ring-1 ring-linea/50 transition hover:-translate-y-0.5"
           >
             <div className="relative aspect-square bg-arena">

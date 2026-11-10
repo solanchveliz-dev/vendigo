@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { use, useRef, useState } from "react";
-import { Check, Copy, Flag, ImagePlus, KeyRound, MessageCircle, PartyPopper, ShieldCheck } from "lucide-react";
+import { use, useEffect, useRef, useState } from "react";
+import { Check, ChevronRight, Copy, CreditCard, ExternalLink, Flag, ImagePlus, KeyRound, MessageCircle, ShieldCheck } from "lucide-react";
 import { api, ErrorApi, useApi } from "@/lib/api";
 import { fecha, soles } from "@/lib/formato";
 import type { PedidoDetalle } from "@/lib/tipos";
@@ -12,7 +12,9 @@ import { DEVOLUCION, EtiquetaPago } from "@/components/pagos/estado";
 import { CabeceraPublica } from "@/components/tienda/cabecera";
 import { PieLegal } from "@/components/legal/pie";
 
-type TiendaPago = { nombre: string; slug: string; yape_numero: string; plin_numero: string; pago_titular: string; pago_qr_url: string; whatsapp: string };
+type TiendaPago = { nombre: string; slug: string; yape_numero: string; plin_numero: string; pago_titular: string; pago_qr_url: string; whatsapp: string; tarjeta_link: string };
+
+const ENTREGA: Record<string, string> = { recojo: "Recojo en tienda", agencia: "Envío por agencia", motorizado: "Delivery con motorizado" };
 type Datos = { pedido: PedidoDetalle; tienda: TiendaPago };
 
 const MOTIVOS: Record<string, string> = { no_llego: "No me llegó", danado: "Llegó dañado", distinto: "Es distinto a lo publicado", incompleto: "Llegó incompleto", otro: "Otro problema" };
@@ -37,7 +39,15 @@ function Seccion({ titulo, children }: { titulo: string; children: React.ReactNo
 
 export default function Seguimiento({ params }: { params: Promise<{ token: string }> }) {
   const { token } = use(params);
-  const [nuevo] = useState(() => typeof window !== "undefined" && new URLSearchParams(window.location.search).get("nuevo") === "1");
+  const [nuevo, setNuevo] = useState(false);
+  // Recién creado: lo marca el checkout (la URL puede actualizarse después del primer render).
+  useEffect(() => {
+    let marca = false;
+    try {
+      marca = sessionStorage.getItem(`vendigo:nuevo:${token}`) === "1";
+    } catch {}
+    setNuevo(marca || new URLSearchParams(window.location.search).get("nuevo") === "1");
+  }, [token]);
   const { datos, error, recargar } = useApi<Datos>(`/seguimiento/${token}`);
   const avisar = useAvisar();
   const archivo = useRef<HTMLInputElement>(null);
@@ -113,29 +123,54 @@ export default function Seguimiento({ params }: { params: Promise<{ token: strin
       <CabeceraPublica />
       <main className="mx-auto max-w-[1000px] space-y-5 px-5 pb-16 pt-6 sm:px-10">
         {nuevo && (
-          <div className="flex items-start gap-3 rounded-[22px] bg-pino p-5 text-white">
-            <PartyPopper className="mt-0.5 size-6 shrink-0 text-coral" />
-            <div className="text-sm">
-              <p className="font-display text-lg font-extrabold">¡Pedido registrado!</p>
-              <p className="text-white/85">Guarda este enlace: aquí ves cómo va tu pedido. También te lo enviamos por SMS.</p>
-              <button onClick={() => copiar(window.location.href.replace("?nuevo=1", ""))} className="mt-2 inline-flex items-center gap-1.5 font-bold text-coral"><Copy className="size-4" /> Copiar enlace</button>
-            </div>
-          </div>
+          <>
+            <ol className="flex flex-wrap items-center gap-2 text-sm">
+              {["Tu pedido", "Entrega", "Pago", "Listo"].map((n, k) => (
+                <li key={n} className="flex items-center gap-2">
+                  <span className="grid size-6 place-items-center rounded-full bg-pino text-white"><Check className="size-3.5" /></span>
+                  <span className={k === 3 ? "font-bold text-tinta" : "text-gris"}>{n}</span>
+                  {k < 3 && <span className="mx-1 h-0.5 w-10 rounded-full bg-pino sm:w-16" />}
+                </li>
+              ))}
+            </ol>
+            <section className="rounded-[22px] bg-white p-6 shadow-suave ring-1 ring-linea/60">
+              <div className="flex items-center gap-4">
+                <span className="grid size-14 shrink-0 place-items-center rounded-full bg-pino text-white"><Check className="size-7" /></span>
+                <div>
+                  <h1 className="text-[28px] font-extrabold leading-tight text-tinta">Pedido {p.codigo}</h1>
+                  <p className="text-sm text-gris">Enviado a {t.nombre}. Te avisaremos por SMS en cada paso.</p>
+                </div>
+              </div>
+              {pago && <div className="mt-3"><EtiquetaPago estado={pago.estado} texto={pago.texto} /></div>}
+              <p className="mt-4 rounded-xl bg-crema/70 px-4 py-3 text-sm text-tinta">
+                Guarda este enlace: es la única forma de ver tu pedido (no necesitas cuenta).{" "}
+                <button onClick={() => copiar(window.location.href.replace("?nuevo=1", ""))} className="inline-flex items-center gap-1 font-bold text-pino"><Copy className="size-3.5" /> Copiar enlace</button>
+              </p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <a href="#seguimiento"><Boton>Ver mi pedido</Boton></a>
+                <Link href={`/t/${t.slug}`}><Boton variante="secundario">Seguir comprando</Boton></Link>
+              </div>
+            </section>
+          </>
         )}
 
-        <div className="flex flex-wrap items-end justify-between gap-3">
+        <div id="seguimiento" className="flex flex-wrap items-end justify-between gap-3 pt-2">
           <div>
+            <nav className="mb-3 flex items-center gap-1.5 text-sm text-gris">
+              <Link href={`/t/${t.slug}`} className="hover:text-tinta">{t.nombre}</Link> <ChevronRight className="size-3.5" /> <span>{p.codigo}</span> <ChevronRight className="size-3.5" /> <span className="text-tinta">Seguimiento</span>
+            </nav>
             <div className="mb-2 h-1 w-8 rounded-full bg-coral" />
-            <h1 className="text-[30px] font-extrabold leading-tight text-pino">Pedido {p.codigo}</h1>
-            <p className="text-sm text-gris">
-              <Link href={`/t/${t.slug}`} className="font-semibold text-tinta hover:text-pino">{t.nombre}</Link> · {fecha(p.creado_en, true)} · {p.estado_texto}
-            </p>
+            <h1 className="text-[34px] font-extrabold leading-tight text-pino">Seguimiento de {p.codigo}</h1>
+            <p className="text-sm text-gris">{ENTREGA[p.entrega] ?? p.entrega} · {t.nombre} · {fecha(p.creado_en, true)}</p>
           </div>
-          {t.whatsapp && (
-            <a href={`https://wa.me/51${t.whatsapp}`} target="_blank" rel="noreferrer">
-              <Boton variante="secundario"><MessageCircle className="size-4" /> Escribir a la tienda</Boton>
-            </a>
-          )}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-xs font-bold text-tinta ring-1 ring-linea"><span className="size-1.5 rounded-full bg-pino" /> {p.estado_texto}</span>
+            {t.whatsapp && (
+              <a href={`https://wa.me/51${t.whatsapp}`} target="_blank" rel="noreferrer">
+                <Boton variante="secundario" tamano="sm"><MessageCircle className="size-4" /> Escribir a la tienda</Boton>
+              </a>
+            )}
+          </div>
         </div>
 
         <div className="grid items-start gap-5 lg:grid-cols-[1fr_360px]">
@@ -147,7 +182,7 @@ export default function Seguimiento({ params }: { params: Promise<{ token: strin
                   <p className="text-sm text-gris">Enviaste tu comprobante. La tienda lo revisa en su app y, cuando lo confirme, prepara tu pedido. Si te equivocaste, puedes enviarlo otra vez.</p>
                 ) : (
                   <p className="text-sm text-gris">
-                    Paga <b className="text-tinta">{soles(montoAhora)}</b>{esAdelanto && <> de adelanto (el resto, {soles(pago.monto_centimos - montoAhora)}, al recibir)</>} directo a {t.nombre} por Yape o Plin. VendiGo no recibe este dinero.
+                    Paga <b className="text-tinta">{soles(montoAhora)}</b>{esAdelanto && <> de adelanto (el resto, {soles(pago.monto_centimos - montoAhora)}, al recibir)</>} directo a {t.nombre}. VendiGo no recibe este dinero.
                   </p>
                 )}
                 <div className="mt-3 grid gap-3 sm:grid-cols-2">
@@ -158,6 +193,15 @@ export default function Seguimiento({ params }: { params: Promise<{ token: strin
                       <button onClick={() => copiar(t.yape_numero)} className="mt-1 inline-flex items-center gap-1 text-xs font-bold text-pino"><Copy className="size-3.5" /> Copiar</button>
                     </div>
                   )}
+                  {pago.metodo === "tarjeta_tienda" && t.tarjeta_link && (
+                    <div className="rounded-2xl bg-crema/70 p-4 sm:col-span-2">
+                      <p className="text-xs text-gris">Tarjeta</p>
+                      <p className="text-sm text-tinta">Paga con el link de pago de {t.nombre}. El cobro lo hace la tienda, no VendiGo.</p>
+                      <a href={t.tarjeta_link} target="_blank" rel="noreferrer noopener" className="mt-2 inline-flex">
+                        <Boton tamano="sm"><CreditCard className="size-4" /> Pagar {soles(montoAhora)} con tarjeta <ExternalLink className="size-3.5" /></Boton>
+                      </a>
+                    </div>
+                  )}
                   {pago.metodo === "plin_directo" && t.plin_numero && (
                     <div className="rounded-2xl bg-crema/70 p-4">
                       <p className="text-xs text-gris">Plin</p>
@@ -165,12 +209,12 @@ export default function Seguimiento({ params }: { params: Promise<{ token: strin
                       <button onClick={() => copiar(t.plin_numero)} className="mt-1 inline-flex items-center gap-1 text-xs font-bold text-pino"><Copy className="size-3.5" /> Copiar</button>
                     </div>
                   )}
-                  <div className="rounded-2xl bg-crema/70 p-4">
+                  {pago.metodo !== "tarjeta_tienda" && <div className="rounded-2xl bg-crema/70 p-4">
                     <p className="text-xs text-gris">Titular</p>
                     <p className="font-bold text-tinta">{t.pago_titular || t.nombre}</p>
                     <p className="mt-1 text-xs text-gris">Verifica que aparezca este nombre antes de pagar.</p>
-                  </div>
-                  {t.pago_qr_url && (
+                  </div>}
+                  {t.pago_qr_url && pago.metodo !== "tarjeta_tienda" && (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={t.pago_qr_url} alt="QR de pago de la tienda" className="mx-auto size-40 rounded-2xl object-contain ring-1 ring-linea" />
                   )}
@@ -203,9 +247,13 @@ export default function Seguimiento({ params }: { params: Promise<{ token: strin
               <Seccion titulo={pago.estado === "adelanto_informado" ? "Adelanto recibido" : "Pagas al recibir"}>
                 <p className="text-sm text-gris">
                   {pago.estado === "adelanto_informado" && <>La tienda confirmó tu adelanto. </>}
-                  Al recibir tu pedido, paga <b className="text-tinta">{soles(montoAlRecibir)}</b> por {pago.metodo === "plin_directo" ? "Plin" : "Yape"} al{" "}
-                  <b className="text-tinta">{pago.metodo === "plin_directo" ? t.plin_numero : t.yape_numero}</b>
-                  {t.pago_titular && <> ({t.pago_titular})</>}. La tienda confirma que le llegó y recién ahí das tu código. No se acepta efectivo.
+                  Al recibir tu pedido, paga <b className="text-tinta">{soles(montoAlRecibir)}</b>{" "}
+                  {pago.metodo === "tarjeta_tienda" ? (
+                    <>con el <a href={t.tarjeta_link} target="_blank" rel="noreferrer noopener" className="font-bold text-pino underline">link de pago con tarjeta</a> de la tienda</>
+                  ) : (
+                    <>por {pago.metodo === "plin_directo" ? "Plin" : "Yape"} al <b className="text-tinta">{pago.metodo === "plin_directo" ? t.plin_numero : t.yape_numero}</b>{t.pago_titular && <> ({t.pago_titular})</>}</>
+                  )}
+                  . La tienda confirma que le llegó y recién ahí das tu código. No se acepta efectivo.
                 </p>
                 {p.entrega === "motorizado" && p.envio_centimos > 0 && <p className="mt-2 text-xs text-gris">El envío ({soles(p.envio_centimos)}) se lo pagas al motorizado aparte.</p>}
               </Seccion>

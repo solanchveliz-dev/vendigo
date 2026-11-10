@@ -4,8 +4,8 @@ import { soles } from "@/lib/formato";
 import type { Producto } from "@/lib/tipos";
 
 // Banner del producto destacado. "Ver producto" abre su página.
-export function Destacado({ producto: p, slug, etiqueta, texto }: { producto: Producto; slug: string; etiqueta: string; texto: string }) {
-  const href = `/t/${slug}/p/${p.id}`;
+export function Destacado({ producto: p, slug, etiqueta, texto, vista = false }: { producto: Producto; slug: string; etiqueta: string; texto: string; vista?: boolean }) {
+  const href = `/t/${slug}/p/${p.id}${vista ? "?vista=1" : ""}`;
   return (
     <section className="mt-10 grid overflow-hidden rounded-[28px] bg-pino p-2 sm:grid-cols-[1.1fr_1fr]">
       <div className="flex flex-col justify-center gap-3 p-8 text-white sm:p-10">

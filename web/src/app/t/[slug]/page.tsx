@@ -141,12 +141,13 @@ export default async function TiendaPublica({ params, searchParams }: { params: 
             <Destacado
               producto={destacado}
               slug={t.slug}
+              vista={vista}
               etiqueta={elegido || masVendido ? "Destacado" : "Lo nuevo"}
               texto={elegido ? `Elegido por ${t.nombre}` : masVendido ? `El más pedido de ${t.nombre}` : `Lo último de ${t.nombre}`}
             />
           )}
 
-          <Catalogo productos={productos} slug={t.slug} />
+          <Catalogo productos={productos} slug={t.slug} vista={vista} />
 
           {/* Conoce a la emprendedora (opcional) */}
           {t.historia && (
@@ -201,7 +202,7 @@ export default async function TiendaPublica({ params, searchParams }: { params: 
                 )}
               </ul>
               <div className="mt-5 flex flex-wrap gap-2">
-                {(t.metodos_pago ?? []).map((k) => ({ yape_directo: "Yape", plin_directo: "Plin" } as Record<string, string>)[k] ?? k).map((m) => (
+                {(t.metodos_pago ?? []).map((k) => ({ yape_directo: "Yape", plin_directo: "Plin", tarjeta_tienda: "Tarjeta" } as Record<string, string>)[k] ?? k).map((m) => (
                   <span key={m} className="rounded-full bg-arena px-3 py-1.5 text-sm font-semibold text-tinta">
                     {m}
                   </span>

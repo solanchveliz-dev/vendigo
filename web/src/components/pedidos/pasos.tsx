@@ -12,25 +12,26 @@ type Paso = { titulo: string; cliente: string; quien: "cliente" | "tienda"; como
 export function pasosPedido(p: PedidoDetalle): { pasos: Paso[]; actual: number; cancelado: boolean } {
   const pagaAlRecibir = p.pago?.momento === "al_recibir";
   const adel = p.pago?.momento === "adelanto" ? p.pago.adelanto_centimos : 0;
+  const medio = p.pago?.metodo === "tarjeta_tienda" ? "con tarjeta" : "por Yape o Plin";
   const fechaPago = p.pago?.informado_en ?? (p.pago?.estado === "de_prueba" ? p.creado_en : null);
   const nombre = p.comprador.split(" ")[0];
   const pasos: Paso[] =
     p.entrega === "agencia"
       ? [
-          { titulo: "Pago a la tienda", cliente: "Pagas directo a la tienda con Yape o Plin, envías tu comprobante y la tienda lo confirma.", quien: "cliente", como: "Te paga a tu Yape/Plin; tú confirmas que te llegó", fecha: fechaPago },
+          { titulo: "Pago a la tienda", cliente: `Pagas directo a la tienda ${medio}, envías tu comprobante y la tienda lo confirma.`, quien: "cliente", como: "Te paga a tu Yape/Plin; tú confirmas que te llegó", fecha: fechaPago },
           { titulo: "Pedido aceptado", cliente: "La tienda está preparando tu pedido.", quien: "tienda", como: "Un toque: “Aceptar pedido”", fecha: p.aceptado_en },
           { titulo: `Enviado por ${p.envio?.agencia || p.agencia || "agencia"}`, cliente: "Recibes el código para recoger en tu agencia.", quien: "tienda", como: "“Ya lo envié” + código o foto", fecha: p.enviado_en },
           { titulo: "Entregado", cliente: "Lo confirmas tú o se confirma solo a los 7 días.", quien: "cliente", como: "Toca “Ya lo recibí” o se confirma solo en 7 días", fecha: p.entregado_en },
         ]
       : p.entrega === "motorizado"
         ? [
-            { titulo: pagaAlRecibir ? "Pedido hecho" : adel ? "Adelanto a la tienda" : "Pago a la tienda", cliente: pagaAlRecibir ? "Pagas a la tienda por Yape o Plin cuando lo recibas. El envío se lo pagas al motorizado." : adel ? `Pagas ${soles(adel)} de adelanto por Yape o Plin y el resto al recibir.` : "Pagas directo a la tienda con Yape o Plin y la tienda lo confirma.", quien: "cliente", como: pagaAlRecibir ? "Pide y paga al recibir" : "Te paga a tu Yape/Plin; tú confirmas que te llegó", fecha: pagaAlRecibir ? p.creado_en : fechaPago },
+            { titulo: pagaAlRecibir ? "Pedido hecho" : adel ? "Adelanto a la tienda" : "Pago a la tienda", cliente: pagaAlRecibir ? `Pagas a la tienda ${medio} cuando lo recibas. El envío se lo pagas al motorizado.` : adel ? `Pagas ${soles(adel)} de adelanto ${medio} y el resto al recibir.` : `Pagas directo a la tienda ${medio} y la tienda lo confirma.`, quien: "cliente", como: pagaAlRecibir ? "Pide y paga al recibir" : "Te paga a tu Yape/Plin; tú confirmas que te llegó", fecha: pagaAlRecibir ? p.creado_en : fechaPago },
             { titulo: "Pedido aceptado", cliente: "La tienda está preparando tu pedido.", quien: "tienda", como: "Un toque: “Aceptar pedido”", fecha: p.aceptado_en },
             { titulo: "En camino", cliente: p.envio?.motorizado_nombre ? `Lo lleva ${p.envio.motorizado_nombre} (${p.envio.motorizado_celular}).` : "Ves quién lo lleva y su celular.", quien: "tienda", como: "“Ya salió” + quién lo lleva", fecha: p.enviado_en },
-            { titulo: "Entregado", cliente: pagaAlRecibir || adel ? "Pagas por Yape o Plin al recibir y das tu código de entrega." : "Das tu código de entrega al recibirlo.", quien: "tienda", como: pagaAlRecibir ? "Pide el código y cobra al entregar" : "Pide el código de entrega al cliente", fecha: p.entregado_en },
+            { titulo: "Entregado", cliente: pagaAlRecibir || adel ? `Pagas ${medio} al recibir y das tu código de entrega.` : "Das tu código de entrega al recibirlo.", quien: "tienda", como: pagaAlRecibir ? "Pide el código y cobra al entregar" : "Pide el código de entrega al cliente", fecha: p.entregado_en },
           ]
         : [
-            { titulo: pagaAlRecibir ? "Pedido reservado" : adel ? "Adelanto a la tienda" : "Pago a la tienda", cliente: pagaAlRecibir ? "Tu pedido queda reservado; pagas por Yape o Plin al recoger." : adel ? `Pagas ${soles(adel)} de adelanto por Yape o Plin y el resto al recoger.` : "Pagas directo a la tienda con Yape o Plin y la tienda lo confirma.", quien: "cliente", como: pagaAlRecibir ? "Reserva y paga al recoger" : "Te paga a tu Yape/Plin; tú confirmas que te llegó", fecha: pagaAlRecibir ? p.creado_en : fechaPago },
+            { titulo: pagaAlRecibir ? "Pedido reservado" : adel ? "Adelanto a la tienda" : "Pago a la tienda", cliente: pagaAlRecibir ? `Tu pedido queda reservado; pagas ${medio} al recoger.` : adel ? `Pagas ${soles(adel)} de adelanto ${medio} y el resto al recoger.` : `Pagas directo a la tienda ${medio} y la tienda lo confirma.`, quien: "cliente", como: pagaAlRecibir ? "Reserva y paga al recoger" : "Te paga a tu Yape/Plin; tú confirmas que te llegó", fecha: pagaAlRecibir ? p.creado_en : fechaPago },
             { titulo: "Pedido aceptado", cliente: "La tienda está preparando tu pedido.", quien: "tienda", como: "Un toque: “Aceptar pedido”", fecha: p.aceptado_en },
             { titulo: "Listo para recoger", cliente: "Te avisamos cuando puedas pasar por la tienda.", quien: "tienda", como: "“Ya está listo”", fecha: p.estado === "listo_recojo" || p.estado === "entregado" ? p.eventos.find((e) => e.estado === "listo_recojo")?.fecha ?? null : null },
             { titulo: "Entregado", cliente: `Muestras tu código de 4 dígitos al recoger.`, quien: "tienda", como: `Pide el código a ${nombre} y toca “Entregar”`, fecha: p.entregado_en },

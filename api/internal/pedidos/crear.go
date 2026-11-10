@@ -37,7 +37,7 @@ type PedidoNuevo struct {
 	Referencia  string
 	Agencia     string
 	AgenciaSede string
-	MetodoPago  string // yape_directo o plin_directo (pago directo a la tienda; sin efectivo)
+	MetodoPago  string // yape_directo, plin_directo o tarjeta_tienda (pago directo a la tienda; sin efectivo)
 	MomentoPago string // antes o al_recibir
 	Prueba      bool   // datos de prueba (solo modo desarrollo y seed)
 	Nota        string
@@ -57,10 +57,10 @@ func Crear(ctx context.Context, app *core.App, tx *sql.Tx, in PedidoNuevo) (stri
 	}
 	var recojo, agencia, moto, pausada bool
 	var costoMoto, adelRecojo, adelMoto int
-	var yape, plin, pagoRecojo, pagoMoto string
+	var yape, plin, tarjeta, pagoRecojo, pagoMoto string
 	if err := tx.QueryRowContext(ctx, `SELECT entrega_recojo, entrega_agencia, entrega_motorizado, costo_motorizado_centimos, pausada,
-		yape_numero, plin_numero, recojo_pago, motorizado_pago, adelanto_pct, motorizado_adelanto_pct FROM tiendas WHERE id=$1 AND activa`,
-		in.TiendaID).Scan(&recojo, &agencia, &moto, &costoMoto, &pausada, &yape, &plin, &pagoRecojo, &pagoMoto, &adelRecojo, &adelMoto); err != nil {
+		yape_numero, plin_numero, recojo_pago, motorizado_pago, adelanto_pct, motorizado_adelanto_pct, tarjeta_link FROM tiendas WHERE id=$1 AND activa`,
+		in.TiendaID).Scan(&recojo, &agencia, &moto, &costoMoto, &pausada, &yape, &plin, &pagoRecojo, &pagoMoto, &adelRecojo, &adelMoto, &tarjeta); err != nil {
 		if core.SinFilas(err) {
 			return "", "", httpx.ErrNoEncontrado
 		}
@@ -99,6 +99,10 @@ func Crear(ctx context.Context, app *core.App, tx *sql.Tx, in PedidoNuevo) (stri
 	case "plin_directo":
 		if plin == "" && !in.Prueba {
 			return "", "", httpx.Invalido("Esta tienda no recibe Plin.")
+		}
+	case "tarjeta_tienda":
+		if tarjeta == "" && !in.Prueba {
+			return "", "", httpx.Invalido("Esta tienda no recibe tarjeta.")
 		}
 	default:
 		return "", "", httpx.Invalido("Elige cómo vas a pagar.")
