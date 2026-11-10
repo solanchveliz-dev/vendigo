@@ -33,6 +33,7 @@ func (m *Modulo) RutasVendedor(r chi.Router) {
 	r.Method("POST", "/plan/ventas-extra", httpx.Handler(m.comprarExtra))
 	r.Method("GET", "/plan/pagos", httpx.Handler(m.pagos))
 	r.Method("POST", "/plan/pagos/{id}/informar", httpx.Handler(m.informarPago))
+	r.Method("POST", "/plan/pagos/{id}/culqi", httpx.Handler(m.pagarConCulqi))
 	r.Method("GET", "/destacados", httpx.Handler(m.destacados))
 	r.Method("POST", "/productos/{id}/destacar", httpx.Handler(m.destacar))
 }
@@ -287,6 +288,6 @@ func (m *Modulo) pagos(w http.ResponseWriter, r *http.Request) error {
 		out = append(out, p)
 	}
 	// Datos para pagarle a VendiGo (los configura el admin). El plan se activa cuando VendiGo confirma el pago.
-	httpx.OK(w, map[string]any{"pagos": out, "pago_vendigo": LeerCobro(ctx, m.app.DB)})
+	httpx.OK(w, map[string]any{"pagos": out, "pago_vendigo": m.cobro(ctx)})
 	return nil
 }

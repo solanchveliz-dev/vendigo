@@ -67,32 +67,10 @@ func (m *Modulo) confirmarPagoPlan(w http.ResponseWriter, r *http.Request) error
 	}
 	id := chi.URLParam(r, "id")
 	err := m.app.EnTransaccion(ctx, func(tx *sql.Tx) error {
-		var tid, tipo, concepto string
-		var planID, productoID sql.NullString
-		var monto, dias int
-		err := tx.QueryRowContext(ctx, `UPDATE pagos_plan SET estado='confirmado', referencia=$2, confirmado_por=$3, confirmado_en=now()
-			WHERE id::text=$1 AND estado='pendiente' RETURNING tienda_id, tipo, plan_id, monto_centimos, concepto, producto_id, dias`, id, in.Referencia, adminID(ctx)).
-			Scan(&tid, &tipo, &planID, &monto, &concepto, &productoID, &dias)
-		if core.SinFilas(err) {
-			return httpx.Conflicto("no_aplica", "Este pago ya fue revisado.")
-		}
+		monto, err := planes.ConfirmarPago(ctx, tx, id, in.Referencia, adminID(ctx), "")
 		if err != nil {
 			return err
 		}
-		switch {
-		case tipo == "ventas_extra":
-			err = planes.AplicarVentasExtra(ctx, tx, tid, monto)
-		case tipo == "destacado" && productoID.Valid:
-			err = planes.AplicarDestacado(ctx, tx, productoID.String, tid, id, dias)
-		case tipo == "destacado":
-			err = httpx.Conflicto("sin_producto", "El producto ya no existe. Rechaza el pago y coordina la devolución con la tienda.")
-		default:
-			err = planes.AplicarPlan(ctx, tx, tid, planID.String, false, monto)
-		}
-		if err != nil {
-			return err
-		}
-		billetera.Notificar(ctx, tx, tid, "Recibimos tu pago", concepto+": ya está activo. ¡Gracias!", "/vendedor/plan")
 		m.app.Auditar(ctx, tx, adminID(ctx), "confirmar_pago_plan", "pago_plan", id, map[string]any{"referencia": in.Referencia, "monto": monto})
 		return nil
 	})

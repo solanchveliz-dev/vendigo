@@ -57,9 +57,9 @@ export function Encabezado({ titulo, detalle, children }: { titulo: string; deta
   return (
     <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
       <div>
-        <div className="mb-2 h-1 w-8 rounded-full bg-coral" />
-        <h1 className="text-[28px] font-extrabold leading-tight text-pino">{titulo}</h1>
-        {detalle && <p className="mt-1 max-w-2xl text-sm text-gris">{detalle}</p>}
+        <div className="mb-3.5 h-1 w-[38px] rounded-full bg-coral" />
+        <h1 className="text-[28px] font-extrabold leading-tight tracking-[-0.035em] text-tinta md:text-[34px]">{titulo}</h1>
+        {detalle && <p className="mt-1.5 max-w-2xl text-[15px] text-gris">{detalle}</p>}
       </div>
       {children && <div className="flex flex-wrap gap-2">{children}</div>}
     </div>

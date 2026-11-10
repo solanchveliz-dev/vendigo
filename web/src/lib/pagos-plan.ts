@@ -22,10 +22,11 @@ export type PagoVendiGo = {
   cuenta: string;
   cci: string;
   banco_titular: string;
-  metodos: ("yape" | "plin" | "tarjeta" | "transferencia")[];
+  metodos: ("culqi" | "yape" | "plin" | "tarjeta" | "transferencia")[];
+  culqi_publica: string;
 };
 
-export const METODOS: Record<string, string> = { yape: "Yape a VendiGo", plin: "Plin a VendiGo", tarjeta: "Tarjeta", transferencia: "Transferencia a VendiGo" };
+export const METODOS: Record<string, string> = { culqi: "Culqi (tarjeta o Yape)", yape: "Yape a VendiGo", plin: "Plin a VendiGo", tarjeta: "Tarjeta", transferencia: "Transferencia a VendiGo" };
 
 export const ESTADO_PAGO_PLAN: Record<PagoPlan["estado"], { t: string; clase: string }> = {
   pendiente: { t: "Por confirmar", clase: "bg-aviso-claro text-aviso" },

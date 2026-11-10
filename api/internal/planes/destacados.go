@@ -118,7 +118,7 @@ func (m *Modulo) destacados(w http.ResponseWriter, r *http.Request) error {
 		}
 		lista = append(lista, it)
 	}
-	httpx.OK(w, map[string]any{"paquetes": paquetes(ctx, m.app.DB), "impulsos": lista, "pago_vendigo": LeerCobro(ctx, m.app.DB)})
+	httpx.OK(w, map[string]any{"paquetes": paquetes(ctx, m.app.DB), "impulsos": lista, "pago_vendigo": m.cobro(ctx)})
 	return nil
 }
 
@@ -145,15 +145,24 @@ func (m *Modulo) destacar(w http.ResponseWriter, r *http.Request) error {
 	if in.Metodo == "" {
 		in.Metodo = "yape"
 	}
-	if err := metodoValido(ctx, m.app.DB, in.Metodo); err != nil {
-		return err
-	}
-	if len(in.Referencia) < 4 || len(in.Referencia) > 40 {
-		return httpx.Invalido("Escribe el número de operación de tu pago a VendiGo.")
+	// Con Culqi se paga justo después (POST /plan/pagos/{id}/culqi) y no hace falta n.° de operación.
+	if in.Metodo == "culqi" {
+		if !slices.Contains(m.cobro(ctx).Metodos, "culqi") {
+			return httpx.Invalido("El pago con Culqi todavía no está disponible.")
+		}
+		in.Referencia = ""
+	} else {
+		if err := metodoValido(ctx, m.app.DB, in.Metodo); err != nil {
+			return err
+		}
+		if len(in.Referencia) < 4 || len(in.Referencia) > 40 {
+			return httpx.Invalido("Escribe el número de operación de tu pago a VendiGo.")
+		}
 	}
 	base, diasBase := PrecioDestacado(ctx, m.app.DB)
 	precio := precioImpulso(base, diasBase, in.Dias)
 	pid := chi.URLParam(r, "id")
+	var pagoID string
 	err = m.app.EnTransaccion(ctx, func(tx *sql.Tx) error {
 		var nombre string
 		var activo bool
@@ -168,19 +177,20 @@ func (m *Modulo) destacar(w http.ResponseWriter, r *http.Request) error {
 		if !activo || stock <= 0 {
 			return httpx.Invalido("Solo puedes impulsar productos publicados y con stock.")
 		}
+		// Un intento con Culqi que no llegó a cobrarse no bloquea un nuevo intento.
+		tx.ExecContext(ctx, `DELETE FROM pagos_plan WHERE producto_id::text=$1 AND tipo='destacado' AND estado='pendiente' AND metodo='culqi' AND referencia_tienda=''`, pid)
 		var pendiente bool
 		tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM pagos_plan WHERE producto_id::text=$1 AND tipo='destacado' AND estado='pendiente')`, pid).Scan(&pendiente)
 		if pendiente {
 			return httpx.Conflicto("pago_pendiente", "Este producto ya tiene un impulso por confirmar.")
 		}
-		_, err = tx.ExecContext(ctx, `INSERT INTO pagos_plan (tienda_id, concepto, monto_centimos, metodo, estado, tipo, producto_id, dias, referencia_tienda)
-			VALUES ($1,$2,$3,$7,'pendiente','destacado',$4,$5,$6)`, tid, fmt.Sprintf("Impulsar «%s» %d días", nombre, in.Dias), precio, pid, in.Dias, in.Referencia, in.Metodo)
-		return err
+		return tx.QueryRowContext(ctx, `INSERT INTO pagos_plan (tienda_id, concepto, monto_centimos, metodo, estado, tipo, producto_id, dias, referencia_tienda)
+			VALUES ($1,$2,$3,$7,'pendiente','destacado',$4,$5,$6) RETURNING id`, tid, fmt.Sprintf("Impulsar «%s» %d días", nombre, in.Dias), precio, pid, in.Dias, in.Referencia, in.Metodo).Scan(&pagoID)
 	})
 	if err != nil {
 		return err
 	}
-	httpx.JSON(w, http.StatusCreated, map[string]any{"mensaje": "¡Listo! Recibimos tu pedido. Tu producto empieza a destacar cuando VendiGo confirme tu pago (te avisamos)."})
+	httpx.JSON(w, http.StatusCreated, map[string]any{"id": pagoID, "mensaje": "¡Listo! Recibimos tu pedido. Tu producto empieza a destacar cuando VendiGo confirme tu pago (te avisamos)."})
 	return nil
 }
 

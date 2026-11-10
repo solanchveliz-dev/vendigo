@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: { default: "VendiGo", template: "%s · VendiGo" },
-  description: "Todas tus tiendas en un solo lugar. Crea tu tienda, recibe pedidos ordenados y cobra con pago protegido.",
+  description: "Todas tus tiendas en un solo lugar. Crea tu tienda, recibe pedidos ordenados y cobra directo por Yape, Plin o tarjeta.",
   icons: { icon: "/logo.png" },
 };
 

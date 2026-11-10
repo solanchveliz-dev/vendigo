@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Clock, Copy, CreditCard, ExternalLink, Landmark, Smartphone } from "lucide-react";
+import { Clock, Copy, CreditCard, ExternalLink, Landmark, Lock, Smartphone } from "lucide-react";
+import { pedirTokenCulqi } from "@/lib/culqi";
 import { api, ErrorApi } from "@/lib/api";
 import { soles } from "@/lib/formato";
 import { Aviso, Boton, Campo, Entrada, cn, useAvisar } from "@/components/ui";
@@ -9,6 +10,7 @@ import type { PagoVendiGo } from "@/lib/pagos-plan";
 
 type Metodo = PagoVendiGo["metodos"][number];
 const NOMBRE: Record<Metodo, { t: string; icono: React.ReactNode }> = {
+  culqi: { t: "Tarjeta o Yape (Culqi)", icono: <Lock className="size-4" /> },
   yape: { t: "Yape", icono: <Smartphone className="size-4" /> },
   plin: { t: "Plin", icono: <Smartphone className="size-4" /> },
   tarjeta: { t: "Tarjeta", icono: <CreditCard className="size-4" /> },
@@ -34,7 +36,7 @@ function Dato({ k, v, copiar }: { k: string; v: string; copiar?: boolean }) {
 // Datos para pagarle a VendiGo con el método que elija la tienda, y registro del n.° de operación en la app.
 // Si se pasa pagoId, informa un pago pendiente ya creado (planes, ventas extra). Si se pasa alPagar, lo usa el que llama (impulsos).
 export function PagarAVendiGo({
-  concepto, monto, vendigo, pagoId, referenciaInformada, alPagar, alListo, boton = "Ya pagué",
+  concepto, monto, vendigo, pagoId, referenciaInformada, alPagar, crearPago, alListo, boton = "Ya pagué",
 }: {
   concepto: string;
   monto: number;
@@ -42,6 +44,7 @@ export function PagarAVendiGo({
   pagoId?: string;
   referenciaInformada?: string;
   alPagar?: (metodo: Metodo, referencia: string) => Promise<void>;
+  crearPago?: () => Promise<string>; // para Culqi cuando el pago aún no existe (impulsos): lo crea y devuelve su id
   alListo?: () => void;
   boton?: string;
 }) {
@@ -51,6 +54,24 @@ export function PagarAVendiGo({
   const [ref, setRef] = useState("");
   const [error, setError] = useState("");
   const [enviando, setEnviando] = useState(false);
+
+  async function pagarCulqi() {
+    if (!vendigo?.culqi_publica) return;
+    setError("");
+    setEnviando(true);
+    try {
+      const { token, email } = await pedirTokenCulqi(vendigo.culqi_publica, monto, `VendiGo · ${concepto}`);
+      const id = pagoId ?? (crearPago ? await crearPago() : "");
+      if (!id) throw new Error("No se pudo registrar el pago.");
+      const r = await api.post<{ mensaje: string }>(`/vendedor/plan/pagos/${id}/culqi`, { token, email });
+      avisar(r.mensaje);
+      alListo?.();
+    } catch (e) {
+      setError((e as ErrorApi).message || (e as Error).message);
+    } finally {
+      setEnviando(false);
+    }
+  }
 
   async function enviar() {
     if (!metodo) return;
@@ -90,6 +111,13 @@ export function PagarAVendiGo({
                   </button>
                 ))}
               </div>
+              {vendigo && metodo === "culqi" && (
+                <div className="space-y-2">
+                  <p>Pagas {soles(monto)} con tarjeta o Yape en el formulario seguro de Culqi y se activa al instante.</p>
+                  {error && <Aviso tono="error">{error}</Aviso>}
+                  <Boton onClick={pagarCulqi} cargando={enviando}><Lock className="size-4" /> Pagar {soles(monto)}</Boton>
+                </div>
+              )}
               {vendigo && metodo === "yape" && <div className="grid gap-2 sm:grid-cols-2"><Dato k="Yape de VendiGo" v={vendigo.yape} copiar /><Dato k="Titular" v={vendigo.titular} /></div>}
               {vendigo && metodo === "plin" && <div className="grid gap-2 sm:grid-cols-2"><Dato k="Plin de VendiGo" v={vendigo.plin} copiar /><Dato k="Titular" v={vendigo.titular} /></div>}
               {vendigo && metodo === "tarjeta" && (
@@ -108,12 +136,14 @@ export function PagarAVendiGo({
                   {vendigo.cci && <Dato k="CCI" v={vendigo.cci} copiar />}
                 </div>
               )}
+              {metodo !== "culqi" && (<>
               <Campo etiqueta="N.° de operación de tu pago">
                 <Entrada value={ref} onChange={(e) => setRef(e.target.value.replace(/\s/g, ""))} maxLength={40} placeholder="Ej. 12345678" />
               </Campo>
               {error && <Aviso tono="error">{error}</Aviso>}
               <Boton onClick={enviar} cargando={enviando} disabled={!metodo || ref.trim().length < 4}>{boton}</Boton>
               <p className="text-xs text-gris">VendiGo compara tu n.° de operación con lo recibido y lo activa. Te avisamos.</p>
+              </>)}
             </>
           )}
         </div>

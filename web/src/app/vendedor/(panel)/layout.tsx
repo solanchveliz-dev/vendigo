@@ -119,7 +119,7 @@ export default function LayoutPanel({ children }: { children: React.ReactNode })
             <Link href="/vendedor/tienda/compartir" className="hidden h-10 items-center gap-2 rounded-full bg-white px-4 text-sm font-semibold text-pino ring-1 ring-linea lg:inline-flex">
               <Share2 className="size-4" /> Compartir tienda
             </Link>
-            <Link href="/vendedor/productos/nuevo" className="hidden h-10 items-center gap-1 rounded-full bg-coral px-4 text-sm font-semibold text-white sm:inline-flex">
+            <Link href="/vendedor/productos/nuevo" className={`hidden h-10 items-center gap-1 rounded-full bg-coral px-4 text-sm font-semibold text-white ${ruta === "/vendedor/productos" ? "" : "sm:inline-flex"}`}>
               <Plus className="size-4" /> Nuevo producto
             </Link>
             <Link href="/vendedor/notificaciones" className="relative grid size-10 place-items-center rounded-full bg-white ring-1 ring-linea" aria-label="Notificaciones">

@@ -34,6 +34,11 @@ type Config struct {
 	IAProveedor string // simulado (sin costo) o bedrock
 	IAModelo    string
 	IARegion    string
+
+	// Culqi: cobro de VendiGo a las tiendas (planes, ventas extra e impulsos). Nunca se usa para las ventas.
+	// La llave secreta solo vive en .env / Secrets Manager: jamás en el repositorio.
+	CulqiPublica string
+	CulqiSecreta string
 }
 
 func (c Config) EsDev() bool { return c.Entorno == "dev" }
@@ -59,6 +64,8 @@ func Carga() Config {
 		MediaPublicURL: strings.TrimRight(env("MEDIA_PUBLIC_URL", "http://localhost:9000/vendigo-publico"), "/"),
 		OTPCanal:       env("OTP_CANAL", "log"),
 		IAProveedor:    env("IA_PROVEEDOR", "simulado"),
+		CulqiPublica:   env("CULQI_LLAVE_PUBLICA", ""),
+		CulqiSecreta:   env("CULQI_LLAVE_SECRETA", ""),
 		IAModelo:       env("IA_MODELO", "amazon.nova-lite-v1:0"),
 		IARegion:       env("IA_REGION", "us-east-1"),
 	}

@@ -19,7 +19,7 @@ const AREAS = [
   { id: "vendedores", t: "Vendedores", d: "Planes, pedidos y ventas", icono: Briefcase },
   { id: "productos", t: "Productos", d: "Publicados, agotados y retirados", icono: Package },
   { id: "pedidos", t: "Pedidos", d: "Estados y tipos de entrega", icono: ShoppingBag },
-  { id: "pagos", t: "Pagos", d: "Cobros, comisiones y liberaciones", icono: Wallet },
+  { id: "pagos", t: "Pagos", d: "Pagos informados por las tiendas y devoluciones", icono: Wallet },
   { id: "reclamos", t: "Reclamos", d: "Motivos y resolución", icono: Flag },
 ];
 const MOTIVOS: Record<string, string> = { no_llego: "No llegó", danado: "Llegó dañado", distinto: "Distinto a lo publicado", incompleto: "Incompleto", otro: "Otro" };

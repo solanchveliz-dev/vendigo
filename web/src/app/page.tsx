@@ -20,7 +20,7 @@ export default function Inicio() {
           <h1 className="text-5xl font-extrabold leading-[1.05] text-pino sm:text-6xl">
             Todas tus tiendas en <span className="text-coral">un solo lugar</span>
           </h1>
-          <p className="mt-5 text-lg text-gris">Crea tu tienda gratis, recibe pedidos pagados y ordenados, y cobra con pago protegido. Sin comisión por venta.</p>
+          <p className="mt-5 text-lg text-gris">Crea tu tienda gratis, recibe pedidos ordenados y cobra directo a tu Yape, Plin o tarjeta. Sin comisión por venta.</p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Link href="/registro" className="inline-flex h-12 items-center rounded-full bg-coral px-6 font-semibold text-white">
               Crear mi tienda

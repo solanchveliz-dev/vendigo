@@ -2,12 +2,17 @@ package planes
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"net/http"
+	"net/mail"
 	"slices"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/solanchveliz-dev/vendigo/api/internal/billetera"
 	"github.com/solanchveliz-dev/vendigo/api/internal/core"
+	"github.com/solanchveliz-dev/vendigo/api/internal/culqi"
 	"github.com/solanchveliz-dev/vendigo/api/internal/httpx"
 	"github.com/solanchveliz-dev/vendigo/api/internal/tiendas"
 )
@@ -25,7 +30,8 @@ type CobroVendiGo struct {
 	Cuenta        string   `json:"cuenta"`
 	CCI           string   `json:"cci"`
 	BancoTitular  string   `json:"banco_titular"`
-	Metodos       []string `json:"metodos"` // yape, plin, tarjeta, transferencia (los que están configurados)
+	Metodos       []string `json:"metodos"` // culqi, yape, plin, tarjeta, transferencia (los que están configurados)
+	CulqiPublica  string   `json:"culqi_publica"`
 }
 
 // ClavesCobro son las claves de ajustes_plataforma de cada dato.
@@ -57,7 +63,7 @@ func LeerCobro(ctx context.Context, q core.Ejecutor) CobroVendiGo {
 	return c
 }
 
-var ordenMetodos = []string{"yape", "plin", "tarjeta", "transferencia"}
+var ordenMetodos = []string{"culqi", "yape", "plin", "tarjeta", "transferencia"}
 
 // metodoValido: el método debe estar entre los que VendiGo tiene configurados.
 func metodoValido(ctx context.Context, q core.Ejecutor, metodo string) error {
@@ -98,4 +104,109 @@ func (m *Modulo) informarPago(w http.ResponseWriter, r *http.Request) error {
 	}
 	httpx.OK(w, map[string]string{"mensaje": "¡Gracias! VendiGo revisará tu pago y te avisará cuando esté activo."})
 	return nil
+}
+
+// ConfirmarPago marca un pago a VendiGo como confirmado y aplica lo comprado (plan, ventas extra o impulso).
+// porAdmin es el admin que lo revisó (vacío si lo confirmó Culqi); cargo es el id del cargo de Culqi.
+func ConfirmarPago(ctx context.Context, tx *sql.Tx, id, referencia, porAdmin, cargo string) (int, error) {
+	var tid, tipo, concepto string
+	var planID, productoID sql.NullString
+	var monto, dias int
+	var admin any
+	if porAdmin != "" {
+		admin = porAdmin
+	}
+	err := tx.QueryRowContext(ctx, `UPDATE pagos_plan SET estado='confirmado', referencia=$2, confirmado_por=$3, confirmado_en=now(),
+		metodo = CASE WHEN $4 <> '' THEN 'culqi' ELSE metodo END, proveedor = CASE WHEN $4 <> '' THEN 'culqi' ELSE proveedor END
+		WHERE id::text=$1 AND estado='pendiente' RETURNING tienda_id, tipo, plan_id, monto_centimos, concepto, producto_id, dias`, id, referencia, admin, cargo).
+		Scan(&tid, &tipo, &planID, &monto, &concepto, &productoID, &dias)
+	if core.SinFilas(err) {
+		return 0, httpx.Conflicto("no_aplica", "Este pago ya fue revisado.")
+	}
+	if err != nil {
+		return 0, err
+	}
+	switch {
+	case tipo == "ventas_extra":
+		err = AplicarVentasExtra(ctx, tx, tid, monto)
+	case tipo == "destacado" && productoID.Valid:
+		err = AplicarDestacado(ctx, tx, productoID.String, tid, id, dias)
+	case tipo == "destacado":
+		err = httpx.Conflicto("sin_producto", "El producto ya no existe. Rechaza el pago y coordina la devolución con la tienda.")
+	default:
+		err = AplicarPlan(ctx, tx, tid, planID.String, false, monto)
+	}
+	if err != nil {
+		return 0, err
+	}
+	billetera.Notificar(ctx, tx, tid, "Recibimos tu pago", concepto+": ya está activo. ¡Gracias!", "/vendedor/plan")
+	return monto, nil
+}
+
+// POST /vendedor/plan/pagos/{id}/culqi {token, email}: la tienda paga con Culqi y se activa al instante.
+func (m *Modulo) pagarConCulqi(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	if m.app.Cfg.CulqiSecreta == "" {
+		return httpx.Conflicto("sin_culqi", "El pago con Culqi todavía no está disponible.")
+	}
+	tid, err := tiendas.ID(ctx, m.app)
+	if err != nil {
+		return err
+	}
+	var in struct {
+		Token string `json:"token"`
+		Email string `json:"email"`
+	}
+	if err := httpx.Leer(r, &in); err != nil {
+		return err
+	}
+	in.Token, in.Email = strings.TrimSpace(in.Token), strings.TrimSpace(in.Email)
+	if !strings.HasPrefix(in.Token, "tkn_") && !strings.HasPrefix(in.Token, "ype_") {
+		return httpx.Invalido("No recibimos los datos de pago de Culqi. Inténtalo de nuevo.")
+	}
+	if _, err := mail.ParseAddress(in.Email); err != nil {
+		return httpx.Invalido("Escribe un correo válido en el formulario de Culqi.")
+	}
+	id := chi.URLParam(r, "id")
+	var concepto string
+	var monto int
+	err = m.app.DB.QueryRowContext(ctx, `SELECT concepto, monto_centimos FROM pagos_plan WHERE id::text=$1 AND tienda_id=$2 AND estado='pendiente'`, id, tid).Scan(&concepto, &monto)
+	if core.SinFilas(err) {
+		return httpx.Conflicto("no_aplica", "Este pago ya fue revisado.")
+	}
+	if err != nil {
+		return err
+	}
+	cargo, err := culqi.Cobrar(ctx, m.app.Cfg.CulqiSecreta, culqi.Cargo{
+		Monto: monto, Email: in.Email, Token: in.Token, Descripcion: "VendiGo · " + concepto,
+		Metadata: map[string]string{"pago_plan_id": id, "tienda_id": tid},
+	})
+	var rechazo culqi.ErrRechazado
+	if errors.As(err, &rechazo) {
+		return httpx.Invalido(rechazo.Mensaje)
+	}
+	if err != nil {
+		return err
+	}
+	// El cargo ya se cobró: lo confirmamos. Si algo falla aquí, el cargo queda registrado para revisarlo.
+	err = m.app.EnTransaccion(ctx, func(tx *sql.Tx) error {
+		_, err := ConfirmarPago(ctx, tx, id, cargo, "", cargo)
+		return err
+	})
+	if err != nil {
+		m.app.DB.ExecContext(ctx, `UPDATE pagos_plan SET referencia_tienda=$2 WHERE id::text=$1`, id, cargo)
+		return err
+	}
+	httpx.OK(w, map[string]string{"mensaje": "¡Pago aprobado! Ya está activo.", "cargo": cargo})
+	return nil
+}
+
+// cobro: métodos para pagarle a VendiGo, con Culqi primero si está configurado.
+func (m *Modulo) cobro(ctx context.Context) CobroVendiGo {
+	c := LeerCobro(ctx, m.app.DB)
+	if m.app.Cfg.CulqiPublica != "" && m.app.Cfg.CulqiSecreta != "" {
+		c.CulqiPublica = m.app.Cfg.CulqiPublica
+		c.Metodos = append([]string{"culqi"}, c.Metodos...)
+	}
+	return c
 }

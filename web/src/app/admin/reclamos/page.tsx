@@ -39,7 +39,7 @@ type Reclamo = {
 type Datos = { reclamos: Reclamo[]; indicadores: { devoluciones_pendientes_centimos: number; devoluciones_pendientes: number; abiertos: number; ingresos_planes_mes_centimos: number } };
 
 const MOTIVOS: Record<string, string> = { no_llego: "No me llegó", danado: "Llegó dañado", distinto: "Es distinto a lo publicado", incompleto: "Llegó incompleto", otro: "Otro" };
-const ESTADOS: Record<string, string> = { abierto: "Esperando a la tienda", en_revision: "Por decidir", a_favor_comprador: "Devuelto al cliente", a_favor_vendedor: "Liberado a la tienda" };
+const ESTADOS: Record<string, string> = { abierto: "Esperando a la tienda", en_revision: "Por decidir", a_favor_comprador: "A favor del cliente", a_favor_vendedor: "A favor de la tienda" };
 const REP: Record<string, string> = { nueva: "tienda nueva", buena: "buena reputación", excelente: "reputación excelente" };
 
 function Caja({ titulo, children }: { titulo: string; children: React.ReactNode }) {

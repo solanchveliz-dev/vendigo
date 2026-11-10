@@ -31,7 +31,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   if (!d) return { title: "Tienda no encontrada" };
   return {
     title: d.tienda.nombre,
-    description: d.tienda.descripcion || `${rubros[d.tienda.rubro]} en ${d.tienda.ciudad}. Compra con pago protegido en VendiGo.`,
+    description: d.tienda.descripcion || `${rubros[d.tienda.rubro]} en ${d.tienda.ciudad}. Pide con seguimiento en VendiGo.`,
     openGraph: { images: d.tienda.logo_url ? [d.tienda.logo_url] : [] },
   };
 }

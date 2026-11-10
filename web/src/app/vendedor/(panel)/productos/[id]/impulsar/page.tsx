@@ -90,7 +90,15 @@ export default function Impulsar({ params }: { params: Promise<{ id: string }> }
                 </section>
               </>
             ) : (
-              <PagarAVendiGo concepto={`Impulsar ${paquete.dias} días`} monto={paquete.precio_centimos} vendigo={d.pago_vendigo} alPagar={pagar} boton="Ya pagué, impulsar" />
+              <PagarAVendiGo
+                concepto={`Impulsar ${paquete.dias} días`}
+                monto={paquete.precio_centimos}
+                vendigo={d.pago_vendigo}
+                alPagar={pagar}
+                crearPago={async () => (await api.post<{ id: string }>(`/vendedor/productos/${id}/destacar`, { dias: paquete.dias, metodo: "culqi", referencia: "" })).id}
+                alListo={() => router.push("/vendedor/impulsos")}
+                boton="Ya pagué, impulsar"
+              />
             )}
           </div>
 
