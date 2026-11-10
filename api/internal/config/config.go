@@ -18,7 +18,7 @@ type Config struct {
 	AccesoDuracion time.Duration
 	RefreshDias    int
 
-	// Llave de 32 bytes en base64 para cifrar DNI y cuentas bancarias (en AWS viene de KMS / Secrets Manager).
+	// Llave de 32 bytes en base64 para cifrar el DNI. En el servidor vive solo en el .env de la instancia.
 	LlaveCifrado string
 
 	S3Region       string
@@ -27,7 +27,7 @@ type Config struct {
 	S3SecretKey    string
 	BucketPublico  string
 	BucketPrivado  string
-	MediaPublicURL string // CloudFront o MinIO
+	MediaPublicURL string // bucket público de S3 o MinIO
 
 	OTPCanal string // log (pruebas) o sms (Amazon SNS)
 
@@ -39,9 +39,16 @@ type Config struct {
 	// La llave secreta solo vive en .env / Secrets Manager: jamás en el repositorio.
 	CulqiPublica string
 	CulqiSecreta string
+
+	// DemoComprador habilita en el servidor el panel que simula acciones del comprador (pedidos de prueba,
+	// preguntas). Solo para la demostración de la tesis: los pedidos quedan marcados como prueba y nunca envían SMS.
+	DemoComprador bool
 }
 
 func (c Config) EsDev() bool { return c.Entorno == "dev" }
+
+// ConSimulador: las rutas /dev que simulan al comprador existen en local o si se activan a propósito en el servidor.
+func (c Config) ConSimulador() bool { return c.EsDev() || c.DemoComprador }
 
 // Carga lee las variables de entorno. Si existe un archivo .env lo usa como base.
 func Carga() Config {
@@ -68,6 +75,7 @@ func Carga() Config {
 		CulqiSecreta:   env("CULQI_LLAVE_SECRETA", ""),
 		IAModelo:       env("IA_MODELO", "amazon.nova-lite-v1:0"),
 		IARegion:       env("IA_REGION", "us-east-1"),
+		DemoComprador:  env("DEMO_COMPRADOR", "0") == "1",
 	}
 }
 

@@ -1,0 +1,35 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "FotosYDocumentos",
+      "Effect": "Allow",
+      "Action": ["s3:PutObject", "s3:GetObject", "s3:DeleteObject"],
+      "Resource": [
+        "arn:aws:s3:::vendigo-publico-tuapellido/*",
+        "arn:aws:s3:::vendigo-privado-tuapellido/*"
+      ]
+    },
+    {
+      "Sid": "SaberSiUnArchivoExiste",
+      "Effect": "Allow",
+      "Action": "s3:ListBucket",
+      "Resource": [
+        "arn:aws:s3:::vendigo-publico-tuapellido",
+        "arn:aws:s3:::vendigo-privado-tuapellido"
+      ]
+    },
+    {
+      "Sid": "SMS",
+      "Effect": "Allow",
+      "Action": "sns:Publish",
+      "Resource": "*"
+    },
+    {
+      "Sid": "IA",
+      "Effect": "Allow",
+      "Action": "bedrock:InvokeModel",
+      "Resource": "arn:aws:bedrock:us-east-1::foundation-model/amazon.nova-lite-v1:0"
+    }
+  ]
+}

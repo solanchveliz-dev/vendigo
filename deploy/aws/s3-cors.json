@@ -1,0 +1,8 @@
+[
+  {
+    "AllowedOrigins": ["https://3-90-12-34.sslip.io"],
+    "AllowedMethods": ["PUT", "GET"],
+    "AllowedHeaders": ["*"],
+    "MaxAgeSeconds": 3000
+  }
+]

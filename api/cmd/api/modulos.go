@@ -95,7 +95,7 @@ func registrarModulos(app *core.App, api chi.Router) {
 			mLibro.RutasAdmin(a)
 		})
 
-		if app.Cfg.EsDev() {
+		if app.Cfg.ConSimulador() {
 			r.Route("/dev", func(d chi.Router) {
 				d.Use(httpx.Rol("vendedor"))
 				demo.Nuevo(app).Rutas(d)

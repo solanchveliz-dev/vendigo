@@ -1,0 +1,46 @@
+# VendiGo en el servidor (una instancia EC2). La base de datos es Amazon RDS y las fotos van a Amazon S3;
+# los permisos de AWS vienen del rol de la instancia, así que aquí no hay llaves de AWS.
+# Uso (desde esta carpeta): docker compose up -d --build
+services:
+  api:
+    build: ../api
+    env_file: .env
+    environment:
+      PORT: "8080"
+    restart: unless-stopped
+    expose: ["8080"]
+
+  worker:
+    build: ../api
+    entrypoint: ["/app/worker"]
+    env_file: .env
+    restart: unless-stopped
+    depends_on: [api]
+
+  web:
+    build:
+      context: ../web
+      args:
+        NEXT_PUBLIC_DEMO: ${DEMO_COMPRADOR:-0}
+    environment:
+      API_URL: http://api:8080
+    restart: unless-stopped
+    expose: ["3000"]
+    depends_on: [api]
+
+  # Caddy saca y renueva solo el certificado HTTPS para el dominio.
+  caddy:
+    image: caddy:2-alpine
+    environment:
+      DOMINIO: ${DOMINIO:?Define DOMINIO en deploy/.env}
+    ports: ["80:80", "443:443"]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    restart: unless-stopped
+    depends_on: [web]
+
+volumes:
+  caddy_data:
+  caddy_config:

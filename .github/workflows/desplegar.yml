@@ -1,0 +1,39 @@
+# Despliega VendiGo en la instancia EC2 cuando se publica algo en main (o a mano desde la pestaña Actions).
+# Secretos del repositorio (Settings → Secrets and variables → Actions):
+#   EC2_HOST  IP elástica de la instancia
+#   EC2_USUARIO  ec2-user
+#   EC2_LLAVE_SSH  contenido completo del archivo .pem
+# Y la variable DESPLIEGUE_ACTIVO=1 (pestaña Variables) cuando el servidor ya esté listo; sin ella no hace nada.
+name: Desplegar
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      rama:
+        description: Rama a desplegar
+        default: main
+        required: true
+
+concurrency:
+  group: despliegue
+  cancel-in-progress: false
+
+jobs:
+  desplegar:
+    if: ${{ vars.DESPLIEGUE_ACTIVO == '1' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Conectar y desplegar
+        env:
+          HOST: ${{ secrets.EC2_HOST }}
+          USUARIO: ${{ secrets.EC2_USUARIO }}
+          LLAVE: ${{ secrets.EC2_LLAVE_SSH }}
+          RAMA: ${{ github.event.inputs.rama || 'main' }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$LLAVE" > ~/.ssh/vendigo.pem
+          chmod 600 ~/.ssh/vendigo.pem
+          ssh-keyscan -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          ssh -i ~/.ssh/vendigo.pem "$USUARIO@$HOST" "cd ~/vendigo && ./deploy/desplegar.sh '$RAMA'"

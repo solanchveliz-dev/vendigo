@@ -14,8 +14,9 @@ Proyecto de Fin de Carrera — Tecsup, Diseño y Desarrollo de Software.
 |---|---|
 | `api/` | API REST en Go (monolito modular) |
 | `web/` | Web en Next.js: tiendas públicas, compra y seguimiento, panel del vendedor y del administrador |
+| `deploy/` | Despliegue en AWS (EC2 + Docker Compose + RDS + S3 + SNS + Bedrock). Guía paso a paso en [`deploy/README.md`](deploy/README.md) |
 
-Planificadas (todavía no están en el repositorio): `app/` (app móvil con React Native + Expo) e `infra/` (AWS con Terraform).
+La app móvil nativa queda como trabajo futuro: la web está pensada primero para el celular.
 
 ## Ramas
 

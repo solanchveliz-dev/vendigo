@@ -54,6 +54,20 @@ func imagen(c color.RGBA) []byte {
 func main() {
 	cfg := config.Carga()
 	ctx := context.Background()
+	// En el servidor la tienda de demostración solo se carga a propósito, y nunca con el administrador de
+	// prueba: su contraseña es pública y quien entre primero configuraría la autenticación en dos pasos.
+	if !cfg.EsDev() && os.Getenv("SEED_SERVIDOR") != "1" {
+		fmt.Println("Fuera de local, el seed necesita SEED_SERVIDOR=1. El administrador se crea con cmd/admin.")
+		os.Exit(1)
+	}
+	// En el servidor la vendedora de demostración no usa la contraseña pública de local.
+	claveDemo := "vendigo123"
+	if !cfg.EsDev() {
+		if claveDemo = os.Getenv("SEED_CLAVE"); len(claveDemo) < 10 {
+			fmt.Println("En el servidor define SEED_CLAVE (mínimo 10 caracteres) para la cuenta de la tienda demo.")
+			os.Exit(1)
+		}
+	}
 	conexion, err := db.Conectar(ctx, cfg.DatabaseURL)
 	if err != nil {
 		slog.Error("base de datos", "err", err)
@@ -73,7 +87,9 @@ func main() {
 	}
 	app := &core.App{Cfg: cfg, DB: conexion, Cifrador: cif, Archivos: s3, Avisos: core.NotificadorConsola{}}
 
-	adminDemo(ctx, conexion)
+	if cfg.EsDev() {
+		adminDemo(ctx, conexion)
+	}
 	defer verificacionDemo(ctx, conexion, s3, cif)
 	var existe bool
 	conexion.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM usuarios WHERE celular='999888777')`).Scan(&existe)
@@ -84,11 +100,13 @@ func main() {
 		visitasDemo(ctx, conexion)
 		historialDemo(ctx, conexion)
 		agenciasDemo(ctx, conexion)
-		fmt.Println("Los datos de prueba ya existen. Usuario: 999888777 · Contraseña: vendigo123")
-		fmt.Println("Administrador de prueba: admin@vendigo.pe · Contraseña: Admin2026 (la primera vez configura tu app de autenticación)")
+		fmt.Println("Los datos de prueba ya existen. Usuario: 999888777")
+		if cfg.EsDev() {
+			fmt.Println("Administrador de prueba: admin@vendigo.pe · Contraseña: Admin2026 (la primera vez configura tu app de autenticación)")
+		}
 		return
 	}
-	hash, _ := seguridad.HashPassword("vendigo123")
+	hash, _ := seguridad.HashPassword(claveDemo)
 	var uid, tid string
 	conexion.QueryRowContext(ctx, `INSERT INTO usuarios (nombre, celular, email, password_hash, rol, celular_verificado)
 		VALUES ('Camila Rojas', '999888777', 'camila@lunaysol.pe', $1, 'vendedor', true) RETURNING id`, hash).Scan(&uid)
@@ -159,8 +177,10 @@ func main() {
 	visitasDemo(ctx, conexion)
 	historialDemo(ctx, conexion)
 	agenciasDemo(ctx, conexion)
-	fmt.Printf("Datos de prueba listos (%d imágenes subidas).\nUsuario: 999888777 · Contraseña: vendigo123\n", subidas)
-	fmt.Println("Administrador de prueba: admin@vendigo.pe · Contraseña: Admin2026 (la primera vez configura tu app de autenticación)")
+	fmt.Printf("Datos de prueba listos (%d imágenes subidas).\nUsuario: 999888777 · Contraseña: %s\n", subidas, claveDemo)
+	if cfg.EsDev() {
+		fmt.Println("Administrador de prueba: admin@vendigo.pe · Contraseña: Admin2026 (la primera vez configura tu app de autenticación)")
+	}
 }
 
 // visitasDemo agrega visitas de los últimos 30 días a la tienda de prueba (solo si aún no tiene),

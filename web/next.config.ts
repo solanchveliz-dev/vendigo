@@ -2,6 +2,8 @@ import type { NextConfig } from "next";
 
 const config: NextConfig = {
   poweredByHeader: false,
+  // Genera un servidor autocontenido para la imagen de Docker (no cambia nada en local con npm run dev).
+  output: "standalone",
   images: { unoptimized: true },
   async headers() {
     return [
