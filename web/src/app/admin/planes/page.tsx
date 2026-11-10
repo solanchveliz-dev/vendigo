@@ -47,7 +47,9 @@ function TarjetaPlan({ plan, alGuardar }: { plan: Plan; alGuardar: () => void })
   const avisar = useAvisar();
   const [f, setF] = useState<Form>(aForm(plan));
   const [guardando, setGuardando] = useState(false);
-  useEffect(() => setF(aForm(plan)), [plan]);
+  useEffect(() => {
+    setF(aForm(plan));
+  }, [plan]);
   const cambiado = JSON.stringify(f) !== JSON.stringify(aForm(plan));
   const gratis = plan.id === "gratis";
 

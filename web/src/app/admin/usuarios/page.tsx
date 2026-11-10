@@ -16,7 +16,9 @@ export default function Usuarios() {
   const [rol, setRol] = useState("");
   const [estado, setEstado] = useState("");
   const [pagina, setPagina] = useState(1);
-  useEffect(() => setQ(new URLSearchParams(window.location.search).get("q") ?? ""), []);
+  useEffect(() => {
+    setQ(new URLSearchParams(window.location.search).get("q") ?? "");
+  }, []);
 
   const lista = useMemo(() => {
     const t = q.trim().toLowerCase();

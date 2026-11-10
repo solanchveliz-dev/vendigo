@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { Bike, Check, ChevronRight, CreditCard, Lock, MapPin, Minus, Package, Plus, Smartphone, Store, Trash2 } from "lucide-react";
+import { Bike, Check, ChevronRight, CreditCard, Landmark, Lock, MapPin, Minus, Package, Plus, Smartphone, Store, Trash2 } from "lucide-react";
 import { api, ErrorApi } from "@/lib/api";
 import { soles } from "@/lib/formato";
 import { guardarCarrito, leerCarrito, type ItemCarrito } from "@/lib/carrito";
@@ -11,7 +11,7 @@ import type { Tienda } from "@/lib/tipos";
 import { Area, Aviso, Boton, Campo, Entrada, Selector, cn } from "@/components/ui";
 
 type FormaEntrega = "recojo" | "agencia" | "motorizado";
-type Metodo = "yape_directo" | "plin_directo" | "tarjeta_tienda";
+type Metodo = "yape_directo" | "plin_directo" | "tarjeta_tienda" | "transferencia_tienda";
 type Paso = 1 | 2 | 3;
 
 const ENTREGAS: Record<FormaEntrega, { t: string; d: string; icono: React.ReactNode }> = {
@@ -23,7 +23,10 @@ const METODO: Record<Metodo, { t: string; d: string; icono: React.ReactNode }> =
   yape_directo: { t: "Yape", d: "Al número de la tienda", icono: <Smartphone className="size-5" /> },
   plin_directo: { t: "Plin", d: "Al número de la tienda", icono: <Smartphone className="size-5" /> },
   tarjeta_tienda: { t: "Tarjeta", d: "Con el link de pago de la tienda", icono: <CreditCard className="size-5" /> },
+  transferencia_tienda: { t: "Transferencia", d: "A la cuenta de la tienda", icono: <Landmark className="size-5" /> },
 };
+
+const MARCA: Record<string, string> = { visa: "Visa", mastercard: "Mastercard", amex: "American Express", diners: "Diners Club" };
 
 function Pasos({ actual }: { actual: Paso | 4 }) {
   const nombres = ["Tu pedido", "Entrega", "Pago", "Listo"];
@@ -74,8 +77,12 @@ export function Checkout({ tienda: t, vista = false }: { tienda: Tienda; vista?:
   const [error, setError] = useState("");
   const [cargando, setCargando] = useState(false);
 
-  useEffect(() => setItems(leerCarrito(t.slug)), [t.slug]);
-  useEffect(() => window.scrollTo({ top: 0 }), [paso]);
+  useEffect(() => {
+    setItems(leerCarrito(t.slug));
+  }, [t.slug]);
+  useEffect(() => {
+    window.scrollTo({ top: 0 });
+  }, [paso]);
 
   // Cuándo se paga lo decide la tienda por forma de entrega (agencia: siempre completo antes).
   const regla = entrega === "recojo" ? t.entrega.recojo_pago : entrega === "motorizado" ? t.entrega.motorizado_pago : "completo";
@@ -342,7 +349,7 @@ export function Checkout({ tienda: t, vista = false }: { tienda: Tienda; vista?:
                 {!metodos.length ? (
                   <p className="text-sm text-gris">Esta tienda todavía no configuró cómo recibir pagos. Escríbele antes de pedir.</p>
                 ) : (
-                  <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="grid gap-3 sm:grid-cols-2">
                     {metodos.map((m) => (
                       <button
                         key={m}
@@ -351,7 +358,7 @@ export function Checkout({ tienda: t, vista = false }: { tienda: Tienda; vista?:
                         className={cn("flex items-center gap-3 rounded-2xl bg-white p-4 text-left ring-1 transition", metodo === m ? "ring-2 ring-pino" : "ring-linea hover:ring-pino/40")}
                       >
                         <span className={cn("grid size-10 shrink-0 place-items-center rounded-xl", metodo === m ? "bg-pino text-white" : "bg-crema text-tinta")}>{METODO[m].icono}</span>
-                        <span className="min-w-0"><b className="block text-sm text-tinta">{METODO[m].t}</b><span className="text-xs text-gris">{METODO[m].d}</span></span>
+                        <span className="min-w-0"><b className="block text-sm text-tinta">{METODO[m].t}</b><span className="text-xs text-gris">{m === "tarjeta_tienda" && t.tarjeta_marcas?.length ? t.tarjeta_marcas.map((x) => MARCA[x] ?? x).join(", ") : METODO[m].d}</span></span>
                       </button>
                     ))}
                   </div>
