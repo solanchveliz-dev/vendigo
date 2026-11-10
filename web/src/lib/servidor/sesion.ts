@@ -31,6 +31,13 @@ export function borrarSesion(res: NextResponse) {
   res.cookies.set(COOKIE_RECORDAR, "", { path: "/", maxAge: 0 });
 }
 
+// Cabecera de sesión para las páginas públicas que se arman en el servidor: si quien mira es la dueña de una
+// tienda que todavía no está verificada, la API le deja ver su propia tienda (vista previa). Al público no.
+export async function cabeceraSesion(): Promise<Record<string, string>> {
+  const { acceso } = await tokens();
+  return acceso ? { Authorization: `Bearer ${acceso}` } : {};
+}
+
 export async function tokens() {
   const c = await cookies();
   return { acceso: c.get(COOKIE_ACCESO)?.value, refresh: c.get(COOKIE_REFRESH)?.value, recordar: c.get(COOKIE_RECORDAR)?.value !== "0" };

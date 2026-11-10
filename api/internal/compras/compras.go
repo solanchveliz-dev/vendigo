@@ -104,7 +104,7 @@ func (m *Modulo) comprar(w http.ResponseWriter, r *http.Request) error {
 		return httpx.Invalido("La nota puede tener hasta 300 caracteres.")
 	}
 	var tid string
-	if err := m.app.DB.QueryRowContext(ctx, `SELECT id FROM tiendas WHERE slug=$1 AND activa`, in.Slug).Scan(&tid); err != nil {
+	if err := m.app.DB.QueryRowContext(ctx, `SELECT id FROM tiendas WHERE slug=$1 AND activa AND tienda_identidad_verificada(id)`, in.Slug).Scan(&tid); err != nil {
 		return httpx.ErrNoEncontrado
 	}
 	var pid, codigo, token string

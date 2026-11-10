@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"net/http"
@@ -17,6 +18,11 @@ import (
 // cubierto: el fondo de emergencia cubre pedidos que no le llegaron al comprador
 // (la tienda canceló después de cobrar, o VendiGo le dio la razón en un reclamo "no llegó").
 const cubierto = `(d.origen = 'cancelacion' OR EXISTS (SELECT 1 FROM reclamos rc WHERE rc.pedido_id = p.id AND rc.motivo = 'no_llego'))`
+
+// CasosReactivables: veces que el fondo puede cubrir a una misma tienda y que el admin aún pueda reactivarla.
+// "A la segunda, no se reactiva": una tienda honesta a la que se le pasó tiene una oportunidad; si se repite,
+// la suspensión es definitiva.
+const CasosReactivables = 1
 
 // diasHabilesDesde cuenta los días hábiles (Perú) completos desde t hasta ahora.
 func diasHabilesDesde(t time.Time) int {
@@ -50,8 +56,10 @@ func (m *Modulo) garantias(w http.ResponseWriter, r *http.Request) error {
 		Desde     time.Time `json:"desde"`
 		Dias      int       `json:"dias_habiles"`
 		Vencida   bool      `json:"vencida"`
+		Casos     int       `json:"casos_tienda"` // veces que el fondo ya cubrió a esta tienda
 	}
-	rows, err := m.app.DB.QueryContext(ctx, `SELECT p.id, p.codigo, t.nombre, t.id, p.comprador_nombre, p.comprador_celular, d.origen, d.monto_centimos, d.creado_en
+	rows, err := m.app.DB.QueryContext(ctx, `SELECT p.id, p.codigo, t.nombre, t.id, p.comprador_nombre, p.comprador_celular, d.origen, d.monto_centimos, d.creado_en,
+		(SELECT count(*) FROM garantias gc WHERE gc.tienda_id=t.id)
 		FROM devoluciones d JOIN pedidos p ON p.id=d.pedido_id JOIN tiendas t ON t.id=p.tienda_id
 		WHERE d.estado='pendiente_tienda' AND `+cubierto+`
 		AND NOT EXISTS (SELECT 1 FROM garantias gg WHERE gg.pedido_id=p.id) ORDER BY d.creado_en`)
@@ -61,7 +69,7 @@ func (m *Modulo) garantias(w http.ResponseWriter, r *http.Request) error {
 	pend := []pendiente{}
 	for rows.Next() {
 		var x pendiente
-		if err := rows.Scan(&x.PedidoID, &x.Codigo, &x.Tienda, &x.TiendaID, &x.Comprador, &x.Celular, &x.Origen, &x.Monto, &x.Desde); err != nil {
+		if err := rows.Scan(&x.PedidoID, &x.Codigo, &x.Tienda, &x.TiendaID, &x.Comprador, &x.Celular, &x.Origen, &x.Monto, &x.Desde, &x.Casos); err != nil {
 			rows.Close()
 			return err
 		}
@@ -79,6 +87,8 @@ func (m *Modulo) garantias(w http.ResponseWriter, r *http.Request) error {
 		Tienda     string     `json:"tienda"`
 		TiendaID   string     `json:"tienda_id"`
 		Suspendida bool       `json:"tienda_suspendida"`
+		Casos      int        `json:"casos_tienda"`
+		Definitiva bool       `json:"suspension_definitiva"`
 		Monto      int        `json:"monto_centimos"`
 		Estado     string     `json:"estado"` // pagada · recuperada (sistema anterior, cuando la tienda reponía)
 		Referencia string     `json:"referencia"`
@@ -86,7 +96,7 @@ func (m *Modulo) garantias(w http.ResponseWriter, r *http.Request) error {
 		RecupRef   string     `json:"recuperada_ref"`
 		RecupEn    *time.Time `json:"recuperada_en"`
 	}
-	rows, err = m.app.DB.QueryContext(ctx, `SELECT g.id, p.id, p.codigo, t.nombre, t.id, t.suspendida_garantia, g.monto_centimos, g.estado, g.referencia, g.pagada_en, g.recuperada_ref, g.recuperada_en
+	rows, err = m.app.DB.QueryContext(ctx, `SELECT g.id, p.id, p.codigo, t.nombre, t.id, t.suspendida_garantia, (SELECT count(*) FROM garantias gc WHERE gc.tienda_id=t.id), g.monto_centimos, g.estado, g.referencia, g.pagada_en, g.recuperada_ref, g.recuperada_en
 		FROM garantias g JOIN pedidos p ON p.id=g.pedido_id JOIN tiendas t ON t.id=g.tienda_id ORDER BY g.pagada_en DESC LIMIT 100`)
 	if err != nil {
 		return err
@@ -95,9 +105,10 @@ func (m *Modulo) garantias(w http.ResponseWriter, r *http.Request) error {
 	hechas := []pagada{}
 	for rows.Next() {
 		var x pagada
-		if err := rows.Scan(&x.ID, &x.PedidoID, &x.Codigo, &x.Tienda, &x.TiendaID, &x.Suspendida, &x.Monto, &x.Estado, &x.Referencia, &x.PagadaEn, &x.RecupRef, &x.RecupEn); err != nil {
+		if err := rows.Scan(&x.ID, &x.PedidoID, &x.Codigo, &x.Tienda, &x.TiendaID, &x.Suspendida, &x.Casos, &x.Monto, &x.Estado, &x.Referencia, &x.PagadaEn, &x.RecupRef, &x.RecupEn); err != nil {
 			return err
 		}
+		x.Definitiva = x.Casos > CasosReactivables
 		hechas = append(hechas, x)
 	}
 	// Saldo del fondo (con todas las garantías, no solo las 100 que se listan):
@@ -171,7 +182,7 @@ func (m *Modulo) pagarGarantia(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 		billetera.Notificar(ctx, tx, tid, "Tu tienda está suspendida",
-			avisoSuspension(codigo, monto, total),
+			avisoSuspension(codigo, monto, total, casosTienda(ctx, tx, tid)),
 			"/vendedor/pedidos/"+pid)
 		m.app.Auditar(ctx, tx, adminID(ctx), "pagar_garantia", "pedido", pid, map[string]any{"monto": monto, "referencia": in.Referencia})
 		return nil
@@ -193,6 +204,11 @@ func (m *Modulo) reactivarTiendaFondo(w http.ResponseWriter, r *http.Request) er
 	}
 	id := chi.URLParam(r, "id")
 	err = m.app.EnTransaccion(ctx, func(tx *sql.Tx) error {
+		var casos int
+		tx.QueryRowContext(ctx, `SELECT count(*) FROM garantias WHERE tienda_id=(SELECT tienda_id FROM garantias WHERE id::text=$1)`, id).Scan(&casos)
+		if casos > CasosReactivables {
+			return httpx.Conflicto("suspension_definitiva", fmt.Sprintf("El fondo ya cubrió %d pedidos de esta tienda: la suspensión es definitiva y no se puede reactivar.", casos))
+		}
 		var tid string
 		err := tx.QueryRowContext(ctx, `UPDATE tiendas t SET suspendida_garantia=false FROM garantias g
 			WHERE g.id::text=$1 AND t.id=g.tienda_id AND t.suspendida_garantia RETURNING t.id`, id).Scan(&tid)
@@ -202,7 +218,8 @@ func (m *Modulo) reactivarTiendaFondo(w http.ResponseWriter, r *http.Request) er
 		if err != nil {
 			return err
 		}
-		billetera.Notificar(ctx, tx, tid, "Tu tienda está activa de nuevo", "El equipo de VendiGo revisó el caso y reactivó tu tienda: "+motivo, "/vendedor")
+		billetera.Notificar(ctx, tx, tid, "Tu tienda está activa de nuevo",
+			"El equipo de VendiGo revisó el caso y reactivó tu tienda: "+motivo+". Importante: si vuelve a pasar, la suspensión será definitiva.", "/vendedor")
 		m.app.Auditar(ctx, tx, adminID(ctx), "reactivar_tienda_fondo", "garantia", id, map[string]any{"motivo": motivo})
 		return nil
 	})
@@ -213,10 +230,26 @@ func (m *Modulo) reactivarTiendaFondo(w http.ResponseWriter, r *http.Request) er
 	return nil
 }
 
+// casosTienda: veces que el fondo cubrió a la tienda (incluido el caso que se acaba de registrar).
+func casosTienda(ctx context.Context, tx *sql.Tx, tid string) int {
+	var n int
+	tx.QueryRowContext(ctx, `SELECT count(*) FROM garantias WHERE tienda_id=$1`, tid).Scan(&n)
+	return n
+}
+
 // avisoSuspension: lo que se le dice a la tienda cuando VendiGo cubrió una devolución que ella no hizo.
-func avisoSuspension(codigo string, cubierto, total int) string {
+func avisoSuspension(codigo string, cubierto, total, casos int) string {
+	if casos > CasosReactivables {
+		t := fmt.Sprintf("No le devolviste el dinero al comprador del pedido %s y VendiGo le devolvió S/ %.2f de su fondo de emergencia. "+
+			"Es la %da vez que pasa: tu tienda queda suspendida de forma definitiva.", codigo, float64(cubierto)/100, casos)
+		if total > cubierto {
+			t += fmt.Sprintf(" Todavía debes devolverle S/ %.2f al comprador.", float64(total-cubierto)/100)
+		}
+		return t
+	}
 	t := fmt.Sprintf("No le devolviste el dinero al comprador del pedido %s a tiempo y VendiGo le devolvió S/ %.2f de su fondo de emergencia. "+
-		"Tu tienda no recibirá pedidos mientras el equipo de VendiGo revisa el caso. Si crees que es un error, escríbenos desde Ayuda.",
+		"Tu tienda no recibirá pedidos mientras el equipo de VendiGo revisa el caso. Si crees que es un error, escríbenos desde Ayuda. "+
+		"Si vuelve a pasar, la suspensión será definitiva.",
 		codigo, float64(cubierto)/100)
 	if total > cubierto {
 		t += fmt.Sprintf(" Además, todavía debes devolverle S/ %.2f al comprador e informarlo desde el pedido.", float64(total-cubierto)/100)

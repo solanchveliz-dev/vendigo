@@ -16,6 +16,7 @@ export type Vendedora = {
   ventas_centimos: number;
   ultimo_acceso: string | null;
   reputacion: string;
+  ruc_pendiente?: boolean;
 };
 
 export type Evento = { id: number; usuario: string; rol: string; accion: string; entidad: string; entidad_id: string; datos: string; creado_en: string };
@@ -85,7 +86,9 @@ export function fecha(iso: string | null) {
 
 export function estadoVendedora(v: Vendedora) {
   if (!v.activo) return { clave: "suspendidas", t: "Suspendido", tono: "error" as const };
-  if (v.verificacion === "pendiente") return { clave: "pendientes", t: "Pendiente", tono: "aviso" as const };
+  if (v.verificacion === "pendiente") return { clave: "pendientes", t: "Identidad por revisar", tono: "aviso" as const };
+  if (v.ruc_pendiente) return { clave: "pendientes", t: "RUC por revisar", tono: "aviso" as const };
+  if (v.verificacion !== "aprobada") return { clave: "activas", t: "Sin verificar (no visible)", tono: "neutro" as const };
   if (v.bloqueada) return { clave: "activas", t: "Bloqueo temporal", tono: "aviso" as const };
   return { clave: "activas", t: "Activo", tono: "neutro" as const };
 }

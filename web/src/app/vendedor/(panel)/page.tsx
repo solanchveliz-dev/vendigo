@@ -84,6 +84,25 @@ export default function Inicio() {
 
   return (
     <div className="space-y-5 pt-2">
+      {tienda.datos && !tienda.datos.identidad_verificada && (
+        <Aviso tono="aviso">
+          <span className="flex flex-wrap items-center justify-between gap-3">
+            <span>Tu tienda todavía no se muestra a los compradores: el equipo de VendiGo debe verificar tu identidad (DNI).</span>
+            <Link href="/vendedor/verificacion" className="font-bold text-pino underline">Verificar mi identidad</Link>
+          </span>
+        </Aviso>
+      )}
+      {tienda.datos?.reclamo_pedido_id && (
+        <Aviso tono="error">
+          <span className="flex flex-wrap items-center justify-between gap-3">
+            <span>
+              Tu tienda está suspendida: un cliente dice que no recibió su pedido. No recibes pedidos nuevos ni apareces en las búsquedas hasta que VendiGo revise el caso.
+              Envía tus pruebas (boleta o guía de envío, conversación con el cliente) o, si VendiGo le dio la razón al cliente, devuélvele su dinero e infórmalo.
+            </span>
+            <Link href={`/vendedor/cobros/reclamo/${tienda.datos.reclamo_pedido_id}`} className="font-bold text-error underline">Ver el reclamo y enviar pruebas</Link>
+          </span>
+        </Aviso>
+      )}
       {tienda.datos?.suspendida_garantia && (
         <Aviso tono="error">
           Tu tienda está suspendida: un cliente no recibió su pedido, no le devolviste su dinero a tiempo y VendiGo se lo devolvió con su fondo de emergencia. No recibirás pedidos mientras el equipo de VendiGo revisa el caso. Si crees que es un error, escríbenos desde Ayuda.

@@ -93,7 +93,7 @@ func (m *Modulo) tienda(w http.ResponseWriter, r *http.Request) error {
 	m.app.DB.QueryRowContext(ctx, `SELECT t.descripcion, t.horario, t.politicas, COALESCE(t.portada_key,''), t.entrega_recojo, t.entrega_agencia, t.entrega_motorizado, t.entrega_otra,
 		(SELECT count(*) FROM reclamos c JOIN pedidos p ON p.id=c.pedido_id WHERE p.tienda_id=t.id),
 		u.celular_verificado,
-		COALESCE((SELECT v.estado FROM verificaciones v WHERE v.tienda_id=t.id ORDER BY v.creado_en DESC LIMIT 1),'sin_enviar')
+		COALESCE((SELECT v.estado FROM verificaciones v WHERE v.tienda_id=t.id AND v.clase='identidad' ORDER BY v.creado_en DESC LIMIT 1),'sin_enviar')
 		FROM tiendas t JOIN usuarios u ON u.id=t.usuario_id WHERE t.id=$1`, t.ID).
 		Scan(&info.Descripcion, &info.Horario, &info.Politicas, &portada, &recojo, &agencia, &moto, &otra, &info.Reclamos, &info.Contacto, &info.Identidad)
 	if portada != "" {

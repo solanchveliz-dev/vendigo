@@ -58,6 +58,9 @@ export type Tienda = {
   transf_titular: string;
   metodos_pago: string[];
   suspendida_garantia: boolean;
+  identidad_verificada: boolean; // sin esto la tienda no se muestra a los compradores
+  ruc_verificado: boolean; // insignia "Negocio con RUC verificado"
+  reclamo_pedido_id: string; // pedido con reclamo "No me llegó" que suspende la tienda ("" si no hay)
   tema_color: string;
   tema_fuente: string;
   prefijo_pedido: string;

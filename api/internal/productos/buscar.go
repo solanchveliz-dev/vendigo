@@ -58,7 +58,8 @@ func (m *Modulo) impulsados(ctx context.Context, q string, limite int) ([]Impuls
 		(SELECT o.descuento_pct FROM ofertas o WHERE o.producto_id=p.id AND o.termina_en > now())
 		FROM productos p JOIN tiendas t ON t.id=p.tienda_id
 		WHERE p.destacado_hasta > now() AND p.activo AND NOT p.eliminado AND p.stock > 0
-		AND t.activa AND NOT t.pausada AND NOT t.suspendida_garantia AND `+coincide()+`
+		AND t.activa AND NOT t.pausada AND NOT t.suspendida_garantia
+		AND tienda_identidad_verificada(t.id) AND tienda_reclamo_bloqueante(t.id) IS NULL AND `+coincide()+`
 		ORDER BY random() LIMIT $2`, pq.Array(palabras(q)), limite)
 	if err != nil {
 		return nil, err
@@ -135,6 +136,7 @@ func (m *Modulo) buscar(w http.ResponseWriter, r *http.Request) error {
 		(SELECT count(*) FROM productos p WHERE p.tienda_id=t.id AND p.activo AND NOT p.eliminado AND `+coincide()+`) AS coinciden
 		FROM tiendas t
 		WHERE t.activa AND NOT t.pausada AND NOT t.suspendida_garantia
+		AND tienda_identidad_verificada(t.id) AND tienda_reclamo_bloqueante(t.id) IS NULL
 		AND ($2 = '' OR t.rubro = $2)
 		AND ($3 = '' OR `+sinTildes("t.ciudad")+` = `+sinTildes("$3")+` OR `+sinTildes("t.distrito")+` = `+sinTildes("$3")+`)
 		AND ($4 = '' OR ($4 = 'recojo' AND t.entrega_recojo) OR ($4 = 'agencia' AND t.entrega_agencia) OR ($4 = 'motorizado' AND t.entrega_motorizado))

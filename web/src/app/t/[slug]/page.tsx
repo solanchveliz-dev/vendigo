@@ -4,7 +4,8 @@ import type { Metadata } from "next";
 import { ContarVisita } from "@/components/tienda/contar-visita";
 import { notFound } from "next/navigation";
 import { Bike, Clock, MapPin, Megaphone, MessageCircle, Package, RefreshCw, ShieldCheck, Star, Store } from "lucide-react";
-import { API_URL } from "@/lib/servidor/sesion";
+import { API_URL, cabeceraSesion } from "@/lib/servidor/sesion";
+import { InsigniasTienda } from "@/components/tienda/insignias";
 import { soles } from "@/lib/formato";
 import { rubros } from "@/lib/catalogos";
 import type { Producto, Tienda } from "@/lib/tipos";
@@ -18,9 +19,10 @@ import { enlaceRed } from "@/lib/redes";
 
 // Página pública de la tienda. Se genera en el servidor para que Google pueda leerla.
 async function cargar(slug: string) {
+  const headers = await cabeceraSesion();
   const [t, p] = await Promise.all([
-    fetch(`${API_URL}/api/v1/tiendas/${encodeURIComponent(slug)}`, { cache: "no-store" }),
-    fetch(`${API_URL}/api/v1/tiendas/${encodeURIComponent(slug)}/productos`, { cache: "no-store" }),
+    fetch(`${API_URL}/api/v1/tiendas/${encodeURIComponent(slug)}`, { cache: "no-store", headers }),
+    fetch(`${API_URL}/api/v1/tiendas/${encodeURIComponent(slug)}/productos`, { cache: "no-store", headers }),
   ]);
   if (!t.ok) return null;
   return { tienda: (await t.json()) as Tienda, productos: ((await p.json()) as { productos: Producto[] }).productos };
@@ -97,7 +99,13 @@ export default async function TiendaPublica({ params, searchParams }: { params: 
               <span className="grid size-full place-items-center font-display text-5xl font-extrabold text-pino">{t.nombre[0]}</span>
             )}
           </div>
+          {!t.identidad_verificada && (
+            <p className="mt-4 rounded-full bg-aviso-claro px-4 py-1.5 text-xs font-bold text-aviso">
+              Vista previa: tu tienda todavía no se muestra a los compradores hasta que VendiGo verifique tu identidad.
+            </p>
+          )}
           <h1 className="mt-4 text-4xl font-extrabold text-tinta">{t.nombre}</h1>
+          <InsigniasTienda identidad={t.identidad_verificada} ruc={t.ruc_verificado} className="mt-2 justify-center" />
           <p className="mt-2 text-xs font-semibold uppercase tracking-[0.18em] text-gris">
             {rubros[t.rubro] ?? t.rubro} · {lugar}
           </p>

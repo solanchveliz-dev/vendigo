@@ -170,23 +170,25 @@ type Vendedora struct {
 	Ventas       int        `json:"ventas_centimos"`
 	UltimoAcceso *time.Time `json:"ultimo_acceso"`
 	Reputacion   string     `json:"reputacion"`
+	RUCPendiente bool       `json:"ruc_pendiente"` // envió su RUC y espera revisión
 }
 
 const consultaVendedoras = `SELECT u.id, u.nombre, u.celular, COALESCE(u.email,''), u.activo, u.suspendido_motivo,
 	COALESCE(u.bloqueado_hasta > now(), false), u.creado_en,
 	COALESCE(t.id::text,''), COALESCE(t.nombre,''), COALESCE(t.slug,''),
 	COALESCE((SELECT p.nombre FROM suscripciones s JOIN planes p ON p.id=s.plan_id WHERE s.tienda_id=t.id AND s.activa LIMIT 1),''),
-	COALESCE((SELECT v.estado FROM verificaciones v WHERE v.tienda_id=t.id ORDER BY v.creado_en DESC LIMIT 1),'sin_enviar'),
+	COALESCE((SELECT v.estado FROM verificaciones v WHERE v.tienda_id=t.id AND v.clase='identidad' ORDER BY v.creado_en DESC LIMIT 1),'sin_enviar'),
 	(SELECT count(*) FROM pedidos p WHERE p.tienda_id=t.id AND p.estado NOT IN ('rechazado','cancelado')),
 	COALESCE((SELECT SUM(total_centimos) FROM pedidos p WHERE p.tienda_id=t.id AND p.estado='entregado'),0),
-	(SELECT max(a.creado_en) FROM accesos a WHERE a.usuario_id=u.id AND a.exito), COALESCE(t.reputacion,'')
+	(SELECT max(a.creado_en) FROM accesos a WHERE a.usuario_id=u.id AND a.exito), COALESCE(t.reputacion,''),
+	EXISTS (SELECT 1 FROM verificaciones v WHERE v.tienda_id=t.id AND v.clase='negocio' AND v.estado='pendiente')
 	FROM usuarios u LEFT JOIN tiendas t ON t.usuario_id=u.id
 	WHERE u.rol='vendedor'`
 
 func scanVendedora(s interface{ Scan(...any) error }) (Vendedora, error) {
 	var v Vendedora
 	err := s.Scan(&v.ID, &v.Nombre, &v.Celular, &v.Email, &v.Activo, &v.Motivo, &v.Bloqueada, &v.CreadoEn,
-		&v.TiendaID, &v.Tienda, &v.Slug, &v.Plan, &v.Verificacion, &v.Pedidos, &v.Ventas, &v.UltimoAcceso, &v.Reputacion)
+		&v.TiendaID, &v.Tienda, &v.Slug, &v.Plan, &v.Verificacion, &v.Pedidos, &v.Ventas, &v.UltimoAcceso, &v.Reputacion, &v.RUCPendiente)
 	return v, err
 }
 
@@ -274,6 +276,8 @@ func (m *Modulo) vendedor(w http.ResponseWriter, r *http.Request) error {
 		Perdidos   int        `json:"reclamos_perdidos"`
 		PlanDesde  *time.Time `json:"plan_desde"`
 		VerifID    string     `json:"verificacion_id"`
+		RUCID      string     `json:"verificacion_ruc_id"`
+		RUCEstado  string     `json:"ruc"`
 	}
 	extra.Entrega = []string{}
 	if v.TiendaID != "" {
@@ -286,9 +290,11 @@ func (m *Modulo) vendedor(w http.ResponseWriter, r *http.Request) error {
 			(SELECT count(*) FROM reclamos c JOIN pedidos p ON p.id=c.pedido_id WHERE p.tienda_id=t.id),
 			(SELECT count(*) FROM reclamos c JOIN pedidos p ON p.id=c.pedido_id WHERE p.tienda_id=t.id AND c.estado='a_favor_comprador'),
 			(SELECT inicio FROM suscripciones s WHERE s.tienda_id=t.id AND s.activa LIMIT 1),
-			COALESCE((SELECT v.id::text FROM verificaciones v WHERE v.tienda_id=t.id ORDER BY v.creado_en DESC LIMIT 1),'')
+			COALESCE((SELECT v.id::text FROM verificaciones v WHERE v.tienda_id=t.id AND v.clase='identidad' ORDER BY v.creado_en DESC LIMIT 1),''),
+			COALESCE((SELECT v.id::text FROM verificaciones v WHERE v.tienda_id=t.id AND v.clase='negocio' ORDER BY v.creado_en DESC LIMIT 1),''),
+			COALESCE((SELECT v.estado FROM verificaciones v WHERE v.tienda_id=t.id AND v.clase='negocio' ORDER BY v.creado_en DESC LIMIT 1),'sin_enviar')
 			FROM tiendas t WHERE t.id=$1`, v.TiendaID).
-			Scan(&extra.Ciudad, &recojo, &agencia, &moto, &otra, &extra.Reputacion, &extra.Reclamos, &extra.Perdidos, &extra.PlanDesde, &extra.VerifID)
+			Scan(&extra.Ciudad, &recojo, &agencia, &moto, &otra, &extra.Reputacion, &extra.Reclamos, &extra.Perdidos, &extra.PlanDesde, &extra.VerifID, &extra.RUCID, &extra.RUCEstado)
 		for _, e := range []struct {
 			ok bool
 			t  string
@@ -371,6 +377,7 @@ type Verificacion struct {
 	UsuarioID string     `json:"usuario_id"`
 	Titular   string     `json:"titular_cuenta"`
 	Tipo      string     `json:"tipo_documento"`
+	Clase     string     `json:"clase"` // identidad (DNI/CE, obligatoria para mostrarse) o negocio (RUC, insignia)
 	Ultimos4  string     `json:"ultimos4"`
 	Nombre    string     `json:"nombre_completo"`
 	Estado    string     `json:"estado"`
@@ -383,12 +390,12 @@ type Verificacion struct {
 	Selfie    string     `json:"selfie_url,omitempty"`
 }
 
-const consultaVerif = `SELECT v.id, v.tienda_id, t.nombre, u.id, u.nombre, v.tipo_documento, v.ultimos4, v.nombre_completo, v.estado,
+const consultaVerif = `SELECT v.id, v.tienda_id, t.nombre, u.id, u.nombre, v.tipo_documento, v.clase, v.ultimos4, v.nombre_completo, v.estado,
 	v.motivo_rechazo, v.creado_en, v.revisado_en FROM verificaciones v JOIN tiendas t ON t.id=v.tienda_id JOIN usuarios u ON u.id=t.usuario_id`
 
 func scanVerif(s interface{ Scan(...any) error }) (Verificacion, error) {
 	var v Verificacion
-	err := s.Scan(&v.ID, &v.TiendaID, &v.Tienda, &v.UsuarioID, &v.Titular, &v.Tipo, &v.Ultimos4, &v.Nombre, &v.Estado, &v.Motivo, &v.CreadoEn, &v.Revisado)
+	err := s.Scan(&v.ID, &v.TiendaID, &v.Tienda, &v.UsuarioID, &v.Titular, &v.Tipo, &v.Clase, &v.Ultimos4, &v.Nombre, &v.Estado, &v.Motivo, &v.CreadoEn, &v.Revisado)
 	return v, err
 }
 
@@ -426,12 +433,12 @@ func (m *Modulo) verificacion(w http.ResponseWriter, r *http.Request) error {
 	}
 	var cifrado, frente, selfie string
 	var reverso *string
-	m.app.DB.QueryRowContext(ctx, `SELECT numero_cifrado, frente_key, reverso_key, selfie_key FROM verificaciones WHERE id=$1`, v.ID).Scan(&cifrado, &frente, &reverso, &selfie)
+	m.app.DB.QueryRowContext(ctx, `SELECT numero_cifrado, frente_key, reverso_key, COALESCE(selfie_key, '') FROM verificaciones WHERE id=$1`, v.ID).Scan(&cifrado, &frente, &reverso, &selfie)
 	if m.app.Cifrador != nil {
 		v.Numero, _ = m.app.Cifrador.Descifrar(cifrado)
 	}
 	v.Frente = m.urlPrivada(ctx, frente)
-	v.Selfie = m.urlPrivada(ctx, selfie)
+	v.Selfie = m.urlPrivada(ctx, selfie) // la ficha RUC no lleva selfie: queda vacío
 	if reverso != nil {
 		v.Reverso = m.urlPrivada(ctx, *reverso)
 	}
@@ -445,16 +452,20 @@ func (m *Modulo) aprobar(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	id := chi.URLParam(r, "id")
 	err := m.app.EnTransaccion(ctx, func(tx *sql.Tx) error {
-		var tid string
+		var tid, clase string
 		err := tx.QueryRowContext(ctx, `UPDATE verificaciones SET estado='aprobada', motivo_rechazo='', revisado_en=now(), revisado_por=$2
-			WHERE id::text=$1 AND estado='pendiente' RETURNING tienda_id`, id, adminID(ctx)).Scan(&tid)
+			WHERE id::text=$1 AND estado='pendiente' RETURNING tienda_id, clase`, id, adminID(ctx)).Scan(&tid, &clase)
 		if core.SinFilas(err) {
 			return httpx.Conflicto("ya_revisada", "Esta verificación ya se revisó o no existe.")
 		}
 		if err != nil {
 			return err
 		}
-		billetera.Notificar(ctx, tx, tid, "Verificamos tu identidad", "El equipo de VendiGo aprobó tus datos. Tu identidad ya está verificada.", "/vendedor/verificacion")
+		if clase == "negocio" {
+			billetera.Notificar(ctx, tx, tid, "Verificamos tu RUC", "Tu tienda ya muestra la insignia «Negocio con RUC verificado».", "/vendedor/verificacion")
+		} else {
+			billetera.Notificar(ctx, tx, tid, "Verificamos tu identidad", "El equipo de VendiGo aprobó tus datos. Tu tienda ya es visible para los compradores.", "/vendedor")
+		}
 		m.app.Auditar(ctx, tx, adminID(ctx), "aprobar_identidad", "verificacion", id, nil)
 		return nil
 	})

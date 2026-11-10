@@ -621,6 +621,10 @@ func (m *Modulo) catalogoPublico(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
+	// Tienda sin identidad verificada: solo su dueña ve los productos (vista previa).
+	if !tiendas.VisibleParaPublico(r, m.app, tid) {
+		return httpx.ErrNoEncontrado
+	}
 	rows, err := m.app.DB.QueryContext(ctx, `SELECT id FROM productos WHERE tienda_id=$1 AND activo AND NOT eliminado
 		ORDER BY (destacado_hasta > now()) IS TRUE DESC, creado_en DESC LIMIT 200`, tid)
 	if err != nil {
@@ -661,6 +665,9 @@ func (m *Modulo) productoPublico(w http.ResponseWriter, r *http.Request) error {
 	}
 	if err != nil {
 		return err
+	}
+	if !tiendas.VisibleParaPublico(r, m.app, tid) {
+		return httpx.ErrNoEncontrado
 	}
 	// Si el producto está impulsado, cuenta la visita (excepto la vista previa de la propia tienda).
 	if r.URL.Query().Get("vista") != "1" {

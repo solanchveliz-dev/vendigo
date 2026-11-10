@@ -58,6 +58,17 @@ func Crear(ctx context.Context, app *core.App, tx *sql.Tx, in PedidoNuevo) (stri
 	var recojo, agencia, moto, pausada bool
 	var costoMoto, adelRecojo, adelMoto int
 	var yape, plin, tarjeta, transf, pagoRecojo, pagoMoto string
+	var verificada, porReclamo bool
+	if err := tx.QueryRowContext(ctx, `SELECT tienda_identidad_verificada(id), tienda_reclamo_bloqueante(id) IS NOT NULL FROM tiendas WHERE id=$1`, in.TiendaID).
+		Scan(&verificada, &porReclamo); err != nil {
+		return "", "", httpx.ErrNoEncontrado
+	}
+	switch {
+	case !verificada && !in.Prueba: // los pedidos de prueba (simulador de desarrollo) sí se permiten
+		return "", "", httpx.Conflicto("tienda_sin_verificar", "Esta tienda todavía no está verificada por VendiGo y no recibe pedidos.")
+	case porReclamo:
+		return "", "", httpx.Conflicto("tienda_pausada", "Esta tienda no está recibiendo pedidos por ahora.")
+	}
 	if err := tx.QueryRowContext(ctx, `SELECT entrega_recojo, entrega_agencia, entrega_motorizado, costo_motorizado_centimos, (pausada OR suspendida_garantia),
 		yape_numero, plin_numero, recojo_pago, motorizado_pago, adelanto_pct, motorizado_adelanto_pct, tarjeta_link, transf_cuenta||transf_cci FROM tiendas WHERE id=$1 AND activa`,
 		in.TiendaID).Scan(&recojo, &agencia, &moto, &costoMoto, &pausada, &yape, &plin, &pagoRecojo, &pagoMoto, &adelRecojo, &adelMoto, &tarjeta, &transf); err != nil {
@@ -319,6 +330,12 @@ func AbrirReclamo(ctx context.Context, tx *sql.Tx, pid, motivo, descripcion stri
 	if err := evento(ctx, tx, pid, "reclamo", "Abriste un reclamo: "+MotivosReclamo[motivo]+". La tienda responderá y VendiGo revisará el caso."); err != nil {
 		return err
 	}
-	billetera.Notificar(ctx, tx, tid, "Reclamo en el pedido "+codigo, "Responde con tu boleta de envío o tu prueba. VendiGo revisará el caso.", "/vendedor/cobros/reclamo/"+pid)
+	aviso := "Responde con tu boleta de envío o tu prueba. VendiGo revisará el caso."
+	if motivo == "no_llego" {
+		// El comprador ya pagó y dice que no le llegó: la tienda queda suspendida mientras se revisa (tienda_reclamo_bloqueante).
+		aviso = "El cliente dice que no recibió su pedido. Tu tienda queda suspendida (no recibe pedidos nuevos ni aparece en las búsquedas) " +
+			"hasta que VendiGo revise el caso. Envía tus pruebas: boleta o guía de envío, conversación con el cliente, etc."
+	}
+	billetera.Notificar(ctx, tx, tid, "Reclamo en el pedido "+codigo, aviso, "/vendedor/cobros/reclamo/"+pid)
 	return nil
 }

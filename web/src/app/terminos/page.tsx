@@ -19,7 +19,8 @@ export default function Terminos() {
           <ul>
             <li>Para vender necesitas una cuenta verificada con tu celular por código SMS.</li>
             <li>Eres responsable de mantener segura tu contraseña. Puedes activar la verificación en dos pasos.</li>
-            <li>Puedes verificar tu identidad (DNI) para dar más confianza a tus clientes. El equipo de VendiGo revisa cada solicitud.</li>
+            <li>Para que tu tienda se muestre a los compradores debes verificar tu identidad (DNI o carné de extranjería, con una selfie). El equipo de VendiGo revisa cada solicitud.</li>
+            <li>Si tu negocio tiene RUC, puedes verificarlo con tu ficha RUC para mostrar la insignia “Negocio con RUC verificado”.</li>
             <li>VendiGo puede suspender cuentas o tiendas que incumplan estos términos, informando el motivo.</li>
           </ul>
         </>],
@@ -42,12 +43,13 @@ export default function Terminos() {
         </>],
         ["Reclamos entre comprador y tienda", <>
           <p>Si un pedido no llega, llega dañado, incompleto o es distinto a lo publicado, el comprador puede reportarlo desde su pedido hasta 7 días después de recibirlo. La tienda responde con sus pruebas y, si no hay acuerdo, VendiGo revisa las pruebas de ambas partes y decide.</p>
+          <p>Si un comprador que ya pagó reporta que <b>no le llegó</b> su pedido, la tienda queda suspendida de inmediato (no recibe pedidos nuevos ni aparece en las búsquedas) mientras VendiGo revisa el caso. La suspensión se levanta sola si VendiGo da la razón a la tienda, o cuando la tienda devuelve el dinero y lo informa.</p>
           <p>Si VendiGo da la razón al comprador, el pedido se cancela y <b>la tienda debe devolverle lo pagado</b> e informarlo en VendiGo con su comprobante. Si da la razón a la tienda, el pedido queda como entregado.</p>
           <p>Además, cualquier persona puede usar nuestro <Link href="/libro-reclamaciones" className="font-semibold underline">Libro de Reclamaciones</Link>.</p>
         </>],
         ["Fondo de emergencia de VendiGo", <>
           <p>VendiGo mantiene un fondo común, que se alimenta con un porcentaje de todo lo que cobra por sus servicios (planes, ventas extra, impulsos y créditos de IA), para los pedidos que <b>no le llegaron al comprador</b>: cuando la tienda canceló después de cobrar, o cuando VendiGo resolvió a favor del comprador un reclamo de “No me llegó”.</p>
-          <p>Si en esos casos la tienda no devuelve el dinero en <PlazoFondo />, VendiGo le devuelve al comprador hasta <TopeFondo /> por pedido. La tienda queda suspendida y no recibe pedidos mientras VendiGo revisa el caso; VendiGo puede mantener la suspensión si confirma un mal uso de la plataforma.</p>
+          <p>Si en esos casos la tienda no devuelve el dinero en <PlazoFondo />, VendiGo le devuelve al comprador hasta <TopeFondo /> por pedido. La tienda queda suspendida y no recibe pedidos mientras VendiGo revisa el caso; VendiGo puede reactivarla una vez si fue un descuido; si vuelve a pasar, o si confirma un mal uso de la plataforma, la suspensión es definitiva.</p>
           <p>El fondo no cubre productos dañados, distintos o incompletos: en esos casos la devolución corresponde a la tienda.</p>
         </>],
         ["Responsabilidad", <>

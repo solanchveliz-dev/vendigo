@@ -15,7 +15,7 @@ type Detalle = {
   accesos: { exito: boolean; motivo: string; ip: string; agente: string; creado_en: string }[];
   historial: Evento[];
   ventas: { vendido_centimos: number; pedidos_entregados: number; pagos_por_confirmar: number; devoluciones_pendientes: number };
-  tienda: { ciudad: string; entrega: string[]; reputacion: string; reclamos: number; reclamos_perdidos: number; plan_desde: string | null; verificacion_id: string };
+  tienda: { ciudad: string; entrega: string[]; reputacion: string; reclamos: number; reclamos_perdidos: number; plan_desde: string | null; verificacion_id: string; verificacion_ruc_id: string; ruc: string };
   pagos_plan: { concepto: string; monto_centimos: number; estado: "pendiente" | "confirmado" | "rechazado" | "de_prueba"; creado_en: string }[];
 };
 
@@ -46,6 +46,7 @@ export default function DetalleVendedor({ params }: { params: Promise<{ id: stri
   const avisar = useAvisar();
   const [suspender, setSuspender] = useState(false);
   const [revisar, setRevisar] = useState(false);
+  const [revisarRuc, setRevisarRuc] = useState(false);
   const [motivo, setMotivo] = useState("");
   const [enviando, setEnviando] = useState(false);
 
@@ -144,7 +145,7 @@ export default function DetalleVendedor({ params }: { params: Promise<{ id: stri
               <span className="grid size-10 place-items-center rounded-xl bg-white text-tinta"><BadgeCheck className="size-5" /></span>
               <span>
                 <b className="block text-tinta">Identidad: {VERIFICACION[v.verificacion]?.texto ?? v.verificacion}</b>
-                <span className="text-xs text-gris">Verificar la identidad da confianza a los compradores.</span>
+                <span className="text-xs text-gris">{v.verificacion === "aprobada" ? "Su tienda es visible para los compradores." : "Su tienda no se muestra a los compradores hasta que apruebes su identidad."}</span>
               </span>
             </span>
             {d.tienda.verificacion_id && (
@@ -153,6 +154,20 @@ export default function DetalleVendedor({ params }: { params: Promise<{ id: stri
               </Boton>
             )}
           </div>
+          {d.tienda.verificacion_ruc_id && (
+            <div className="-mt-2 mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-crema/70 p-4">
+              <span className="flex items-center gap-3">
+                <span className="grid size-10 place-items-center rounded-xl bg-white text-tinta"><BadgeCheck className="size-5" /></span>
+                <span>
+                  <b className="block text-tinta">RUC: {VERIFICACION[d.tienda.ruc]?.texto ?? d.tienda.ruc}</b>
+                  <span className="text-xs text-gris">Si lo apruebas, la tienda muestra la insignia “Negocio con RUC verificado”.</span>
+                </span>
+              </span>
+              <Boton tamano="sm" variante={d.tienda.ruc === "pendiente" ? "primario" : "secundario"} onClick={() => setRevisarRuc(true)}>
+                {d.tienda.ruc === "pendiente" ? "Revisar RUC" : "Ver ficha RUC"}
+              </Boton>
+            </div>
+          )}
           <dl>
             <Fila k="Vendido (entregado)">{soles(d.ventas.vendido_centimos)}</Fila>
             <Fila k="Pedidos entregados">{d.ventas.pedidos_entregados}</Fila>
@@ -190,6 +205,7 @@ export default function DetalleVendedor({ params }: { params: Promise<{ id: stri
       </Tarjeta>
 
       {d.tienda.verificacion_id && <RevisarIdentidad id={d.tienda.verificacion_id} abierto={revisar} onCerrar={() => setRevisar(false)} alTerminar={recargar} />}
+      {d.tienda.verificacion_ruc_id && <RevisarIdentidad id={d.tienda.verificacion_ruc_id} abierto={revisarRuc} onCerrar={() => setRevisarRuc(false)} alTerminar={recargar} />}
       <Modal abierto={suspender} onCerrar={() => setSuspender(false)} titulo="Suspender cuenta">
         <p className="mb-3 text-sm text-gris">{v.nombre} no podrá entrar a VendiGo y se cerrarán sus sesiones al instante. Su tienda deja de verse y de recibir pedidos mientras esté suspendida.</p>
         <Area value={motivo} onChange={(ev) => setMotivo(ev.target.value)} placeholder="Motivo (ej. Vende productos prohibidos)" maxLength={300} />

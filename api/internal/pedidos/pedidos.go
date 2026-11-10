@@ -1001,9 +1001,9 @@ func (m *Modulo) leerNotificaciones(w http.ResponseWriter, r *http.Request) erro
 // ResolverReclamo lo usa el administrador cuando la tienda y el comprador no se ponen de acuerdo.
 // aFavor: "comprador" (se devuelve el dinero y se cancela el pedido) o "vendedor" (el dinero sigue su curso).
 func ResolverReclamo(ctx context.Context, app *core.App, tx *sql.Tx, reclamoID, aFavor, nota, adminID string) (string, error) {
-	var pid, tid, codigo, estado string
-	err := tx.QueryRowContext(ctx, `SELECT p.id, p.tienda_id, p.codigo, p.estado FROM reclamos c JOIN pedidos p ON p.id=c.pedido_id
-		WHERE c.id::text=$1 AND c.estado IN ('abierto','en_revision') FOR UPDATE OF c`, reclamoID).Scan(&pid, &tid, &codigo, &estado)
+	var pid, tid, codigo, estado, motivo string
+	err := tx.QueryRowContext(ctx, `SELECT p.id, p.tienda_id, p.codigo, p.estado, c.motivo FROM reclamos c JOIN pedidos p ON p.id=c.pedido_id
+		WHERE c.id::text=$1 AND c.estado IN ('abierto','en_revision') FOR UPDATE OF c`, reclamoID).Scan(&pid, &tid, &codigo, &estado, &motivo)
 	if core.SinFilas(err) {
 		return "", httpx.Conflicto("reclamo_cerrado", "Este reclamo ya se resolvió o no existe.")
 	}
@@ -1027,6 +1027,9 @@ func ResolverReclamo(ctx context.Context, app *core.App, tx *sql.Tx, reclamoID, 
 		if devolver {
 			texto += " La tienda debe devolverte tu dinero; verás aquí cuando lo informe."
 			aviso += " Devuelve el pago al comprador e infórmalo con tu captura desde el pedido."
+			if motivo == "no_llego" {
+				aviso += " Tu tienda seguirá suspendida hasta que informes la devolución."
+			}
 		}
 		if err := evento(ctx, tx, pid, "cancelado", texto); err != nil {
 			return "", err
@@ -1044,7 +1047,11 @@ func ResolverReclamo(ctx context.Context, app *core.App, tx *sql.Tx, reclamoID, 
 		} else if err := evento(ctx, tx, pid, estado, "VendiGo revisó el reclamo y las pruebas de la tienda. El pedido queda como entregado."); err != nil {
 			return "", err
 		}
-		billetera.Notificar(ctx, tx, tid, "Reclamo resuelto a tu favor", "Pedido "+codigo+": el pedido queda como entregado.", "/vendedor/cobros/reclamo/"+pid)
+		aviso := "Pedido " + codigo + ": el pedido queda como entregado."
+		if motivo == "no_llego" {
+			aviso += " Tu tienda ya puede recibir pedidos de nuevo."
+		}
+		billetera.Notificar(ctx, tx, tid, "Reclamo resuelto a tu favor", aviso, "/vendedor/cobros/reclamo/"+pid)
 	default:
 		return "", httpx.Invalido("Elige a favor de quién se resuelve.")
 	}

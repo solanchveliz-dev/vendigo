@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { API_URL } from "@/lib/servidor/sesion";
+import { API_URL, cabeceraSesion } from "@/lib/servidor/sesion";
 import type { Tienda } from "@/lib/tipos";
 import { CabeceraPublica } from "@/components/tienda/cabecera";
 import { PieLegal } from "@/components/legal/pie";
@@ -9,7 +9,7 @@ import { Checkout } from "@/components/tienda/checkout";
 type Params = { params: Promise<{ slug: string }>; searchParams: Promise<{ vista?: string }> };
 
 async function cargar(slug: string) {
-  const r = await fetch(`${API_URL}/api/v1/tiendas/${encodeURIComponent(slug)}`, { cache: "no-store" });
+  const r = await fetch(`${API_URL}/api/v1/tiendas/${encodeURIComponent(slug)}`, { cache: "no-store", headers: await cabeceraSesion() });
   return r.ok ? ((await r.json()) as Tienda) : null;
 }
 

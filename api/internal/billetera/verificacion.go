@@ -1,8 +1,10 @@
 package billetera
 
 // Este paquete ya no maneja dinero: VendiGo no recibe ni retiene los pagos de las ventas.
-// Queda la verificación de identidad de la vendedora (insignia "Tienda verificada"),
-// los avisos a la tienda y el cálculo de días hábiles.
+// Queda la verificación de la vendedora, los avisos a la tienda y el cálculo de días hábiles.
+// La verificación tiene dos partes, que aprueba un administrador:
+//   · identidad (DNI o carné de extranjería, con selfie): obligatoria; sin ella la tienda no se muestra a los compradores.
+//   · negocio (RUC con su ficha RUC): opcional; da la insignia "Negocio con RUC verificado".
 
 import (
 	"net/http"
@@ -30,12 +32,36 @@ func (m *Modulo) RutasVendedor(r chi.Router) {
 
 // ---------- verificación de identidad ----------
 
-func (m *Modulo) estadoVerificacion(r *http.Request, tid string) string {
+func (m *Modulo) estadoVerificacion(r *http.Request, tid, clase string) string {
 	var e string
-	if m.app.DB.QueryRowContext(r.Context(), `SELECT estado FROM verificaciones WHERE tienda_id=$1 ORDER BY creado_en DESC LIMIT 1`, tid).Scan(&e) != nil {
+	if m.app.DB.QueryRowContext(r.Context(), `SELECT estado FROM verificaciones WHERE tienda_id=$1 AND clase=$2 ORDER BY creado_en DESC LIMIT 1`, tid, clase).Scan(&e) != nil {
 		return "sin_enviar"
 	}
 	return e
+}
+
+type estadoVerif struct {
+	Estado   string     `json:"estado"`
+	Tipo     string     `json:"tipo_documento,omitempty"`
+	Ultimos4 string     `json:"ultimos4,omitempty"`
+	Nombre   string     `json:"nombre_completo,omitempty"`
+	Motivo   string     `json:"motivo_rechazo,omitempty"`
+	CreadoEn *time.Time `json:"creado_en,omitempty"`
+}
+
+func (m *Modulo) leerVerif(r *http.Request, tid, clase string) (estadoVerif, error) {
+	v := estadoVerif{}
+	var creado time.Time
+	err := m.app.DB.QueryRowContext(r.Context(), `SELECT estado, tipo_documento, ultimos4, nombre_completo, motivo_rechazo, creado_en
+		FROM verificaciones WHERE tienda_id=$1 AND clase=$2 ORDER BY creado_en DESC LIMIT 1`, tid, clase).Scan(&v.Estado, &v.Tipo, &v.Ultimos4, &v.Nombre, &v.Motivo, &creado)
+	if core.SinFilas(err) {
+		return estadoVerif{Estado: "sin_enviar"}, nil
+	}
+	if err != nil {
+		return v, err
+	}
+	v.CreadoEn = &creado
+	return v, nil
 }
 
 func (m *Modulo) verificacion(w http.ResponseWriter, r *http.Request) error {
@@ -44,28 +70,40 @@ func (m *Modulo) verificacion(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	var v struct {
-		Estado   string    `json:"estado"`
-		Tipo     string    `json:"tipo_documento"`
-		Ultimos4 string    `json:"ultimos4"`
-		Nombre   string    `json:"nombre_completo"`
-		Motivo   string    `json:"motivo_rechazo"`
-		CreadoEn time.Time `json:"creado_en"`
-	}
-	err = m.app.DB.QueryRowContext(ctx, `SELECT estado, tipo_documento, ultimos4, nombre_completo, motivo_rechazo, creado_en
-		FROM verificaciones WHERE tienda_id=$1 ORDER BY creado_en DESC LIMIT 1`, tid).Scan(&v.Estado, &v.Tipo, &v.Ultimos4, &v.Nombre, &v.Motivo, &v.CreadoEn)
-	if core.SinFilas(err) {
-		httpx.OK(w, map[string]any{"estado": "sin_enviar"})
-		return nil
-	}
+	// La identidad va en la raíz (como antes) y el RUC en "negocio".
+	identidad, err := m.leerVerif(r, tid, "identidad")
 	if err != nil {
 		return err
 	}
-	httpx.OK(w, v)
+	negocio, err := m.leerVerif(r, tid, "negocio")
+	if err != nil {
+		return err
+	}
+	httpx.OK(w, struct {
+		estadoVerif
+		Negocio estadoVerif `json:"negocio"`
+	}{identidad, negocio})
 	return nil
 }
 
-var reDoc = map[string]*regexp.Regexp{"dni": regexp.MustCompile(`^\d{8}$`), "ruc": regexp.MustCompile(`^(10|20)\d{9}$`), "ce": regexp.MustCompile(`^\d{9,12}$`)}
+// rucValido comprueba el dígito verificador del RUC (SUNAT, módulo 11).
+func rucValido(ruc string) bool {
+	if !regexp.MustCompile(`^(10|15|17|20)\d{9}$`).MatchString(ruc) {
+		return false
+	}
+	pesos := []int{5, 4, 3, 2, 7, 6, 5, 4, 3, 2}
+	suma := 0
+	for i, p := range pesos {
+		suma += int(ruc[i]-'0') * p
+	}
+	d := 11 - suma%11
+	if d >= 10 {
+		d -= 10
+	}
+	return d == int(ruc[10]-'0')
+}
+
+var reDoc = map[string]*regexp.Regexp{"dni": regexp.MustCompile(`^\d{8}$`), "ruc": regexp.MustCompile(`^(10|15|17|20)\d{9}$`), "ce": regexp.MustCompile(`^\d{9,12}$`)}
 
 func (m *Modulo) enviarVerificacion(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
@@ -89,29 +127,53 @@ func (m *Modulo) enviarVerificacion(w http.ResponseWriter, r *http.Request) erro
 		return httpx.Invalido("Elige el tipo de documento.")
 	}
 	in.Numero = strings.TrimSpace(in.Numero)
-	if !re.MatchString(in.Numero) {
-		return httpx.Invalido("El número de documento no es válido.")
-	}
-	if len([]rune(strings.TrimSpace(in.Nombre))) < 5 {
-		return httpx.Invalido("Escribe tu nombre completo como figura en tu documento.")
+	clase := "identidad"
+	if in.Tipo == "ruc" {
+		clase = "negocio"
 	}
 	pref := "dni/" + tid + "/"
-	if !strings.HasPrefix(in.FrenteKey, pref) || !strings.HasPrefix(in.SelfieKey, pref) || (in.ReversoKey != "" && !strings.HasPrefix(in.ReversoKey, pref)) {
-		return httpx.Invalido("Sube las fotos del documento y tu selfie.")
+	if clase == "negocio" {
+		// RUC: el número (con su dígito verificador), la razón social y la foto o PDF de la ficha RUC.
+		if !rucValido(in.Numero) {
+			return httpx.Invalido("El RUC no es válido. Revisa los 11 dígitos.")
+		}
+		if len([]rune(strings.TrimSpace(in.Nombre))) < 3 {
+			return httpx.Invalido("Escribe la razón social o el nombre como figura en tu ficha RUC.")
+		}
+		if !strings.HasPrefix(in.FrenteKey, pref) {
+			return httpx.Invalido("Sube la foto de tu ficha RUC.")
+		}
+		in.ReversoKey, in.SelfieKey = "", ""
+	} else {
+		if !re.MatchString(in.Numero) {
+			return httpx.Invalido("El número de documento no es válido.")
+		}
+		if len([]rune(strings.TrimSpace(in.Nombre))) < 5 {
+			return httpx.Invalido("Escribe tu nombre completo como figura en tu documento.")
+		}
+		if !strings.HasPrefix(in.FrenteKey, pref) || !strings.HasPrefix(in.SelfieKey, pref) || (in.ReversoKey != "" && !strings.HasPrefix(in.ReversoKey, pref)) {
+			return httpx.Invalido("Sube las fotos del documento y tu selfie.")
+		}
 	}
-	if m.estadoVerificacion(r, tid) == "pendiente" || m.estadoVerificacion(r, tid) == "aprobada" {
+	if e := m.estadoVerificacion(r, tid, clase); e == "pendiente" || e == "aprobada" {
+		if clase == "negocio" {
+			return httpx.Conflicto("verificacion_existe", "Tu RUC ya fue enviado.")
+		}
 		return httpx.Conflicto("verificacion_existe", "Tu verificación ya fue enviada.")
 	}
 	num, err := m.app.Cifrador.Cifrar(in.Numero)
 	if err != nil {
 		return err
 	}
-	var reverso any
+	var reverso, selfie any
 	if in.ReversoKey != "" {
 		reverso = in.ReversoKey
 	}
-	if _, err := m.app.DB.ExecContext(ctx, `INSERT INTO verificaciones (tienda_id, tipo_documento, numero_cifrado, ultimos4, nombre_completo, frente_key, reverso_key, selfie_key)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`, tid, in.Tipo, num, in.Numero[len(in.Numero)-4:], strings.TrimSpace(in.Nombre), in.FrenteKey, reverso, in.SelfieKey); err != nil {
+	if in.SelfieKey != "" {
+		selfie = in.SelfieKey
+	}
+	if _, err := m.app.DB.ExecContext(ctx, `INSERT INTO verificaciones (tienda_id, tipo_documento, numero_cifrado, ultimos4, nombre_completo, frente_key, reverso_key, selfie_key, clase)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`, tid, in.Tipo, num, in.Numero[len(in.Numero)-4:], strings.TrimSpace(in.Nombre), in.FrenteKey, reverso, selfie, clase); err != nil {
 		return err
 	}
 	u, _ := httpx.UsuarioDe(ctx)

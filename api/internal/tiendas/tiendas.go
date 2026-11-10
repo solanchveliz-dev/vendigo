@@ -120,6 +120,12 @@ type Tienda struct {
 	TransfTitular string   `json:"transf_titular"`
 	MetodosPago   []string `json:"metodos_pago"`
 	Suspendida    bool     `json:"suspendida_garantia"` // VendiGo cubrió una devolución que la tienda no hizo
+	// Verificación: sin identidad aprobada la tienda no se muestra a los compradores. El RUC da una insignia extra.
+	IdentidadVerificada bool `json:"identidad_verificada"`
+	RUCVerificado       bool `json:"ruc_verificado"`
+	// Pedido con un reclamo "No me llegó" que mantiene suspendida la tienda (vacío si no hay ninguno).
+	ReclamoPedidoID string `json:"reclamo_pedido_id"`
+	usuarioID       string
 }
 
 type Entrega struct {
@@ -148,7 +154,8 @@ const columnas = `id, nombre, slug, rubro, descripcion, ciudad, distrito, logo_k
 	instrucciones_recojo, dias_recojo, adelanto_pct, costo_agencia_centimos, entrega_otra, descripcion_otra, pausada, tema_color, tema_fuente, prefijo_pedido,
 	destacado_id, aviso, historia, historia_foto_key, vende_desde,
 	yape_numero, plin_numero, pago_titular, pago_qr_key, recojo_pago, motorizado_pago, motorizado_adelanto_pct, tarjeta_link,
-	plin_qr_key, tarjeta_marcas, transf_banco, transf_cuenta, transf_cci, transf_titular, suspendida_garantia`
+	plin_qr_key, tarjeta_marcas, transf_banco, transf_cuenta, transf_cci, transf_titular, suspendida_garantia,
+	usuario_id, tienda_identidad_verificada(id), tienda_ruc_verificado(id), COALESCE(tienda_reclamo_bloqueante(id), '')`
 
 func (m *Modulo) leer(ctx context.Context, where string, arg any) (Tienda, error) {
 	var t Tienda
@@ -161,7 +168,8 @@ func (m *Modulo) leer(ctx context.Context, where string, arg any) (Tienda, error
 		&e.Instrucciones, pq.Array(&e.DiasRecojo), &e.AdelantoPct, &e.CostoAgencia, &e.Otra, &e.DescripcionOtra, &t.Pausada, &t.TemaColor, &t.TemaFuente, &t.Prefijo,
 		&t.DestacadoID, &t.Aviso, &t.Historia, &t.HistoriaKey, &t.VendeDesde,
 		&t.YapeNumero, &t.PlinNumero, &t.PagoTitular, &t.PagoQRKey, &e.RecojoPago, &e.MotorizadoPago, &e.MotoAdelantoPct, &t.TarjetaLink,
-		&t.PlinQRKey, pq.Array(&t.TarjetaMarcas), &t.TransfBanco, &t.TransfCuenta, &t.TransfCCI, &t.TransfTitular, &t.Suspendida)
+		&t.PlinQRKey, pq.Array(&t.TarjetaMarcas), &t.TransfBanco, &t.TransfCuenta, &t.TransfCCI, &t.TransfTitular, &t.Suspendida,
+		&t.usuarioID, &t.IdentidadVerificada, &t.RUCVerificado, &t.ReclamoPedidoID)
 	if core.SinFilas(err) {
 		return t, httpx.ErrNoEncontrado
 	}
@@ -512,11 +520,36 @@ func (m *Modulo) actualizarEntrega(w http.ResponseWriter, r *http.Request) error
 
 // ---------- vista pública ----------
 
+// EsDuena: la petición la hace la dueña de la tienda (vista previa de una tienda que aún no se muestra al público).
+func (m *Modulo) EsDuena(r *http.Request, usuarioID string) bool {
+	u, ok := httpx.UsuarioOpcional(r, m.app.Cfg.JWTSecreto)
+	return ok && usuarioID != "" && u.ID == usuarioID
+}
+
+// VisibleParaPublico: la tienda tiene identidad verificada, o quien mira es su dueña (vista previa).
+func VisibleParaPublico(r *http.Request, app *core.App, tiendaID string) bool {
+	var verificada bool
+	var duena string
+	if app.DB.QueryRowContext(r.Context(), `SELECT tienda_identidad_verificada(id), usuario_id FROM tiendas WHERE id::text=$1`, tiendaID).Scan(&verificada, &duena) != nil {
+		return false
+	}
+	if verificada {
+		return true
+	}
+	u, ok := httpx.UsuarioOpcional(r, app.Cfg.JWTSecreto)
+	return ok && u.ID == duena
+}
+
 func (m *Modulo) publica(w http.ResponseWriter, r *http.Request) error {
 	t, err := m.leer(r.Context(), "slug=$1 AND activa", chi.URLParam(r, "slug"))
 	if err != nil {
 		return err
 	}
+	// Sin identidad verificada la tienda no existe para los compradores; solo su dueña ve la vista previa.
+	if !t.IdentidadVerificada && !m.EsDuena(r, t.usuarioID) {
+		return httpx.ErrNoEncontrado
+	}
+	t.ReclamoPedidoID = "" // dato interno de la tienda
 	// El WhatsApp y el correo son solo para que VendiGo avise a la tienda: no se muestran a los compradores.
 	// Los datos de Yape/Plin se muestran recién en el seguimiento del pedido, al momento de pagar.
 	t.Whatsapp, t.Correo = "", ""

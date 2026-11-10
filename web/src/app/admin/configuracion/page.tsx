@@ -129,8 +129,8 @@ export default function Configuracion() {
           </Tarjeta>
 
           <Tarjeta titulo="Tiendas y entrega">
-            <Fila titulo="Revisión de tiendas nuevas" detalle="Se publican al instante y quedan “En revisión” hasta que las apruebes.">
-              <Link href="/admin/tiendas" className={enlace}>Ver tiendas</Link>
+            <Fila titulo="Verificación de tiendas" detalle="Una tienda se muestra a los compradores recién cuando apruebas la identidad (DNI) de su dueña. El RUC es opcional y da la insignia “Negocio con RUC verificado”.">
+              <Link href="/admin/vendedores" className={enlace}>Ver vendedores</Link>
             </Fila>
             <Fila titulo="Agencias de envío" detalle={c.agencias.length ? `${c.agencias.join(", ")} · ${c.sedes_activas} sedes activas` : "Aún no hay sedes"}>
               <Link href="/admin/agencias" className={enlace}>Editar</Link>

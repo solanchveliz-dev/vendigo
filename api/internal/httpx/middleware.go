@@ -52,6 +52,20 @@ func Autenticar(secreto string) func(http.Handler) http.Handler {
 	}
 }
 
+// UsuarioOpcional lee la sesión en una ruta pública (sin exigirla). Sirve, por ejemplo, para que la dueña de una
+// tienda todavía no verificada pueda ver su vista previa, que los compradores no ven.
+func UsuarioOpcional(r *http.Request, secreto string) (Usuario, bool) {
+	token, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+	if !ok || token == "" {
+		return Usuario{}, false
+	}
+	c, err := seguridad.LeerAcceso(secreto, token)
+	if err != nil {
+		return Usuario{}, false
+	}
+	return Usuario{ID: c.Subject, Rol: c.Rol}, true
+}
+
 // Rol permite el paso solo a los roles indicados.
 // AlDenegar se llama cuando alguien con sesión intenta entrar a una sección sin permiso
 // (queda en "Intentos de acceso denegados" del panel admin).

@@ -5,7 +5,8 @@ import { ContarVisita } from "@/components/tienda/contar-visita";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Bike, Check, ChevronRight, CircleHelp, MessageCircle, Package, RefreshCw, ShieldCheck, Store } from "lucide-react";
-import { API_URL } from "@/lib/servidor/sesion";
+import { API_URL, cabeceraSesion } from "@/lib/servidor/sesion";
+import { InsigniasTienda } from "@/components/tienda/insignias";
 import { hace, soles } from "@/lib/formato";
 import { rubros } from "@/lib/catalogos";
 import type { Producto, Tienda } from "@/lib/tipos";
@@ -17,9 +18,10 @@ type Pregunta = { pregunta: string; respuesta: string | null; respondida_en: str
 
 // Página pública de un producto. Se genera en el servidor para que Google pueda leerla.
 async function cargar(slug: string, id: string) {
+  const headers = await cabeceraSesion();
   const [t, p] = await Promise.all([
-    fetch(`${API_URL}/api/v1/tiendas/${encodeURIComponent(slug)}`, { cache: "no-store" }),
-    fetch(`${API_URL}/api/v1/tiendas/${encodeURIComponent(slug)}/productos/${encodeURIComponent(id)}`, { cache: "no-store" }),
+    fetch(`${API_URL}/api/v1/tiendas/${encodeURIComponent(slug)}`, { cache: "no-store", headers }),
+    fetch(`${API_URL}/api/v1/tiendas/${encodeURIComponent(slug)}/productos/${encodeURIComponent(id)}`, { cache: "no-store", headers }),
   ]);
   if (!t.ok || !p.ok) return null;
   const d = (await p.json()) as { producto: Producto; preguntas: Pregunta[] };
@@ -92,12 +94,11 @@ export default async function ProductoPublico({ params, searchParams }: Params &
                 )}
               </span>
               <span className="min-w-0 flex-1">
-                <span className="flex items-center gap-1 text-sm font-bold text-tinta">
-                  {t.nombre} <ShieldCheck className="size-3.5 text-pino" />
-                </span>
+                <span className="flex items-center gap-1 text-sm font-bold text-tinta">{t.nombre}</span>
                 <span className="block text-sm text-gris">
                   {rubros[t.rubro] ?? t.rubro} · {lugar}
                 </span>
+                <InsigniasTienda identidad={t.identidad_verificada} ruc={t.ruc_verificado} className="mt-1.5" />
               </span>
               <ChevronRight className="size-5 text-tinta" />
             </Link>
