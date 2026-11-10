@@ -44,15 +44,17 @@ export default function LayoutPanel({ children }: { children: React.ReactNode })
   }, []);
 
   useEffect(() => {
-    if (yo.datos && !yo.datos.tienda_id) router.replace("/vendedor/crear-tienda");
+    // Sin tienda todavía: la crea dentro del panel (los demás menús se activan al crearla).
+    if (yo.datos && !yo.datos.tienda_id && ruta !== "/vendedor/crear-tienda") router.replace("/vendedor/crear-tienda");
     if (yo.datos?.tienda_id) recargarResumen();
-  }, [yo.datos, router, recargarResumen]);
+  }, [yo.datos, router, recargarResumen, ruta]);
 
   useEffect(() => {
     if (yo.datos?.tienda_id) recargarResumen();
   }, [ruta, yo.datos?.tienda_id, recargarResumen]);
 
-  if (!yo.datos?.tienda_id) return <div className="px-6"><Cargando /></div>;
+  const sinTienda = !!yo.datos && !yo.datos.tienda_id;
+  if (!yo.datos || (sinTienda && ruta !== "/vendedor/crear-tienda")) return <div className="px-6"><Cargando /></div>;
 
   const cuentas: Record<string, number> = {
     pedidos: (resumen?.pedidos.por_aceptar ?? 0) + (resumen?.pedidos.por_enviar ?? 0) + (resumen?.pedidos.recogen ?? 0),
@@ -73,7 +75,7 @@ export default function LayoutPanel({ children }: { children: React.ReactNode })
         <Link href="/vendedor" className="mb-5">
           <Image src="/logo.png" alt="VendiGo" width={40} height={40} />
         </Link>
-        <nav className="flex flex-1 flex-col gap-1.5">
+        <nav className={`flex flex-1 flex-col gap-1.5 ${sinTienda ? "pointer-events-none opacity-40" : ""}`} aria-disabled={sinTienda}>
           {menu.map((m) => (
             <Link
               key={m.href}
@@ -115,7 +117,7 @@ export default function LayoutPanel({ children }: { children: React.ReactNode })
             <Search className="absolute left-3.5 top-3 size-4 text-gris" />
             <input name="q" placeholder="Buscar pedidos, productos o clientes…" className="h-10 w-full rounded-full bg-white pl-10 pr-4 text-sm outline-none ring-1 ring-linea focus:ring-pino/40" />
           </form>
-          <div className="flex items-center gap-2">
+          <div className={`flex items-center gap-2 ${sinTienda ? "invisible" : ""}`}>
             <Link href="/vendedor/tienda/compartir" className="hidden h-10 items-center gap-2 rounded-full bg-white px-4 text-sm font-semibold text-pino ring-1 ring-linea lg:inline-flex">
               <Share2 className="size-4" /> Compartir tienda
             </Link>
@@ -161,7 +163,7 @@ export default function LayoutPanel({ children }: { children: React.ReactNode })
       </div>
 
       {/* Barra de abajo (celular) */}
-      <nav className="no-imprimir fixed inset-x-3 bottom-3 z-[200] flex justify-around rounded-2xl bg-white py-2 shadow-suave ring-1 ring-linea md:hidden">
+      <nav className={`no-imprimir fixed inset-x-3 bottom-3 z-[200] flex justify-around rounded-2xl bg-white py-2 shadow-suave ring-1 ring-linea md:hidden ${sinTienda ? "pointer-events-none opacity-40" : ""}`}>
         {menu
           .filter((m) => barraMovil.includes(m.href))
           .map((m) => (

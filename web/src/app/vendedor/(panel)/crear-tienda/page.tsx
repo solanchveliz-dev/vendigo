@@ -1,14 +1,11 @@
 "use client";
 
-import Image from "next/image";
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { Aviso, Boton, Campo, Entrada, Area, Selector } from "@/components/ui";
+import { Aviso, Boton, Campo, Encabezado, Entrada, Area, Selector } from "@/components/ui";
 import { api, ErrorApi, sesion } from "@/lib/api";
 import { ciudades, rubros } from "@/lib/catalogos";
 
 export default function CrearTienda() {
-  const router = useRouter();
   const [f, setF] = useState({ nombre: "", rubro: "", ciudad: "Lima", distrito: "", descripcion: "", slug: "", instagram: "", facebook: "", tiktok: "", whatsapp: "" });
   const [slug, setSlug] = useState<{ slug: string; disponible: boolean; sugerido: string } | null>(null);
   const [error, setError] = useState("");
@@ -36,12 +33,12 @@ export default function CrearTienda() {
     try {
       await api.post("/tienda", { ...f, slug: slug?.disponible ? slug.slug : slug?.sugerido ?? "" });
       await sesion("renovar");
-      router.replace("/vendedor");
+      window.location.assign("/vendedor"); // recarga para que el panel lea la tienda nueva
     } catch (err) {
       // Si la tienda ya se creó (por ejemplo, en un intento anterior), entra directo al panel.
       if ((err as ErrorApi).codigo === "tienda_existe") {
         await sesion("renovar").catch(() => null);
-        router.replace("/vendedor");
+        window.location.assign("/vendedor"); // recarga para que el panel lea la tienda nueva
         return;
       }
       setError((err as ErrorApi).message);
@@ -50,15 +47,9 @@ export default function CrearTienda() {
   }
 
   return (
-    <div className="mx-auto max-w-xl px-5 py-10">
-      <div className="mb-8 flex items-center gap-3">
-        <Image src="/logo.png" alt="" width={40} height={40} />
-        <span className="font-display text-xl font-extrabold text-pino">VendiGo</span>
-      </div>
-      <div className="mb-2 h-1 w-8 rounded-full bg-coral" />
-      <h1 className="text-3xl font-extrabold text-pino">Crea tu tienda</h1>
-      <p className="mt-1 text-gris">Te toma un minuto. Podrás cambiar todo después.</p>
-      <form onSubmit={crear} className="mt-8 space-y-5">
+    <div className="max-w-2xl">
+      <Encabezado titulo="Crea tu tienda" detalle="Te toma un minuto. Podrás cambiar todo después." />
+      <form onSubmit={crear} className="space-y-5 rounded-[22px] bg-white p-6 shadow-suave ring-1 ring-linea/60">
         {error && <Aviso tono="error">{error}</Aviso>}
         <Campo etiqueta="Nombre de tu tienda">
           <Entrada value={f.nombre} onChange={cambiar("nombre")} placeholder="Luna & Sol" maxLength={40} required />
