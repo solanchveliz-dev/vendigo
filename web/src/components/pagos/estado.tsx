@@ -28,6 +28,7 @@ export const ORIGEN: Record<PagoInfo["origen"], string> = {
 export const DEVOLUCION: Record<Devolucion["estado"], string> = {
   pendiente_tienda: "Pendiente: la tienda debe devolver el dinero",
   informada_tienda: "La tienda informó que devolvió el dinero",
+  cubierta_vendigo: "VendiGo devolvió el dinero al comprador (fondo de emergencia)",
   confirmada_proveedor: "Devolución validada por el proveedor",
   de_prueba: "Devolución de prueba (sin dinero real)",
 };
@@ -36,6 +37,7 @@ export const METODOS: Record<string, string> = {
   yape_directo: "Yape a la tienda",
   plin_directo: "Plin a la tienda",
   tarjeta_tienda: "Tarjeta (link de la tienda)",
+  transferencia_tienda: "Transferencia a la tienda",
   efectivo: "Efectivo (pedido antiguo)",
   yape: "Yape",
   tarjeta: "Tarjeta",

@@ -49,7 +49,15 @@ export type Tienda = {
   pago_qr_key: string | null;
   pago_qr_url: string;
   tarjeta_link: string;
+  tarjeta_marcas: string[];
+  plin_qr_key: string | null;
+  plin_qr_url: string;
+  transf_banco: string;
+  transf_cuenta: string;
+  transf_cci: string;
+  transf_titular: string;
   metodos_pago: string[];
+  suspendida_garantia: boolean;
   tema_color: string;
   tema_fuente: string;
   prefijo_pedido: string;
@@ -74,6 +82,7 @@ export type Producto = {
   imagenes: { key: string; url: string }[];
   oferta: { descuento_pct: number; termina_en: string; precio_final_centimos: number } | null;
   vendidos: number;
+  destacado_hasta?: string | null; // destacado pagado a VendiGo
   creado_en: string;
   detalles?: Record<string, unknown>;
 };
@@ -169,7 +178,7 @@ export type PagoInfo = {
 export type Devolucion = {
   origen: "cancelacion" | "reclamo";
   monto_centimos: number;
-  estado: "pendiente_tienda" | "informada_tienda" | "confirmada_proveedor" | "de_prueba";
+  estado: "pendiente_tienda" | "informada_tienda" | "cubierta_vendigo" | "confirmada_proveedor" | "de_prueba";
   evidencia_url: string;
   nota: string;
   informada_en: string | null;

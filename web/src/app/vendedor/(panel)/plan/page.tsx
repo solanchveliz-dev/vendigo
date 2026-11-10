@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { ArrowRight, Check, ReceiptText, ShoppingBag, Sparkles, X } from "lucide-react";
+import { ArrowRight, Check, ReceiptText, ShoppingBag, Sparkles, X, Rocket } from "lucide-react";
 import type { PagoPlan, PagoVendiGo } from "@/lib/pagos-plan";
 import { YapeVendiGo } from "@/components/panel/yape-vendigo";
 import { api, ErrorApi, useApi } from "@/lib/api";
@@ -99,9 +99,14 @@ export default function TuSuscripcion() {
           <h1 className="text-[34px] font-extrabold leading-tight text-pino">Tu suscripción</h1>
           <p className="text-sm text-gris">{subtitulo}</p>
         </div>
-        <Link href="/vendedor/plan/pagos">
-          <Boton variante="secundario"><ReceiptText className="size-4" /> Pagos de tu plan</Boton>
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          <Link href="/vendedor/impulsos">
+            <Boton variante="secundario"><Rocket className="size-4" /> Impulsar productos</Boton>
+          </Link>
+          <Link href="/vendedor/plan/pagos">
+            <Boton variante="secundario"><ReceiptText className="size-4" /> Pagos de tu plan</Boton>
+          </Link>
+        </div>
       </div>
 
       {pendiente && <YapeVendiGo pago={pendiente} vendigo={pagos.datos?.pago_vendigo ?? null} />}

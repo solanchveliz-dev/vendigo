@@ -32,6 +32,8 @@ func (m *Modulo) RutasVendedor(r chi.Router) {
 	r.Method("POST", "/plan", httpx.Handler(m.cambiar))
 	r.Method("POST", "/plan/ventas-extra", httpx.Handler(m.comprarExtra))
 	r.Method("GET", "/plan/pagos", httpx.Handler(m.pagos))
+	r.Method("GET", "/destacados", httpx.Handler(m.destacados))
+	r.Method("POST", "/productos/{id}/destacar", httpx.Handler(m.destacar))
 }
 
 type Plan struct {

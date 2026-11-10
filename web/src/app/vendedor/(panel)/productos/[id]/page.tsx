@@ -2,7 +2,8 @@
 
 import { use, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Eye, EyeOff, Tag, Trash2 } from "lucide-react";
+import Link from "next/link";
+import { Eye, EyeOff, Rocket, Tag, Trash2 } from "lucide-react";
 import { api, ErrorApi, useApi } from "@/lib/api";
 import { fecha, soles } from "@/lib/formato";
 import type { Producto } from "@/lib/tipos";
@@ -101,6 +102,19 @@ export default function EditarProducto({ params }: { params: Promise<{ id: strin
             </Boton>
           </>
         )}
+      </Tarjeta>
+
+      <Tarjeta className="flex flex-wrap items-center gap-4">
+        <span className="grid size-11 place-items-center rounded-xl bg-pino-claro text-pino">
+          <Rocket className="size-5" />
+        </span>
+        <div className="min-w-48 flex-1">
+          <p className="font-semibold">{p.destacado_hasta ? `Impulsado hasta el ${fecha(p.destacado_hasta, true)}` : "Impulsa este producto"}</p>
+          <p className="text-sm text-gris">Sale primero cuando alguien busca algo relacionado en VendiGo, con la etiqueta “Destacado”.</p>
+        </div>
+        <Link href={`/vendedor/productos/${p.id}/impulsar`}>
+          <Boton variante={p.destacado_hasta ? "secundario" : "primario"}>{p.destacado_hasta ? "Sumar días" : "Impulsar"}</Boton>
+        </Link>
       </Tarjeta>
 
       <div className="flex flex-wrap gap-2">

@@ -37,7 +37,7 @@ type PedidoNuevo struct {
 	Referencia  string
 	Agencia     string
 	AgenciaSede string
-	MetodoPago  string // yape_directo, plin_directo o tarjeta_tienda (pago directo a la tienda; sin efectivo)
+	MetodoPago  string // yape_directo, plin_directo, tarjeta_tienda o transferencia_tienda (directo a la tienda; sin efectivo)
 	MomentoPago string // antes o al_recibir
 	Prueba      bool   // datos de prueba (solo modo desarrollo y seed)
 	Nota        string
@@ -57,10 +57,10 @@ func Crear(ctx context.Context, app *core.App, tx *sql.Tx, in PedidoNuevo) (stri
 	}
 	var recojo, agencia, moto, pausada bool
 	var costoMoto, adelRecojo, adelMoto int
-	var yape, plin, tarjeta, pagoRecojo, pagoMoto string
-	if err := tx.QueryRowContext(ctx, `SELECT entrega_recojo, entrega_agencia, entrega_motorizado, costo_motorizado_centimos, pausada,
-		yape_numero, plin_numero, recojo_pago, motorizado_pago, adelanto_pct, motorizado_adelanto_pct, tarjeta_link FROM tiendas WHERE id=$1 AND activa`,
-		in.TiendaID).Scan(&recojo, &agencia, &moto, &costoMoto, &pausada, &yape, &plin, &pagoRecojo, &pagoMoto, &adelRecojo, &adelMoto, &tarjeta); err != nil {
+	var yape, plin, tarjeta, transf, pagoRecojo, pagoMoto string
+	if err := tx.QueryRowContext(ctx, `SELECT entrega_recojo, entrega_agencia, entrega_motorizado, costo_motorizado_centimos, (pausada OR suspendida_garantia),
+		yape_numero, plin_numero, recojo_pago, motorizado_pago, adelanto_pct, motorizado_adelanto_pct, tarjeta_link, transf_cuenta||transf_cci FROM tiendas WHERE id=$1 AND activa`,
+		in.TiendaID).Scan(&recojo, &agencia, &moto, &costoMoto, &pausada, &yape, &plin, &pagoRecojo, &pagoMoto, &adelRecojo, &adelMoto, &tarjeta, &transf); err != nil {
 		if core.SinFilas(err) {
 			return "", "", httpx.ErrNoEncontrado
 		}
@@ -103,6 +103,10 @@ func Crear(ctx context.Context, app *core.App, tx *sql.Tx, in PedidoNuevo) (stri
 	case "tarjeta_tienda":
 		if tarjeta == "" && !in.Prueba {
 			return "", "", httpx.Invalido("Esta tienda no recibe tarjeta.")
+		}
+	case "transferencia_tienda":
+		if transf == "" && !in.Prueba {
+			return "", "", httpx.Invalido("Esta tienda no recibe transferencias.")
 		}
 	default:
 		return "", "", httpx.Invalido("Elige cómo vas a pagar.")

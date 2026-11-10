@@ -105,13 +105,21 @@ type Tienda struct {
 	HistoriaURL string  `json:"historia_foto_url"`
 	VendeDesde  *int    `json:"vende_desde"`
 	// Pago directo a la tienda (VendiGo no recibe el dinero)
-	YapeNumero  string   `json:"yape_numero"`
-	PlinNumero  string   `json:"plin_numero"`
-	PagoTitular string   `json:"pago_titular"`
-	PagoQRKey   *string  `json:"pago_qr_key"`
-	PagoQRURL   string   `json:"pago_qr_url"`
-	TarjetaLink string   `json:"tarjeta_link"` // link de pago con tarjeta de la propia tienda (opcional)
-	MetodosPago []string `json:"metodos_pago"`
+	YapeNumero    string   `json:"yape_numero"`
+	PlinNumero    string   `json:"plin_numero"`
+	PagoTitular   string   `json:"pago_titular"`
+	PagoQRKey     *string  `json:"pago_qr_key"`
+	PagoQRURL     string   `json:"pago_qr_url"`
+	PlinQRKey     *string  `json:"plin_qr_key"`
+	PlinQRURL     string   `json:"plin_qr_url"`
+	TarjetaLink   string   `json:"tarjeta_link"` // link de pago con tarjeta de la propia tienda (opcional)
+	TarjetaMarcas []string `json:"tarjeta_marcas"`
+	TransfBanco   string   `json:"transf_banco"` // transferencia bancaria a la cuenta de la tienda (opcional)
+	TransfCuenta  string   `json:"transf_cuenta"`
+	TransfCCI     string   `json:"transf_cci"`
+	TransfTitular string   `json:"transf_titular"`
+	MetodosPago   []string `json:"metodos_pago"`
+	Suspendida    bool     `json:"suspendida_garantia"` // VendiGo cubrió una devolución que la tienda no hizo
 }
 
 type Entrega struct {
@@ -139,7 +147,8 @@ const columnas = `id, nombre, slug, rubro, descripcion, ciudad, distrito, logo_k
 	correo, horario, politicas,
 	instrucciones_recojo, dias_recojo, adelanto_pct, costo_agencia_centimos, entrega_otra, descripcion_otra, pausada, tema_color, tema_fuente, prefijo_pedido,
 	destacado_id, aviso, historia, historia_foto_key, vende_desde,
-	yape_numero, plin_numero, pago_titular, pago_qr_key, recojo_pago, motorizado_pago, motorizado_adelanto_pct, tarjeta_link`
+	yape_numero, plin_numero, pago_titular, pago_qr_key, recojo_pago, motorizado_pago, motorizado_adelanto_pct, tarjeta_link,
+	plin_qr_key, tarjeta_marcas, transf_banco, transf_cuenta, transf_cci, transf_titular, suspendida_garantia`
 
 func (m *Modulo) leer(ctx context.Context, where string, arg any) (Tienda, error) {
 	var t Tienda
@@ -151,7 +160,8 @@ func (m *Modulo) leer(ctx context.Context, where string, arg any) (Tienda, error
 		&t.Correo, &t.Horario, &t.Politicas,
 		&e.Instrucciones, pq.Array(&e.DiasRecojo), &e.AdelantoPct, &e.CostoAgencia, &e.Otra, &e.DescripcionOtra, &t.Pausada, &t.TemaColor, &t.TemaFuente, &t.Prefijo,
 		&t.DestacadoID, &t.Aviso, &t.Historia, &t.HistoriaKey, &t.VendeDesde,
-		&t.YapeNumero, &t.PlinNumero, &t.PagoTitular, &t.PagoQRKey, &e.RecojoPago, &e.MotorizadoPago, &e.MotoAdelantoPct, &t.TarjetaLink)
+		&t.YapeNumero, &t.PlinNumero, &t.PagoTitular, &t.PagoQRKey, &e.RecojoPago, &e.MotorizadoPago, &e.MotoAdelantoPct, &t.TarjetaLink,
+		&t.PlinQRKey, pq.Array(&t.TarjetaMarcas), &t.TransfBanco, &t.TransfCuenta, &t.TransfCCI, &t.TransfTitular, &t.Suspendida)
 	if core.SinFilas(err) {
 		return t, httpx.ErrNoEncontrado
 	}
@@ -167,6 +177,12 @@ func (m *Modulo) leer(ctx context.Context, where string, arg any) (Tienda, error
 	if t.PagoQRKey != nil {
 		t.PagoQRURL = m.app.Archivos.URLPublica(*t.PagoQRKey)
 	}
+	if t.PlinQRKey != nil {
+		t.PlinQRURL = m.app.Archivos.URLPublica(*t.PlinQRKey)
+	}
+	if t.TarjetaMarcas == nil {
+		t.TarjetaMarcas = []string{}
+	}
 	t.MetodosPago = []string{}
 	if t.YapeNumero != "" {
 		t.MetodosPago = append(t.MetodosPago, "yape_directo")
@@ -176,6 +192,9 @@ func (m *Modulo) leer(ctx context.Context, where string, arg any) (Tienda, error
 	}
 	if t.TarjetaLink != "" {
 		t.MetodosPago = append(t.MetodosPago, "tarjeta_tienda")
+	}
+	if t.TransfCuenta != "" || t.TransfCCI != "" {
+		t.MetodosPago = append(t.MetodosPago, "transferencia_tienda")
 	}
 	if t.HistoriaKey != nil {
 		t.HistoriaURL = m.app.Archivos.URLPublica(*t.HistoriaKey)
@@ -501,7 +520,9 @@ func (m *Modulo) publica(w http.ResponseWriter, r *http.Request) error {
 	// El WhatsApp y el correo son solo para que VendiGo avise a la tienda: no se muestran a los compradores.
 	// Los datos de Yape/Plin se muestran recién en el seguimiento del pedido, al momento de pagar.
 	t.Whatsapp, t.Correo = "", ""
+	// Los datos de pago solo los ve el comprador en su seguimiento, después de pedir.
 	t.YapeNumero, t.PlinNumero, t.PagoTitular, t.PagoQRKey, t.PagoQRURL, t.TarjetaLink = "", "", "", nil, "", ""
+	t.PlinQRKey, t.PlinQRURL, t.TransfBanco, t.TransfCuenta, t.TransfCCI, t.TransfTitular = nil, "", "", "", "", ""
 	httpx.OK(w, t)
 	return nil
 }

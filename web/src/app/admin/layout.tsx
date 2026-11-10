@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { Bell, Download, Flag, Home, LayoutGrid, LogOut, Search, ShieldCheck, Briefcase, Users, Store, Package, ShoppingBag, CreditCard, Crown, BarChart3, AlertTriangle, MapPin, Settings, BookOpen } from "lucide-react";
+import { Bell, Download, Flag, Home, LayoutGrid, LogOut, Search, ShieldCheck, Briefcase, Users, Store, Package, ShoppingBag, CreditCard, Crown, BarChart3, AlertTriangle, MapPin, Settings, BookOpen, LifeBuoy } from "lucide-react";
 import { api, sesion, useApi } from "@/lib/api";
 import type { Usuario } from "@/lib/tipos";
 import { Cargando, cn } from "@/components/ui";
@@ -27,6 +27,7 @@ const menu = [
   { href: "/admin/reportes", texto: "Reportes", icono: BarChart3 },
   { href: "/admin/incidencias", texto: "Incidencias", icono: AlertTriangle, cuenta: "incidencias_abiertas" as const },
   { href: "/admin/reclamos", texto: "Reclamos", icono: Flag, cuenta: "reclamos_abiertos" as const },
+  { href: "/admin/fondo", texto: "Fondo de emergencia", icono: LifeBuoy },
   { href: "/admin/libro", texto: "Libro de Reclamaciones", icono: BookOpen },
   { href: "/admin/seguridad", texto: "Seguridad", icono: ShieldCheck },
   { href: "/admin/configuracion", texto: "Configuración", icono: Settings },

@@ -26,13 +26,14 @@ type PagoPlanAdmin struct {
 	Monto      int        `json:"monto_centimos"`
 	Estado     string     `json:"estado"`
 	Referencia string     `json:"referencia"`
+	RefTienda  string     `json:"referencia_tienda"` // n.° de operación que escribió la tienda al pagar
 	Motivo     string     `json:"motivo_rechazo"`
 	CreadoEn   time.Time  `json:"creado_en"`
 	Confirmado *time.Time `json:"confirmado_en"`
 }
 
 func (m *Modulo) pagosPlan(w http.ResponseWriter, r *http.Request) error {
-	rows, err := m.app.DB.QueryContext(r.Context(), `SELECT pp.id, t.id, t.nombre, pp.concepto, pp.tipo, pp.monto_centimos, pp.estado, pp.referencia, pp.motivo_rechazo,
+	rows, err := m.app.DB.QueryContext(r.Context(), `SELECT pp.id, t.id, t.nombre, pp.concepto, pp.tipo, pp.monto_centimos, pp.estado, pp.referencia, pp.referencia_tienda, pp.motivo_rechazo,
 		pp.creado_en, pp.confirmado_en FROM pagos_plan pp JOIN tiendas t ON t.id=pp.tienda_id
 		ORDER BY pp.estado<>'pendiente', pp.creado_en DESC LIMIT 2000`)
 	if err != nil {
@@ -42,7 +43,7 @@ func (m *Modulo) pagosPlan(w http.ResponseWriter, r *http.Request) error {
 	out := []PagoPlanAdmin{}
 	for rows.Next() {
 		var p PagoPlanAdmin
-		if err := rows.Scan(&p.ID, &p.TiendaID, &p.Tienda, &p.Concepto, &p.Tipo, &p.Monto, &p.Estado, &p.Referencia, &p.Motivo, &p.CreadoEn, &p.Confirmado); err != nil {
+		if err := rows.Scan(&p.ID, &p.TiendaID, &p.Tienda, &p.Concepto, &p.Tipo, &p.Monto, &p.Estado, &p.Referencia, &p.RefTienda, &p.Motivo, &p.CreadoEn, &p.Confirmado); err != nil {
 			return err
 		}
 		out = append(out, p)
@@ -66,20 +67,25 @@ func (m *Modulo) confirmarPagoPlan(w http.ResponseWriter, r *http.Request) error
 	id := chi.URLParam(r, "id")
 	err := m.app.EnTransaccion(ctx, func(tx *sql.Tx) error {
 		var tid, tipo, concepto string
-		var planID sql.NullString
-		var monto int
+		var planID, productoID sql.NullString
+		var monto, dias int
 		err := tx.QueryRowContext(ctx, `UPDATE pagos_plan SET estado='confirmado', referencia=$2, confirmado_por=$3, confirmado_en=now()
-			WHERE id::text=$1 AND estado='pendiente' RETURNING tienda_id, tipo, plan_id, monto_centimos, concepto`, id, in.Referencia, adminID(ctx)).
-			Scan(&tid, &tipo, &planID, &monto, &concepto)
+			WHERE id::text=$1 AND estado='pendiente' RETURNING tienda_id, tipo, plan_id, monto_centimos, concepto, producto_id, dias`, id, in.Referencia, adminID(ctx)).
+			Scan(&tid, &tipo, &planID, &monto, &concepto, &productoID, &dias)
 		if core.SinFilas(err) {
 			return httpx.Conflicto("no_aplica", "Este pago ya fue revisado.")
 		}
 		if err != nil {
 			return err
 		}
-		if tipo == "ventas_extra" {
+		switch {
+		case tipo == "ventas_extra":
 			err = planes.AplicarVentasExtra(ctx, tx, tid, monto)
-		} else {
+		case tipo == "destacado" && productoID.Valid:
+			err = planes.AplicarDestacado(ctx, tx, productoID.String, tid, id, dias)
+		case tipo == "destacado":
+			err = httpx.Conflicto("sin_producto", "El producto ya no existe. Rechaza el pago y coordina la devolución con la tienda.")
+		default:
 			err = planes.AplicarPlan(ctx, tx, tid, planID.String, false, monto)
 		}
 		if err != nil {
@@ -92,7 +98,7 @@ func (m *Modulo) confirmarPagoPlan(w http.ResponseWriter, r *http.Request) error
 	if err != nil {
 		return err
 	}
-	httpx.OK(w, map[string]string{"mensaje": "Pago confirmado. El plan ya está activo."})
+	httpx.OK(w, map[string]string{"mensaje": "Pago confirmado. Ya está activo."})
 	return nil
 }
 

@@ -16,6 +16,7 @@ type PagoPlan = {
   monto_centimos: number;
   estado: "pendiente" | "confirmado" | "rechazado";
   referencia: string;
+  referencia_tienda: string;
   motivo_rechazo: string;
   creado_en: string;
   confirmado_en: string | null;
@@ -78,7 +79,7 @@ export function PagosPlan() {
               <b className="block text-tinta">{p.tienda}</b>
               <span className="text-xs text-gris">
                 {p.concepto} · {fechaHora(p.creado_en)}
-                {p.referencia && ` · Op. ${p.referencia}`}
+                {p.referencia ? ` · Op. ${p.referencia}` : p.referencia_tienda ? ` · La tienda indica Op. ${p.referencia_tienda}` : ""}
                 {p.motivo_rechazo && ` · ${p.motivo_rechazo}`}
               </span>
             </span>
@@ -87,7 +88,7 @@ export function PagosPlan() {
             {p.estado === "pendiente" && (
               <span className="flex gap-2">
                 <Boton tamano="sm" variante="secundario" onClick={() => { setTexto(""); setAbrir({ p, accion: "rechazar" }); }}>Rechazar</Boton>
-                <Boton tamano="sm" onClick={() => { setTexto(""); setAbrir({ p, accion: "confirmar" }); }}>Confirmar</Boton>
+                <Boton tamano="sm" onClick={() => { setTexto(p.referencia_tienda ?? ""); setAbrir({ p, accion: "confirmar" }); }}>Confirmar</Boton>
               </span>
             )}
           </div>
@@ -101,7 +102,7 @@ export function PagosPlan() {
               {abrir.p.tienda} · {abrir.p.concepto} · <b className="text-tinta">{soles(abrir.p.monto_centimos)}</b>
             </p>
             {abrir.accion === "confirmar" ? (
-              <Campo etiqueta="Número de operación de Yape" ayuda="Lo ves en el movimiento recibido en el Yape de VendiGo.">
+              <Campo etiqueta="Número de operación de Yape" ayuda="Compáralo con el movimiento recibido en el Yape de VendiGo antes de confirmar.">
                 <Entrada value={texto} onChange={(e) => setTexto(e.target.value)} maxLength={40} placeholder="Ej. 12345678" />
               </Campo>
             ) : (

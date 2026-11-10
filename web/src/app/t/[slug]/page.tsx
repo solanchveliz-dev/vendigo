@@ -202,7 +202,7 @@ export default async function TiendaPublica({ params, searchParams }: { params: 
                 )}
               </ul>
               <div className="mt-5 flex flex-wrap gap-2">
-                {(t.metodos_pago ?? []).map((k) => ({ yape_directo: "Yape", plin_directo: "Plin", tarjeta_tienda: "Tarjeta" } as Record<string, string>)[k] ?? k).map((m) => (
+                {(t.metodos_pago ?? []).map((k) => ({ yape_directo: "Yape", plin_directo: "Plin", tarjeta_tienda: "Tarjeta", transferencia_tienda: "Transferencia" } as Record<string, string>)[k] ?? k).map((m) => (
                   <span key={m} className="rounded-full bg-arena px-3 py-1.5 text-sm font-semibold text-tinta">
                     {m}
                   </span>

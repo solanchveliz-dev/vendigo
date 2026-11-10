@@ -12,7 +12,67 @@ import { DEVOLUCION, EtiquetaPago } from "@/components/pagos/estado";
 import { CabeceraPublica } from "@/components/tienda/cabecera";
 import { PieLegal } from "@/components/legal/pie";
 
-type TiendaPago = { nombre: string; slug: string; yape_numero: string; plin_numero: string; pago_titular: string; pago_qr_url: string; whatsapp: string; tarjeta_link: string };
+type TiendaPago = {
+  nombre: string; slug: string; whatsapp: string;
+  yape_numero: string; plin_numero: string; pago_titular: string; pago_qr_url: string; plin_qr_url: string;
+  tarjeta_link: string; tarjeta_marcas: string[];
+  transf_banco: string; transf_cuenta: string; transf_cci: string; transf_titular: string;
+};
+
+const MARCA: Record<string, string> = { visa: "Visa", mastercard: "Mastercard", amex: "American Express", diners: "Diners Club" };
+
+function Dato({ k, v, copiar, grande }: { k: string; v: string; copiar?: (v: string) => void; grande?: boolean }) {
+  return (
+    <div className="rounded-2xl bg-crema/70 p-4">
+      <p className="text-xs text-gris">{k}</p>
+      <p className={grande ? "font-display text-2xl font-extrabold text-tinta" : "break-all font-bold text-tinta"}>{v}</p>
+      {copiar && <button onClick={() => copiar(v)} className="mt-1 inline-flex items-center gap-1 text-xs font-bold text-pino"><Copy className="size-3.5" /> Copiar</button>}
+    </div>
+  );
+}
+
+// Datos para pagarle a la tienda según el método que eligió el comprador.
+function DatosPago({ metodo, t, monto, copiar }: { metodo: string; t: TiendaPago; monto: number; copiar: (v: string) => void }) {
+  if (metodo === "tarjeta_tienda" && t.tarjeta_link) {
+    return (
+      <div className="mt-3 rounded-2xl bg-crema/70 p-4">
+        <p className="text-xs text-gris">Tarjeta{t.tarjeta_marcas?.length ? ` · ${t.tarjeta_marcas.map((m) => MARCA[m] ?? m).join(", ")}` : ""}</p>
+        <p className="text-sm text-tinta">Paga con el link de pago de {t.nombre}. El cobro lo hace la tienda, no VendiGo.</p>
+        <a href={t.tarjeta_link} target="_blank" rel="noreferrer noopener" className="mt-2 inline-flex">
+          <Boton tamano="sm"><CreditCard className="size-4" /> Pagar {soles(monto)} con tarjeta <ExternalLink className="size-3.5" /></Boton>
+        </a>
+      </div>
+    );
+  }
+  if (metodo === "transferencia_tienda") {
+    return (
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        <Dato k="Banco" v={t.transf_banco} />
+        <Dato k="Titular" v={t.transf_titular} />
+        {t.transf_cuenta && <Dato k="N.° de cuenta" v={t.transf_cuenta} copiar={copiar} />}
+        {t.transf_cci && <Dato k="CCI (desde otro banco)" v={t.transf_cci} copiar={copiar} />}
+      </div>
+    );
+  }
+  const plin = metodo === "plin_directo";
+  const numero = plin ? t.plin_numero : t.yape_numero;
+  const qr = plin ? t.plin_qr_url : t.pago_qr_url;
+  if (!numero) return null;
+  return (
+    <div className="mt-3 grid gap-3 sm:grid-cols-2">
+      <Dato k={plin ? "Plin" : "Yape"} v={numero} copiar={copiar} grande />
+      <div className="rounded-2xl bg-crema/70 p-4">
+        <p className="text-xs text-gris">Titular</p>
+        <p className="font-bold text-tinta">{t.pago_titular || t.nombre}</p>
+        <p className="mt-1 text-xs text-gris">Verifica que aparezca este nombre antes de pagar.</p>
+      </div>
+      {qr && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={qr} alt={`QR de ${plin ? "Plin" : "Yape"} de la tienda`} className="mx-auto size-40 rounded-2xl object-contain ring-1 ring-linea sm:col-span-2" />
+      )}
+    </div>
+  );
+}
 
 const ENTREGA: Record<string, string> = { recojo: "Recojo en tienda", agencia: "Envío por agencia", motorizado: "Delivery con motorizado" };
 type Datos = { pedido: PedidoDetalle; tienda: TiendaPago };
@@ -185,40 +245,7 @@ export default function Seguimiento({ params }: { params: Promise<{ token: strin
                     Paga <b className="text-tinta">{soles(montoAhora)}</b>{esAdelanto && <> de adelanto (el resto, {soles(pago.monto_centimos - montoAhora)}, al recibir)</>} directo a {t.nombre}. VendiGo no recibe este dinero.
                   </p>
                 )}
-                <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                  {pago.metodo === "yape_directo" && t.yape_numero && (
-                    <div className="rounded-2xl bg-crema/70 p-4">
-                      <p className="text-xs text-gris">Yape</p>
-                      <p className="font-display text-2xl font-extrabold text-tinta">{t.yape_numero}</p>
-                      <button onClick={() => copiar(t.yape_numero)} className="mt-1 inline-flex items-center gap-1 text-xs font-bold text-pino"><Copy className="size-3.5" /> Copiar</button>
-                    </div>
-                  )}
-                  {pago.metodo === "tarjeta_tienda" && t.tarjeta_link && (
-                    <div className="rounded-2xl bg-crema/70 p-4 sm:col-span-2">
-                      <p className="text-xs text-gris">Tarjeta</p>
-                      <p className="text-sm text-tinta">Paga con el link de pago de {t.nombre}. El cobro lo hace la tienda, no VendiGo.</p>
-                      <a href={t.tarjeta_link} target="_blank" rel="noreferrer noopener" className="mt-2 inline-flex">
-                        <Boton tamano="sm"><CreditCard className="size-4" /> Pagar {soles(montoAhora)} con tarjeta <ExternalLink className="size-3.5" /></Boton>
-                      </a>
-                    </div>
-                  )}
-                  {pago.metodo === "plin_directo" && t.plin_numero && (
-                    <div className="rounded-2xl bg-crema/70 p-4">
-                      <p className="text-xs text-gris">Plin</p>
-                      <p className="font-display text-2xl font-extrabold text-tinta">{t.plin_numero}</p>
-                      <button onClick={() => copiar(t.plin_numero)} className="mt-1 inline-flex items-center gap-1 text-xs font-bold text-pino"><Copy className="size-3.5" /> Copiar</button>
-                    </div>
-                  )}
-                  {pago.metodo !== "tarjeta_tienda" && <div className="rounded-2xl bg-crema/70 p-4">
-                    <p className="text-xs text-gris">Titular</p>
-                    <p className="font-bold text-tinta">{t.pago_titular || t.nombre}</p>
-                    <p className="mt-1 text-xs text-gris">Verifica que aparezca este nombre antes de pagar.</p>
-                  </div>}
-                  {t.pago_qr_url && pago.metodo !== "tarjeta_tienda" && (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={t.pago_qr_url} alt="QR de pago de la tienda" className="mx-auto size-40 rounded-2xl object-contain ring-1 ring-linea" />
-                  )}
-                </div>
+                <DatosPago metodo={pago.metodo} t={t} monto={montoAhora} copiar={copiar} />
 
                 {puede("enviar_comprobante") && (
                   <div className="mt-4 space-y-3 border-t border-linea pt-4">
@@ -247,14 +274,9 @@ export default function Seguimiento({ params }: { params: Promise<{ token: strin
               <Seccion titulo={pago.estado === "adelanto_informado" ? "Adelanto recibido" : "Pagas al recibir"}>
                 <p className="text-sm text-gris">
                   {pago.estado === "adelanto_informado" && <>La tienda confirmó tu adelanto. </>}
-                  Al recibir tu pedido, paga <b className="text-tinta">{soles(montoAlRecibir)}</b>{" "}
-                  {pago.metodo === "tarjeta_tienda" ? (
-                    <>con el <a href={t.tarjeta_link} target="_blank" rel="noreferrer noopener" className="font-bold text-pino underline">link de pago con tarjeta</a> de la tienda</>
-                  ) : (
-                    <>por {pago.metodo === "plin_directo" ? "Plin" : "Yape"} al <b className="text-tinta">{pago.metodo === "plin_directo" ? t.plin_numero : t.yape_numero}</b>{t.pago_titular && <> ({t.pago_titular})</>}</>
-                  )}
-                  . La tienda confirma que le llegó y recién ahí das tu código. No se acepta efectivo.
+                  Al recibir tu pedido, paga <b className="text-tinta">{soles(montoAlRecibir)}</b> con estos datos. La tienda confirma que le llegó y recién ahí das tu código. No se acepta efectivo.
                 </p>
+                <DatosPago metodo={pago.metodo} t={t} monto={montoAlRecibir} copiar={copiar} />
                 {p.entrega === "motorizado" && p.envio_centimos > 0 && <p className="mt-2 text-xs text-gris">El envío ({soles(p.envio_centimos)}) se lo pagas al motorizado aparte.</p>}
               </Seccion>
             )}

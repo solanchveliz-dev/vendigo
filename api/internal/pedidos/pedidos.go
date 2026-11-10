@@ -1071,14 +1071,20 @@ func CargarComoAdmin(ctx context.Context, app *core.App, ref string) (*Detalle, 
 
 // TiendaPago: datos para que el comprador le pague directo a la tienda.
 type TiendaPago struct {
-	Nombre   string `json:"nombre"`
-	Slug     string `json:"slug"`
-	Yape     string `json:"yape_numero"`
-	Plin     string `json:"plin_numero"`
-	Titular  string `json:"pago_titular"`
-	QRURL    string `json:"pago_qr_url"`
-	Tarjeta  string `json:"tarjeta_link"`
-	Whatsapp string `json:"whatsapp"`
+	Nombre   string   `json:"nombre"`
+	Slug     string   `json:"slug"`
+	Yape     string   `json:"yape_numero"`
+	Plin     string   `json:"plin_numero"`
+	Titular  string   `json:"pago_titular"`
+	QRURL    string   `json:"pago_qr_url"`
+	PlinQR   string   `json:"plin_qr_url"`
+	Tarjeta  string   `json:"tarjeta_link"`
+	Marcas   []string `json:"tarjeta_marcas"`
+	Banco    string   `json:"transf_banco"`
+	Cuenta   string   `json:"transf_cuenta"`
+	CCI      string   `json:"transf_cci"`
+	TitularB string   `json:"transf_titular"`
+	Whatsapp string   `json:"whatsapp"`
 }
 
 // CargarComoComprador arma el seguimiento del pedido para el comprador (por su enlace secreto).
@@ -1121,11 +1127,19 @@ func CargarComoComprador(ctx context.Context, app *core.App, token string) (*Det
 		d.Acciones = append(d.Acciones, "reclamar")
 	}
 	var t TiendaPago
-	var qr sql.NullString
-	app.DB.QueryRowContext(ctx, `SELECT nombre, slug, yape_numero, plin_numero, pago_titular, pago_qr_key, whatsapp, tarjeta_link FROM tiendas WHERE id=$1`, tid).
-		Scan(&t.Nombre, &t.Slug, &t.Yape, &t.Plin, &t.Titular, &qr, &t.Whatsapp, &t.Tarjeta)
+	var qr, plinQR sql.NullString
+	app.DB.QueryRowContext(ctx, `SELECT nombre, slug, yape_numero, plin_numero, pago_titular, pago_qr_key, whatsapp, tarjeta_link,
+		plin_qr_key, tarjeta_marcas, transf_banco, transf_cuenta, transf_cci, transf_titular FROM tiendas WHERE id=$1`, tid).
+		Scan(&t.Nombre, &t.Slug, &t.Yape, &t.Plin, &t.Titular, &qr, &t.Whatsapp, &t.Tarjeta,
+			&plinQR, pq.Array(&t.Marcas), &t.Banco, &t.Cuenta, &t.CCI, &t.TitularB)
 	if qr.Valid {
 		t.QRURL = app.Archivos.URLPublica(qr.String)
+	}
+	if plinQR.Valid {
+		t.PlinQR = app.Archivos.URLPublica(plinQR.String)
+	}
+	if t.Marcas == nil {
+		t.Marcas = []string{}
 	}
 	return d, &t, nil
 }

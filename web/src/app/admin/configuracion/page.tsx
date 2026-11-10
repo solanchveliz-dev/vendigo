@@ -6,7 +6,14 @@ import { api, ErrorApi, useApi } from "@/lib/api";
 import { Boton, Cargando, Entrada, useAvisar } from "@/components/ui";
 import { Tarjeta, Titulo } from "@/components/admin/ui";
 
-type Config = { correo_soporte: string; planes_yape: string; planes_titular: string; inactividad_min: number; agencias: string[]; sedes_activas: number };
+type Config = { correo_soporte: string; planes_yape: string; planes_titular: string; inactividad_min: number; agencias: string[]; sedes_activas: number; extras: Record<string, number> };
+
+const EXTRAS: { k: string; t: string; ayuda: string; dias?: boolean }[] = [
+  { k: "garantia_tope_centimos", t: "Tope del fondo de emergencia (S/)", ayuda: "Máximo que devuelve VendiGo por pedido que no llegó." },
+  { k: "garantia_dias_habiles", t: "Plazo de la tienda (días hábiles)", ayuda: "Para devolver antes de que pague VendiGo.", dias: true },
+  { k: "destacado_precio_centimos", t: "Impulsar 7 días (S/)", ayuda: "Los paquetes de 3 y 15 días se calculan en proporción." },
+];
+const aTexto = (e: { dias?: boolean }, v: number) => (e.dias ? String(v) : (v / 100).toFixed(2));
 type Plan = { id: string; nombre: string; creditos_ia: number };
 
 function Fila({ titulo, detalle, children }: { titulo: string; detalle?: React.ReactNode; children?: React.ReactNode }) {
@@ -46,12 +53,26 @@ export default function Configuracion() {
   const [guardando, setGuardando] = useState(false);
   const [yape, setYape] = useState("");
   const [titular, setTitular] = useState("");
-  useEffect(() => { if (c) { setCorreo(c.correo_soporte); setYape(c.planes_yape); setTitular(c.planes_titular); } }, [c]);
+  const [ex, setEx] = useState<Record<string, string>>({});
+  useEffect(() => {
+    if (c) {
+      setCorreo(c.correo_soporte);
+      setYape(c.planes_yape);
+      setTitular(c.planes_titular);
+      setEx(Object.fromEntries(EXTRAS.map((e) => [e.k, aTexto(e, c.extras?.[e.k] ?? 0)])));
+    }
+  }, [c]);
+  const cambioExtras = !!c && EXTRAS.some((e) => ex[e.k] !== aTexto(e, c.extras?.[e.k] ?? 0));
 
   async function guardar() {
     setGuardando(true);
     try {
-      const r = await api.put<{ mensaje: string }>("/admin/configuracion", { correo_soporte: correo, planes_yape: yape.trim(), planes_titular: titular.trim() });
+      const r = await api.put<{ mensaje: string }>("/admin/configuracion", {
+        correo_soporte: correo,
+        planes_yape: yape.trim(),
+        planes_titular: titular.trim(),
+        extras: Object.fromEntries(EXTRAS.map((e) => [e.k, e.dias ? parseInt(ex[e.k] || "0", 10) : Math.round(parseFloat(ex[e.k] || "0") * 100)])),
+      });
       avisar(r.mensaje);
       recargar();
     } catch (e) {
@@ -90,7 +111,17 @@ export default function Configuracion() {
                 <Entrada value={titular} onChange={(e) => setTitular(e.target.value)} maxLength={80} placeholder="Nombre que ve la tienda al yapear" />
               </label>
             </div>
-            <Boton className="mt-4" onClick={guardar} cargando={guardando} disabled={correo.trim() === c.correo_soporte && yape.trim() === c.planes_yape && titular.trim() === c.planes_titular}>Guardar configuración</Boton>
+            <p className="mt-6 text-sm font-bold text-tinta">Impulsos y fondo de emergencia</p>
+            <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {EXTRAS.map((e) => (
+                <label key={e.k} className="block">
+                  <span className="mb-1.5 block text-sm font-semibold text-tinta">{e.t}</span>
+                  <Entrada inputMode="decimal" value={ex[e.k] ?? ""} onChange={(x) => setEx({ ...ex, [e.k]: x.target.value.replace(e.dias ? /\D/g : /[^\d.]/g, "") })} />
+                  <span className="mt-1 block text-xs text-gris">{e.ayuda}</span>
+                </label>
+              ))}
+            </div>
+            <Boton className="mt-4" onClick={guardar} cargando={guardando} disabled={!cambioExtras && correo.trim() === c.correo_soporte && yape.trim() === c.planes_yape && titular.trim() === c.planes_titular}>Guardar configuración</Boton>
           </Tarjeta>
 
           <Tarjeta titulo="Datos del proveedor (Libro de Reclamaciones)">

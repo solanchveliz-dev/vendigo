@@ -48,7 +48,7 @@ export default async function ProductoPublico({ params, searchParams }: Params &
   const lugar = t.distrito || t.ciudad;
 
   const confianza = [
-    { icono: <ShieldCheck className="size-5" />, titulo: "Pagas a la tienda", texto: "Yape o Plin, sin intermediarios" },
+    { icono: <ShieldCheck className="size-5" />, titulo: "Pagas a la tienda", texto: "Yape, Plin o tarjeta, sin intermediarios" },
     { icono: <Check className="size-5" />, titulo: "Ves cada paso", texto: "Te avisamos cómo va tu pedido" },
     t.politicas
       ? { icono: <RefreshCw className="size-5" />, titulo: "Cambios", texto: t.politicas.length > 40 ? t.politicas.slice(0, 40) + "…" : t.politicas }

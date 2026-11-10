@@ -42,6 +42,8 @@ func (m *Modulo) RutasVendedor(r chi.Router) {
 func (m *Modulo) RutasPublicas(r chi.Router) {
 	r.Method("GET", "/tiendas/{slug}/productos", httpx.Handler(m.catalogoPublico))
 	r.Method("GET", "/tiendas/{slug}/productos/{id}", httpx.Handler(m.productoPublico))
+	r.Method("GET", "/destacados", httpx.Handler(m.destacadosPublicos))
+	r.Method("GET", "/buscar", httpx.Handler(m.buscar))
 }
 
 const maxImagenes = 6
@@ -78,6 +80,7 @@ type Producto struct {
 	Vendidos    int             `json:"vendidos"`
 	Detalles    json.RawMessage `json:"detalles"`
 	CreadoEn    time.Time       `json:"creado_en"`
+	Destacado   *time.Time      `json:"destacado_hasta"` // pagado a VendiGo; nil si no está destacado ahora
 }
 
 // PrecioConOferta redondea al sol más cercano hacia abajo en céntimos de 10.
@@ -100,7 +103,8 @@ func (m *Modulo) cargar(ctx context.Context, tiendaID string, ids ...string) ([]
 	rows, err := m.app.DB.QueryContext(ctx, `SELECT p.id, p.nombre, p.descripcion, p.categoria, p.precio_centimos, p.stock, p.activo, p.creado_en, p.detalles,
 		o.descuento_pct, o.termina_en,
 		(SELECT COALESCE(SUM(i.cantidad),0) FROM pedido_items i JOIN pedidos pe ON pe.id=i.pedido_id
-			WHERE i.producto_id=p.id AND pe.estado NOT IN ('rechazado','cancelado'))
+			WHERE i.producto_id=p.id AND pe.estado NOT IN ('rechazado','cancelado')),
+		CASE WHEN p.destacado_hasta > now() THEN p.destacado_hasta END
 		FROM productos p LEFT JOIN ofertas o ON o.producto_id=p.id AND o.termina_en > now()
 		WHERE p.tienda_id=$1 AND NOT p.eliminado AND p.id::text IN (`+in+`)`, args...)
 	if err != nil {
@@ -112,7 +116,7 @@ func (m *Modulo) cargar(ctx context.Context, tiendaID string, ids ...string) ([]
 		var p Producto
 		var pct sql.NullInt64
 		var termina sql.NullTime
-		if err := rows.Scan(&p.ID, &p.Nombre, &p.Descripcion, &p.Categoria, &p.Precio, &p.Stock, &p.Activo, &p.CreadoEn, &p.Detalles, &pct, &termina, &p.Vendidos); err != nil {
+		if err := rows.Scan(&p.ID, &p.Nombre, &p.Descripcion, &p.Categoria, &p.Precio, &p.Stock, &p.Activo, &p.CreadoEn, &p.Detalles, &pct, &termina, &p.Vendidos, &p.Destacado); err != nil {
 			return nil, err
 		}
 		if pct.Valid {
@@ -617,7 +621,8 @@ func (m *Modulo) catalogoPublico(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	rows, err := m.app.DB.QueryContext(ctx, `SELECT id FROM productos WHERE tienda_id=$1 AND activo AND NOT eliminado ORDER BY creado_en DESC LIMIT 200`, tid)
+	rows, err := m.app.DB.QueryContext(ctx, `SELECT id FROM productos WHERE tienda_id=$1 AND activo AND NOT eliminado
+		ORDER BY (destacado_hasta > now()) IS TRUE DESC, creado_en DESC LIMIT 200`, tid)
 	if err != nil {
 		return err
 	}
@@ -657,6 +662,10 @@ func (m *Modulo) productoPublico(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
+	// Si el producto está impulsado, cuenta la visita (excepto la vista previa de la propia tienda).
+	if r.URL.Query().Get("vista") != "1" {
+		m.app.DB.ExecContext(ctx, `UPDATE impulsos SET visitas = visitas + 1 WHERE producto_id::text=$1 AND now() BETWEEN inicio AND fin`, chi.URLParam(r, "id"))
+	}
 	l, err := m.cargar(ctx, tid, chi.URLParam(r, "id"))
 	if err != nil {
 		return err
@@ -692,5 +701,16 @@ func validarLimite(ctx context.Context, q core.Ejecutor, tid string) error {
 	if max.Valid && int64(usados) >= max.Int64 {
 		return httpx.Conflicto("limite_productos", fmt.Sprintf("Tu plan %s permite %d productos publicados. Oculta o elimina uno, o mejora tu plan para publicar más.", plan, max.Int64))
 	}
+	return nil
+}
+
+// destacadosPublicos: productos que sus tiendas pagaron destacar (anuncio), para la portada de VendiGo.
+// Solo tiendas activas, sin pausa ni suspensión. Orden aleatorio para repartir la vista entre anunciantes.
+func (m *Modulo) destacadosPublicos(w http.ResponseWriter, r *http.Request) error {
+	lista, err := m.impulsados(r.Context(), "", 12)
+	if err != nil {
+		return err
+	}
+	httpx.OK(w, map[string]any{"productos": lista})
 	return nil
 }
