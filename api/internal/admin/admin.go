@@ -454,7 +454,7 @@ func (m *Modulo) aprobar(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return err
 		}
-		billetera.Notificar(ctx, tx, tid, "Verificamos tu identidad", "Ya puedes retirar tu dinero a tu cuenta bancaria.", "/vendedor/cobros")
+		billetera.Notificar(ctx, tx, tid, "Verificamos tu identidad", "El equipo de VendiGo aprobó tus datos. Tu identidad ya está verificada.", "/vendedor/verificacion")
 		m.app.Auditar(ctx, tx, adminID(ctx), "aprobar_identidad", "verificacion", id, nil)
 		return nil
 	})

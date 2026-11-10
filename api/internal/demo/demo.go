@@ -27,7 +27,7 @@ func (m *Modulo) Rutas(r chi.Router) {
 	r.Method("POST", "/pedidos/{id}/ayuda", httpx.Handler(m.ayuda))
 	r.Method("POST", "/pregunta", httpx.Handler(m.pregunta))
 	r.Method("POST", "/barrer", httpx.Handler(m.barrer))
-	r.Method("POST", "/verificacion/aprobar", httpx.Handler(m.aprobarVerificacion))
+	// La verificación de identidad la aprueba un administrador desde su panel (no se simula).
 }
 
 var nombres = []string{"Mariana Torres", "Diego Salazar", "Valeria Quispe", "Rodrigo Mendoza", "Camila Rojas", "Luis Huamán", "Andrea Flores"}
@@ -189,23 +189,6 @@ func (m *Modulo) barrer(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	httpx.OK(w, map[string]int{"confirmados": c})
-	return nil
-}
-
-// aprobarVerificacion simula la revisión del administrador.
-func (m *Modulo) aprobarVerificacion(w http.ResponseWriter, r *http.Request) error {
-	tid, err := tiendas.ID(r.Context(), m.app)
-	if err != nil {
-		return err
-	}
-	res, err := m.app.DB.ExecContext(r.Context(), `UPDATE verificaciones SET estado='aprobada', revisado_en=now() WHERE tienda_id=$1 AND estado='pendiente'`, tid)
-	if err != nil {
-		return err
-	}
-	if n, _ := res.RowsAffected(); n == 0 {
-		return httpx.Invalido("No hay una verificación pendiente.")
-	}
-	httpx.OK(w, map[string]string{"mensaje": "Identidad verificada."})
 	return nil
 }
 

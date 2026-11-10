@@ -154,7 +154,7 @@ export default async function ProductoPublico({ params, searchParams }: Params &
               </p>
               <ul className="mt-3 space-y-2.5 text-[15px] text-tinta/80">
                 {[
-                  "Le pagas directo a la tienda por Yape o Plin; VendiGo no toca tu dinero.",
+                  "Le pagas directo a la tienda con los medios que ella acepta; VendiGo no toca tu dinero.",
                   "Ves cada paso: preparación, código de agencia o motorizado.",
                   "Si algo sale mal, lo reportas en 1 clic y VendiGo media con la tienda.",
                 ].map((x) => (

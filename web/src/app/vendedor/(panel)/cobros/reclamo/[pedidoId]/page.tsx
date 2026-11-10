@@ -79,8 +79,8 @@ export default function ResponderReclamo({ params }: { params: Promise<{ pedidoI
       setDatos(await api.post<PedidoDetalle>(`/vendedor/reclamos/${reclamo.id}/devolver`, {}));
       recargarResumen();
       setDevolver(false);
-      avisar(`Listo. Le devolvimos a ${nombre} todo su dinero.`);
-      router.push("/vendedor/cobros");
+      avisar(`Reclamo aceptado. Devuélvele a ${nombre} lo que pagó e infórmalo con tu captura.`);
+      router.push(`/vendedor/pedidos/${pedidoId}`);
     } catch (e) {
       avisar((e as ErrorApi).message, "error");
     } finally {
@@ -216,7 +216,7 @@ export default function ResponderReclamo({ params }: { params: Promise<{ pedidoI
 
       <Modal abierto={devolver} onCerrar={() => setDevolver(false)} titulo="¿Devolver el dinero?">
         <p className="text-sm text-gris">
-          Aceptas el reclamo y le devolvemos a {nombre} los {soles(p.total_centimos)} por el mismo medio de pago. Este pedido no se cobra y el reclamo queda cerrado. No se puede deshacer.
+          Aceptas el reclamo: el pedido se cancela y el reclamo queda cerrado. Si {nombre} ya te pagó, tú le devuelves lo que pagó (hasta {soles(p.total_centimos)}) por el mismo medio y lo informas con tu captura desde el pedido. No se puede deshacer.
         </p>
         <div className="mt-4 flex gap-2">
           <Boton variante="peligro" cargando={enviando} onClick={confirmarDevolucion}>Sí, devolver el dinero</Boton>

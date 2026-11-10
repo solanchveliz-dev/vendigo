@@ -25,10 +25,10 @@ const PERMISOS: [string, boolean, boolean, boolean][] = [
   ["Publicar y editar productos", false, true, false],
   ["Gestionar pedidos y registrar despachos", false, true, false],
   ["Usar asistencia IA", false, true, false],
-  ["Retirar su dinero (con código de confirmación)", false, true, false],
+  ["Informar pagos recibidos y devoluciones", false, true, false],
   ["Ver panel administrativo", false, false, true],
   ["Suspender tiendas y usuarios", false, false, true],
-  ["Aprobar identidades y registrar transferencias", false, false, true],
+  ["Aprobar identidades y confirmar pagos a VendiGo", false, false, true],
   ["Resolver reclamos", false, false, true],
 ];
 

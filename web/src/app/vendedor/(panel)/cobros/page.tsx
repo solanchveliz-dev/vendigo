@@ -80,7 +80,7 @@ export default function MisVentas() {
       <div className="max-w-2xl">
         <div className="mb-2 h-1 w-8 rounded-full bg-coral" />
         <h1 className="text-[34px] font-extrabold leading-tight text-pino">Mis ventas</h1>
-        <p className="text-sm text-gris">Tus clientes te pagan directo a ti por Yape, Plin o en efectivo. VendiGo no recibe ni guarda tu dinero: aquí solo llevas la cuenta de lo que vendiste.</p>
+        <p className="text-sm text-gris">Tus clientes te pagan directo a ti por Yape, Plin, transferencia o tu link de tarjeta. VendiGo no recibe ni guarda tu dinero: aquí solo llevas la cuenta de lo que vendiste.</p>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">

@@ -1036,7 +1036,12 @@ func ResolverReclamo(ctx context.Context, app *core.App, tx *sql.Tx, reclamoID, 
 		if _, err := tx.ExecContext(ctx, `UPDATE reclamos SET estado='a_favor_vendedor', nota_admin=$2, resuelto_en=now() WHERE id::text=$1`, reclamoID, nota); err != nil {
 			return "", err
 		}
-		if err := evento(ctx, tx, pid, estado, "VendiGo revisó el reclamo y las pruebas de la tienda. El pedido queda como entregado."); err != nil {
+		if estado == "enviado" {
+			// Sin esto el pedido se quedaría "enviado" para siempre: la confirmación automática no toca pedidos con reclamo.
+			if err := MarcarEntregado(ctx, tx, pid, "vendigo"); err != nil {
+				return "", err
+			}
+		} else if err := evento(ctx, tx, pid, estado, "VendiGo revisó el reclamo y las pruebas de la tienda. El pedido queda como entregado."); err != nil {
 			return "", err
 		}
 		billetera.Notificar(ctx, tx, tid, "Reclamo resuelto a tu favor", "Pedido "+codigo+": el pedido queda como entregado.", "/vendedor/cobros/reclamo/"+pid)

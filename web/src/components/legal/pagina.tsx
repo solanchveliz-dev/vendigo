@@ -1,7 +1,7 @@
 import { CabeceraPublica } from "@/components/tienda/cabecera";
 import { PieLegal } from "@/components/legal/pie";
 
-export const ACTUALIZADO = "9 de noviembre de 2026";
+export const ACTUALIZADO = "10 de noviembre de 2026";
 
 // Plantilla de las páginas legales: título, fecha de actualización y secciones numeradas.
 export function PaginaLegal({ titulo, intro, secciones }: { titulo: string; intro: React.ReactNode; secciones: [string, React.ReactNode][] }) {

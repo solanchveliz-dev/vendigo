@@ -1,6 +1,7 @@
 # VendiGo
 
-Plataforma donde los emprendedores del Perú crean su tienda y los compradores encuentran tiendas con pago protegido.
+Plataforma donde los emprendedores del Perú crean su tienda y los compradores siguen su pedido con reclamos mediados por VendiGo.
+El comprador le paga directo a la tienda (Yape, Plin, transferencia o el link de tarjeta de la tienda): VendiGo no recibe ni retiene el dinero de las ventas.
 
 Proyecto de Fin de Carrera — Tecsup, Diseño y Desarrollo de Software.
 
@@ -12,9 +13,9 @@ Proyecto de Fin de Carrera — Tecsup, Diseño y Desarrollo de Software.
 | Carpeta | Contenido |
 |---|---|
 | `api/` | API REST en Go (monolito modular) |
-| `web/` | Web en Next.js: tiendas públicas, panel del vendedor y del administrador |
-| `app/` | App móvil en React Native + Expo (comprador y vendedor) |
-| `infra/` | Infraestructura en AWS con Terraform |
+| `web/` | Web en Next.js: tiendas públicas, compra y seguimiento, panel del vendedor y del administrador |
+
+Planificadas (todavía no están en el repositorio): `app/` (app móvil con React Native + Expo) e `infra/` (AWS con Terraform).
 
 ## Ramas
 
@@ -49,7 +50,7 @@ Requisitos: Docker Desktop, Go 1.24 o superior y Node.js 20 o superior.
    go run ./cmd/seed
    ```
 
-4. Worker de tareas programadas (liberación de dinero y confirmaciones automáticas):
+4. Worker de tareas programadas (da por recibidos los envíos por agencia a los 7 días sin reclamo). En AWS lo dispara EventBridge; en local déjalo corriendo en otra terminal:
 
    ```
    go run ./cmd/worker
@@ -69,3 +70,10 @@ Requisitos: Docker Desktop, Go 1.24 o superior y Node.js 20 o superior.
 ## Versión 0.1
 
 Perfil del vendedor completo: cuenta con código OTP, tienda, productos con IA, pedidos con pago protegido, envíos, reclamos, cobros, retiros, verificación de identidad y planes con cupo de ventas.
+
+## Versión 0.2 (en `develop`)
+
+Pago directo a la tienda: VendiGo ya no custodia dinero. Cada pedido registra el estado de su pago y sus devoluciones;
+la tienda informa lo que recibió y lo que devolvió con su captura, y el administrador da seguimiento y media los reclamos.
+El fondo de emergencia de VendiGo cubre los pedidos que no le llegaron al comprador cuando la tienda no devuelve a tiempo.
+Los saldos, liberaciones y retiros del modelo anterior quedan en tablas de archivo de solo lectura.

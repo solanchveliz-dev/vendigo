@@ -5,7 +5,7 @@ Monolito modular: una sola aplicación dividida en módulos con responsabilidade
 ```
 cmd/
   api/      servidor HTTP
-  worker/   tareas programadas (liberar dinero, dar por recibidos los envíos)
+  worker/   tareas programadas (dar por recibidos los envíos por agencia a los 7 días)
   seed/     datos de prueba
 internal/
   config/        variables de entorno
@@ -18,9 +18,13 @@ internal/
   auth/          registro, código OTP, inicio de sesión y recuperación
   tiendas/       tienda, formas de entrega y subida de imágenes
   productos/     productos, variantes, ofertas y preguntas
-  pedidos/       pedidos, envíos, reclamos y notificaciones
-  billetera/     libro de movimientos: a liberar, disponible, retiros
-  planes/        planes con cupo de ventas
+  pedidos/       pedidos, envíos, reclamos, devoluciones y notificaciones
+  pagos/         estado del pago de cada pedido y reglas del fondo de emergencia (VendiGo no recibe el dinero)
+  compras/       compra sin cuenta con código SMS y seguimiento por enlace secreto
+  billetera/     verificación de identidad, avisos y días hábiles (ya no maneja dinero)
+  planes/        planes con cupo de ventas, ventas extra e impulsos (cobro de VendiGo con Culqi)
+  admin/         panel del administrador
+  libro/         Libro de Reclamaciones y datos legales
   ia/            herramientas de IA con créditos (Amazon Bedrock)
   demo/          simula al comprador (solo APP_ENV=dev)
 ```
@@ -43,13 +47,20 @@ internal/
 | GET | `/vendedor/pedidos?grupo=` | Pedidos: por_aceptar, por_enviar, recogen, en_camino, terminados |
 | POST | `/vendedor/pedidos/{id}/aceptar` · `rechazar` · `enviar` · `listo-recojo` · `entregar-recojo` | Pasos del pedido |
 | POST | `/vendedor/reclamos/{id}/responder` | Responder un reclamo con pruebas |
-| GET | `/vendedor/cobros` | A liberar, disponible, retiros |
-| POST | `/vendedor/retiros` | Retirar a la cuenta bancaria |
-| GET/PUT | `/vendedor/cuenta-bancaria` | Cuenta para los cobros (cifrada) |
+| POST | `/vendedor/pedidos/{id}/pago` | La tienda informa si recibió el pago |
+| POST | `/vendedor/pedidos/{id}/devolucion` | La tienda informa la devolución con su captura |
+| POST | `/vendedor/reclamos/{id}/devolver` | La tienda acepta el reclamo |
+| GET | `/vendedor/ventas` | Reporte informativo de ventas (no es un saldo) |
+| PUT | `/vendedor/tienda/pagos` | Medios con los que la tienda cobra directo |
 | GET/POST | `/vendedor/verificacion` | Verificación de identidad |
 | GET/POST | `/vendedor/plan` · `/vendedor/plan/ventas-extra` | Plan y cupo de ventas |
+| POST | `/vendedor/productos/{id}/destacar` | Impulsar un producto |
 | GET/POST | `/vendedor/ia` · `/vendedor/ia/*` | Créditos y herramientas de IA |
 | GET | `/tiendas/{slug}` · `/tiendas/{slug}/productos` | Tienda pública |
+| POST | `/compras/codigo` · `/compras` | Compra sin cuenta con código SMS |
+| GET/POST | `/seguimiento/{token}` · `.../comprobante` · `.../recibido` · `.../reclamo` | Seguimiento del comprador |
+| GET | `/legal/proveedor` | Datos legales y reglas vigentes del fondo de emergencia |
+| * | `/admin/*` | Panel del administrador (rol admin con verificación en dos pasos) |
 
 ## Pruebas
 

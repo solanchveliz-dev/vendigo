@@ -27,6 +27,7 @@ func MarcarEntregado(ctx context.Context, tx *sql.Tx, pedidoID, por string) erro
 		"comprador":  "El comprador confirmó que lo recibió.",
 		"automatico": "Se dio por recibido: pasaron 7 días desde el envío sin reclamos.",
 		"vendedor":   "Entregado con el código del comprador.",
+		"vendigo":    "VendiGo revisó el reclamo y las pruebas de la tienda. El pedido queda como entregado.",
 	}[por]
 	return evento(ctx, tx, pedidoID, "entregado", detalle)
 }

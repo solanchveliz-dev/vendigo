@@ -65,7 +65,7 @@ export default function Pagos() {
   const k = datos?.resumen;
   return (
     <>
-      <Titulo titulo="Pagos registrados" detalle="El comprador le paga directo a la tienda (Yape o Plin). VendiGo no recibe ni guarda ese dinero: aquí solo ves el seguimiento que informan comprador y tienda." />
+      <Titulo titulo="Pagos registrados" detalle="El comprador le paga directo a la tienda (Yape, Plin, transferencia o el link de tarjeta de la tienda). VendiGo no recibe ni guarda ese dinero: aquí solo ves el seguimiento que informan comprador y tienda." />
       {!datos || !k ? (
         <Cargando />
       ) : (

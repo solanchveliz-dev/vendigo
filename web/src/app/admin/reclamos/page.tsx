@@ -158,7 +158,7 @@ export default function Reclamos() {
                   <Check ok={guia ? !!c.numero_orden : null} titulo="Boleta de envío" detalle={guia ? (c.numero_orden ? `${c.agencia} ${c.numero_orden}${c.boleta ? " · con foto" : ""}` : "La tienda no registró el envío") : "No aplica (no fue por agencia)"} />
                   <Check ok={c.respuesta_vendedor ? true : null} titulo="Respuesta de la tienda" detalle={c.respondido_en ? `Respondió el ${fechaHora(c.respondido_en)}` : "Por responder"} />
                   <Check ok={c.evidencias.length || c.fotos.length ? true : null} titulo="Fotos de ambas partes" detalle={`Cliente ${c.fotos.length} · tienda ${c.evidencias.length}`} />
-                  <Check ok={c.confirmado_por ? true : null} titulo="Entrega confirmada" detalle={{ comprador: "El cliente la confirmó", automatico: "Se dio por recibido", vendedor: "Entregado en tienda" }[c.confirmado_por] ?? "Sin confirmar"} />
+                  <Check ok={c.confirmado_por ? true : null} titulo="Entrega confirmada" detalle={{ comprador: "El cliente la confirmó", automatico: "Se dio por recibido", vendedor: "Entregado en tienda", vendigo: "VendiGo resolvió el reclamo" }[c.confirmado_por] ?? "Sin confirmar"} />
                 </div>
               </div>
 

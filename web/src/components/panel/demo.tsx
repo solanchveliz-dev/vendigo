@@ -39,11 +39,8 @@ export function PanelDemo() {
           <button className="block w-full rounded-lg px-3 py-2 text-left hover:bg-crema" onClick={() => hacer("/dev/pregunta", {}, "Llegó una pregunta nueva")}>
             Nueva pregunta de un cliente
           </button>
-          <button className="block w-full rounded-lg px-3 py-2 text-left hover:bg-crema" onClick={() => hacer("/dev/verificacion/aprobar", {}, "Identidad aprobada")}>
-            Aprobar mi verificación
-          </button>
-          <button className="block w-full rounded-lg px-3 py-2 text-left hover:bg-crema" onClick={() => hacer("/dev/barrer", {}, "Tareas automáticas ejecutadas")}>
-            Ejecutar liberaciones pendientes
+          <button className="block w-full rounded-lg px-3 py-2 text-left hover:bg-crema" onClick={() => hacer("/dev/barrer", {}, "Se revisaron los envíos de más de 7 días")}>
+            Dar por recibidos los envíos de 7 días
           </button>
         </div>
       )}

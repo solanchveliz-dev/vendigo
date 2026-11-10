@@ -94,7 +94,7 @@ export function TarjetaPago({ pedido: p, ...a }: { pedido: PedidoDetalle } & Acc
           ))}
           {devPendiente && a.informarDevolucion && (
             <>
-              <p className="mt-2 text-sm text-tinta/80">Devuélvele el dinero al cliente por el mismo medio (Yape o Plin) e infórmalo con tu captura.</p>
+              <p className="mt-2 text-sm text-tinta/80">Devuélvele el dinero al cliente por el mismo medio con el que te pagó e infórmalo con tu captura.</p>
               <Boton bloque variante="acento" className="mt-3" onClick={() => setModal("devolucion")}>
                 Informar devolución
               </Boton>

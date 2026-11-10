@@ -14,6 +14,7 @@ import (
 	"github.com/solanchveliz-dev/vendigo/api/internal/billetera"
 	"github.com/solanchveliz-dev/vendigo/api/internal/core"
 	"github.com/solanchveliz-dev/vendigo/api/internal/httpx"
+	"github.com/solanchveliz-dev/vendigo/api/internal/pagos"
 )
 
 type Modulo struct{ app *core.App }
@@ -64,8 +65,13 @@ func (m *Modulo) leerProveedor(q core.Ejecutor, r *http.Request) Proveedor {
 	return p
 }
 
+// proveedor: datos legales de VendiGo y las reglas vigentes del fondo de emergencia
+// (las páginas de Términos y Devoluciones las muestran tal como las configura el admin).
 func (m *Modulo) proveedor(w http.ResponseWriter, r *http.Request) error {
-	httpx.OK(w, m.leerProveedor(m.app.DB, r))
+	httpx.OK(w, struct {
+		Proveedor
+		Fondo pagos.Garantia `json:"fondo"`
+	}{m.leerProveedor(m.app.DB, r), pagos.LeerGarantia(r.Context(), m.app.DB)})
 	return nil
 }
 
