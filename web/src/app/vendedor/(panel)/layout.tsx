@@ -10,6 +10,7 @@ import type { Usuario } from "@/lib/tipos";
 import { cn, Cargando } from "@/components/ui";
 import { PanelCtx, type Resumen } from "@/components/panel/contexto";
 import { PanelDemo } from "@/components/panel/demo";
+import { ErrorCarga } from "@/components/error-carga";
 
 const menu = [
   { href: "/vendedor", texto: "Inicio", icono: Home },
@@ -159,7 +160,10 @@ export default function LayoutPanel({ children }: { children: React.ReactNode })
             </div>
           </div>
         </header>
-        <main className="mx-auto max-w-6xl px-4 pb-28 pt-2 md:px-6 md:pb-12">{children}</main>
+        <main className="mx-auto max-w-6xl px-4 pb-28 pt-2 md:px-6 md:pb-12">
+          <div className="mb-4 empty:mb-0"><ErrorCarga /></div>
+          {children}
+        </main>
       </div>
 
       {/* Barra de abajo (celular) */}

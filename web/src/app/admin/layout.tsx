@@ -9,6 +9,7 @@ import { api, sesion, useApi } from "@/lib/api";
 import type { Usuario } from "@/lib/tipos";
 import { Cargando, cn } from "@/components/ui";
 import { fechaHora } from "@/lib/admin";
+import { ErrorCarga } from "@/components/error-carga";
 
 type Resumen = { verificaciones_pendientes: number; pagos_plan_pendientes: number; reclamos_abiertos: number; incidencias_abiertas: number };
 type Aviso = { id: string; titulo: string; cuerpo: string; enlace: string; leida: boolean; creado_en: string };
@@ -41,6 +42,8 @@ export default function LayoutAdmin({ children }: { children: React.ReactNode })
   const { datos: r } = useApi<Resumen>(esAdmin ? `/admin/resumen?${ruta}` : null);
   const [abierto, setAbierto] = useState(false);
   const [campana, setCampana] = useState(false);
+  // Etiqueta del menú cerrado: se dibuja fija, por encima de todo, para que el desplazamiento del menú no la corte.
+  const [etiqueta, setEtiqueta] = useState<{ texto: string; top: number } | null>(null);
   const avisos = useApi<{ notificaciones: Aviso[] }>(esAdmin ? `/admin/notificaciones?r=${campana}` : null);
   const noLeidas = avisos.datos?.notificaciones.filter((a) => !a.leida).length ?? 0;
 
@@ -90,34 +93,43 @@ export default function LayoutAdmin({ children }: { children: React.ReactNode })
     <div className="min-h-screen bg-crema">
       {/* Barra lateral de íconos, como el panel del vendedor y el prototipo */}
       <aside className={cn("fixed inset-y-3 left-3 z-[200] hidden flex-col rounded-2xl bg-white py-4 shadow-suave ring-1 ring-linea/60 transition-all md:flex", abierto ? "w-60 px-3" : "w-[72px] items-center")}>
-        <Link href="/admin" className={cn("mb-5 flex items-center gap-2", abierto && "px-2")}>
+        <Link href="/admin" className={cn("mb-3 flex shrink-0 items-center gap-2", abierto && "px-2")}>
           <Image src="/logo.png" alt="VendiGo" width={40} height={40} />
           {abierto && <span className="text-sm font-bold leading-tight text-pino">Panel de<br />administración</span>}
         </Link>
-        <nav className="flex flex-1 flex-col gap-1.5">
+        <nav className={cn("-mx-1 flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto overscroll-contain px-1 py-1 [scrollbar-width:thin]", !abierto && "items-center")} onScroll={() => setEtiqueta(null)}>
           {menu.map((m) => (
             <Link
               key={m.href}
               href={m.href}
               aria-label={m.texto}
+              onMouseEnter={(e) => {
+                if (abierto) return;
+                const r = e.currentTarget.getBoundingClientRect();
+                setEtiqueta({ texto: m.texto, top: r.top + r.height / 2 });
+              }}
+              onMouseLeave={() => setEtiqueta(null)}
+              onClick={() => setEtiqueta(null)}
               className={cn(
-                "group relative flex h-11 items-center gap-3 rounded-xl transition",
-                abierto ? "px-3" : "w-11 justify-center",
+                "relative flex h-10 shrink-0 items-center gap-3 rounded-xl transition",
+                abierto ? "px-3" : "w-10 justify-center",
                 activo(m.href) ? "bg-coral text-white" : "text-gris hover:bg-pino-claro hover:text-pino",
               )}
             >
               <m.icono className="size-5 shrink-0" />
               {abierto && <span className="text-sm font-semibold">{m.texto}</span>}
               {m.cuenta && r && r[m.cuenta] > 0 && (
-                <span className={cn("grid min-w-5 place-items-center rounded-full bg-pino px-1 text-[11px] font-bold text-white ring-2 ring-white", abierto ? "ml-auto" : "absolute -right-0.5 -top-0.5")}>{r[m.cuenta]}</span>
-              )}
-              {!abierto && (
-                <span className="pointer-events-none absolute left-full ml-3 whitespace-nowrap rounded-lg bg-pino px-3 py-1.5 text-sm font-semibold text-white opacity-0 shadow-lg transition group-hover:opacity-100">{m.texto}</span>
+                <span className={cn("grid min-w-5 place-items-center rounded-full bg-pino px-1 text-[11px] font-bold text-white ring-2 ring-white", abierto ? "ml-auto" : "absolute -right-1 -top-1")}>{r[m.cuenta]}</span>
               )}
             </Link>
           ))}
         </nav>
-        <div className={cn("flex items-center gap-2", abierto && "px-2")} title={yo.datos!.nombre}>
+        {etiqueta && !abierto && (
+          <span className="pointer-events-none fixed left-[92px] z-[300] -translate-y-1/2 whitespace-nowrap rounded-lg bg-pino px-3 py-1.5 text-sm font-semibold text-white shadow-lg" style={{ top: etiqueta.top }}>
+            {etiqueta.texto}
+          </span>
+        )}
+        <div className={cn("mt-3 flex shrink-0 items-center gap-2", abierto && "px-2")} title={yo.datos!.nombre}>
           <span className="grid size-9 place-items-center rounded-full bg-coral-claro text-xs font-bold text-tinta">{iniciales}</span>
           {abierto && <span className="text-xs leading-tight"><b className="block text-tinta">{yo.datos!.nombre}</b><span className="text-gris">Administrador</span></span>}
         </div>
@@ -178,7 +190,10 @@ export default function LayoutAdmin({ children }: { children: React.ReactNode })
           ))}
         </nav>
 
-        <main className="mx-auto max-w-[1280px] space-y-6 px-4 py-8 md:px-10">{children}</main>
+        <main className="mx-auto max-w-[1280px] space-y-6 px-4 py-8 md:px-10">
+          <ErrorCarga />
+          {children}
+        </main>
       </div>
     </div>
   );

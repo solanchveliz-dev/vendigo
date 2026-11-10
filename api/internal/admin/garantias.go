@@ -53,7 +53,8 @@ func (m *Modulo) garantias(w http.ResponseWriter, r *http.Request) error {
 	}
 	rows, err := m.app.DB.QueryContext(ctx, `SELECT p.id, p.codigo, t.nombre, t.id, p.comprador_nombre, p.comprador_celular, d.origen, d.monto_centimos, d.creado_en
 		FROM devoluciones d JOIN pedidos p ON p.id=d.pedido_id JOIN tiendas t ON t.id=p.tienda_id
-		WHERE d.estado='pendiente_tienda' AND `+cubierto+` ORDER BY d.creado_en`)
+		WHERE d.estado='pendiente_tienda' AND `+cubierto+`
+		AND NOT EXISTS (SELECT 1 FROM garantias gg WHERE gg.pedido_id=p.id) ORDER BY d.creado_en`)
 	if err != nil {
 		return err
 	}
@@ -90,18 +91,17 @@ func (m *Modulo) garantias(w http.ResponseWriter, r *http.Request) error {
 	}
 	defer rows.Close()
 	hechas := []pagada{}
-	var porRecuperar, pagadoTotal int
 	for rows.Next() {
 		var x pagada
 		if err := rows.Scan(&x.ID, &x.PedidoID, &x.Codigo, &x.Tienda, &x.Monto, &x.Estado, &x.Referencia, &x.PagadaEn, &x.RecupRef, &x.RecupEn); err != nil {
 			return err
 		}
-		pagadoTotal += x.Monto
-		if x.Estado == "pagada" {
-			porRecuperar += x.Monto
-		}
 		hechas = append(hechas, x)
 	}
+	// Totales de todas las garantías (la lista muestra solo las últimas 100).
+	var porRecuperar, pagadoTotal int
+	m.app.DB.QueryRowContext(ctx, `SELECT COALESCE(SUM(monto_centimos),0), COALESCE(SUM(monto_centimos) FILTER (WHERE estado='pagada'),0) FROM garantias`).
+		Scan(&pagadoTotal, &porRecuperar)
 	var ingresosDestacados, impulsosActivos int
 	m.app.DB.QueryRowContext(ctx, `SELECT COALESCE(SUM(monto_centimos),0) FROM pagos_plan WHERE tipo='destacado' AND estado='confirmado'`).Scan(&ingresosDestacados)
 	m.app.DB.QueryRowContext(ctx, `SELECT count(*) FROM impulsos WHERE now() BETWEEN inicio AND fin`).Scan(&impulsosActivos)
@@ -134,7 +134,8 @@ func (m *Modulo) pagarGarantia(w http.ResponseWriter, r *http.Request) error {
 		var tid, devID, codigo string
 		var desde time.Time
 		err := tx.QueryRowContext(ctx, `SELECT d.id, p.tienda_id, p.codigo, d.monto_centimos, d.creado_en FROM devoluciones d JOIN pedidos p ON p.id=d.pedido_id
-			WHERE d.pedido_id::text=$1 AND d.estado='pendiente_tienda' AND `+cubierto+` ORDER BY d.creado_en LIMIT 1 FOR UPDATE OF d`, pid).Scan(&devID, &tid, &codigo, &monto, &desde)
+			WHERE d.pedido_id::text=$1 AND d.estado='pendiente_tienda' AND `+cubierto+`
+			AND NOT EXISTS (SELECT 1 FROM garantias gg WHERE gg.pedido_id=p.id) ORDER BY d.creado_en LIMIT 1 FOR UPDATE OF d`, pid).Scan(&devID, &tid, &codigo, &monto, &desde)
 		if core.SinFilas(err) {
 			return httpx.Conflicto("no_aplica", "Este pedido no está cubierto: el fondo solo cubre pedidos que no llegaron.")
 		}
@@ -152,17 +153,21 @@ func (m *Modulo) pagarGarantia(w http.ResponseWriter, r *http.Request) error {
 		}
 		nota := fmt.Sprintf("Fondo de emergencia: VendiGo devolvió S/ %.2f al comprador.", float64(monto)/100)
 		if total > monto {
-			nota += fmt.Sprintf(" La tienda aún debe S/ %.2f al comprador.", float64(total-monto)/100)
-		}
-		if _, err := tx.ExecContext(ctx, `UPDATE devoluciones SET estado='cubierta_vendigo', nota=$2, informada_en=now() WHERE id=$1`, devID, nota); err != nil {
+			// El tope cubre solo una parte: la devolución sigue abierta por la diferencia, que la tienda debe devolver
+			// e informar con su captura (el comprador lo ve en su seguimiento).
+			nota += fmt.Sprintf(" La tienda aún debe devolver S/ %.2f al comprador.", float64(total-monto)/100)
+			if _, err := tx.ExecContext(ctx, `UPDATE devoluciones SET monto_centimos=$3, nota=$2 WHERE id=$1`, devID, nota, total-monto); err != nil {
+				return err
+			}
+		} else if _, err := tx.ExecContext(ctx, `UPDATE devoluciones SET estado='cubierta_vendigo', nota=$2, informada_en=now() WHERE id=$1`, devID, nota); err != nil {
 			return err
 		}
 		if _, err := tx.ExecContext(ctx, `UPDATE tiendas SET suspendida_garantia=true WHERE id=$1`, tid); err != nil {
 			return err
 		}
 		billetera.Notificar(ctx, tx, tid, "Tu tienda está suspendida",
-			fmt.Sprintf("No devolviste el dinero del pedido %s a tiempo y VendiGo le devolvió S/ %.2f al comprador. Repón ese monto a VendiGo para volver a recibir pedidos.", codigo, float64(monto)/100),
-			"/vendedor/cobros")
+			avisoSuspension(codigo, monto, total),
+			"/vendedor/pedidos/"+pid)
 		m.app.Auditar(ctx, tx, adminID(ctx), "pagar_garantia", "pedido", pid, map[string]any{"monto": monto, "referencia": in.Referencia})
 		return nil
 	})
@@ -219,4 +224,14 @@ func (m *Modulo) recuperarGarantia(w http.ResponseWriter, r *http.Request) error
 	}
 	httpx.OK(w, map[string]string{"mensaje": msg})
 	return nil
+}
+
+// avisoSuspension: lo que se le dice a la tienda cuando VendiGo cubrió una devolución que ella no hizo.
+func avisoSuspension(codigo string, cubierto, total int) string {
+	t := fmt.Sprintf("No devolviste el dinero del pedido %s a tiempo y VendiGo le devolvió S/ %.2f al comprador. Repón ese monto a VendiGo para volver a recibir pedidos.",
+		codigo, float64(cubierto)/100)
+	if total > cubierto {
+		t += fmt.Sprintf(" Además, todavía debes devolverle S/ %.2f al comprador e informarlo desde el pedido.", float64(total-cubierto)/100)
+	}
+	return t
 }

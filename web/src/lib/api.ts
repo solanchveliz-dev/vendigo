@@ -8,13 +8,24 @@ export class ErrorApi extends Error {
   }
 }
 
+// Tiempo máximo de espera: sin esto, si la API no responde la página se queda en "Cargando…" para siempre.
+const ESPERA_MS = 25_000;
+
 async function llamar<T>(metodo: string, ruta: string, cuerpo?: unknown): Promise<T> {
-  const r = await fetch(`/api/v1${ruta}`, {
-    method: metodo,
-    headers: { "Content-Type": "application/json" },
-    body: cuerpo === undefined ? undefined : JSON.stringify(cuerpo),
-    cache: "no-store",
-  });
+  let r: Response;
+  try {
+    r = await fetch(`/api/v1${ruta}`, {
+      method: metodo,
+      headers: { "Content-Type": "application/json" },
+      body: cuerpo === undefined ? undefined : JSON.stringify(cuerpo),
+      cache: "no-store",
+      signal: AbortSignal.timeout(ESPERA_MS),
+    });
+  } catch (e) {
+    const tiempo = (e as Error)?.name === "TimeoutError";
+    throw new ErrorApi(0, tiempo ? "sin_respuesta" : "sin_conexion",
+      tiempo ? "El servidor de VendiGo tardó demasiado en responder. Inténtalo de nuevo." : "No pudimos conectar con VendiGo. Revisa tu conexión e inténtalo de nuevo.");
+  }
   const datos = await r.json().catch(() => null);
   if (!r.ok) {
     if (r.status === 401 && typeof window !== "undefined" && !ruta.startsWith("/auth")) {
@@ -25,7 +36,8 @@ async function llamar<T>(metodo: string, ruta: string, cuerpo?: unknown): Promis
       await fetch("/api/sesion/salir", { method: "POST" }).catch(() => null);
       window.location.href = "/ingresar?suspendida=1";
     }
-    throw new ErrorApi(r.status, datos?.codigo ?? "error", datos?.mensaje ?? "Algo salió mal. Inténtalo de nuevo.");
+    const generico = r.status >= 500 ? `El servidor de VendiGo no respondió bien (error ${r.status}). Inténtalo en unos segundos.` : "Algo salió mal. Inténtalo de nuevo.";
+    throw new ErrorApi(r.status, datos?.codigo ?? "error", datos?.mensaje ?? generico);
   }
   return datos as T;
 }
@@ -49,7 +61,12 @@ export async function sesion<T>(accion: "ingresar" | "verificar" | "mfa" | "reno
   return datos as T;
 }
 
+function avisarCarga(evento: string, detalle: object) {
+  if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent(evento, { detail: detalle }));
+}
+
 // useApi carga datos de una ruta y permite recargarlos después de una acción.
+// Si falla, avisa con el evento "vg:error-carga" (lo muestra <ErrorCarga /> en los paneles).
 export function useApi<T>(ruta: string | null) {
   const [datos, setDatos] = useState<T | null>(null);
   const [error, setError] = useState<ErrorApi | null>(null);
@@ -66,8 +83,12 @@ export function useApi<T>(ruta: string | null) {
         setDatos(d);
         setError(null);
       }
+      avisarCarga("vg:carga-ok", { ruta: r });
     } catch (e) {
-      if (actual.current === r) setError(e as ErrorApi);
+      const err = e as ErrorApi;
+      if (actual.current === r) setError(err);
+      // 401 ya lleva al ingreso; lo demás se muestra en el aviso de error de carga del panel.
+      if (err?.estado !== 401) avisarCarga("vg:error-carga", { ruta: r, estado: err?.estado ?? 0, mensaje: err?.message || "Algo salió mal." });
     } finally {
       if (actual.current === r) setCargando(false);
     }

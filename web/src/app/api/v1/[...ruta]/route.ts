@@ -19,6 +19,7 @@ async function reenviar(req: NextRequest, ruta: string[]) {
 
   const llamar = (token?: string, r: string | undefined = refresh) =>
     fetch(destino, {
+      signal: AbortSignal.timeout(20_000),
       method: req.method,
       headers: {
         "Content-Type": "application/json",
@@ -29,11 +30,24 @@ async function reenviar(req: NextRequest, ruta: string[]) {
       cache: "no-store",
     });
 
-  let r = await llamar(acceso);
+  let r: Response;
   let nueva: Sesion | null = null;
-  if (r.status === 401 && refresh) {
-    nueva = await renovar(refresh);
-    if (nueva) r = await llamar(nueva.access_token, nueva.refresh_token);
+  try {
+    r = await llamar(acceso);
+    if (r.status === 401 && refresh) {
+      nueva = await renovar(refresh);
+      if (nueva) r = await llamar(nueva.access_token, nueva.refresh_token);
+    }
+  } catch (e) {
+    // La API está apagada, reiniciándose o no respondió a tiempo: se responde en JSON para que la página lo muestre.
+    const tiempo = (e as Error)?.name === "TimeoutError";
+    const dev = process.env.NODE_ENV !== "production";
+    const mensaje = tiempo
+      ? "La API de VendiGo tardó demasiado en responder."
+      : dev
+        ? `No se pudo conectar con la API en ${API_URL}. ¿Está corriendo (go run ./cmd/api)?`
+        : "El servidor de VendiGo no está disponible en este momento. Inténtalo en unos segundos.";
+    return NextResponse.json({ codigo: tiempo ? "api_sin_respuesta" : "api_caida", mensaje }, { status: tiempo ? 504 : 502 });
   }
   const res = new NextResponse(r.status === 204 ? null : await r.text(), {
     status: r.status,

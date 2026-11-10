@@ -50,6 +50,7 @@ export function renovar(refresh: string): Promise<Sesion | null> {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ refresh_token: refresh }),
       cache: "no-store",
+      signal: AbortSignal.timeout(20_000),
     });
     return r.ok ? ((await r.json()) as Sesion) : null;
   })();
