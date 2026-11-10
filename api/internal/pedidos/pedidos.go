@@ -210,7 +210,7 @@ type Reclamo struct {
 
 var MotivosReclamo = map[string]string{
 	"no_llego": "No me llegó", "danado": "Llegó dañado", "distinto": "Es distinto a lo publicado",
-	"incompleto": "Llegó incompleto", "otro": "Otro problema",
+	"incompleto": "Llegó incompleto", "otro": "Otro problema", "pago_no_reconocido": "Pagué y la tienda no reconoce mi pago",
 }
 
 type Detalle struct {
@@ -414,6 +414,10 @@ func acciones(d *Detalle) []string {
 			break
 		}
 	}
+	// Reclamo sin responder (aunque ya haya pasado a VendiGo por las 48 h): la tienda todavía puede responder.
+	if d.ReclamoDet != nil && (d.ReclamoDet.Estado == "abierto" || d.ReclamoDet.Estado == "en_revision") && d.ReclamoDet.RespondidoEn == nil {
+		out = append(out, "responder_reclamo")
+	}
 	listo := d.Pago == nil || pagos.PermiteAvanzar(d.Pago.Estado)
 	switch d.Estado {
 	case "por_aceptar":
@@ -432,9 +436,6 @@ func acciones(d *Detalle) []string {
 		if d.Entrega == "motorizado" {
 			return append(out, "entregar")
 		}
-	}
-	if d.ReclamoDet != nil && d.ReclamoDet.Estado == "abierto" {
-		out = append(out, "responder_reclamo")
 	}
 	return out
 }
@@ -598,6 +599,24 @@ func (m *Modulo) rechazar(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	httpx.OK(w, d)
+	return nil
+}
+
+// reconocerComprobante: si la tienda había dicho que no le llegó el pago, el pago vuelve a "comprobante enviado"
+// para poder registrar la devolución con el monto del comprobante. En otros estados no hace nada.
+func reconocerComprobante(ctx context.Context, tx *sql.Tx, pid, detalle string) error {
+	if e, _ := pagos.Estado(ctx, tx, pid); e != "no_recibido" {
+		return nil
+	}
+	return pagos.Cambiar(ctx, tx, pid, pagos.Cambio{Estado: "comprobante_enviado", Detalle: detalle})
+}
+
+// cerrarSinEnviar devuelve el stock si el pedido se cierra antes de salir de la tienda (reclamo por pago).
+func cerrarSinEnviar(ctx context.Context, tx *sql.Tx, pid, estado string) error {
+	switch estado {
+	case "por_aceptar", "preparando", "listo_recojo":
+		return devolverStock(ctx, tx, pid)
+	}
 	return nil
 }
 
@@ -819,9 +838,9 @@ func (m *Modulo) devolverReclamo(w http.ResponseWriter, r *http.Request) error {
 	}
 	var pid string
 	err = m.app.EnTransaccion(ctx, func(tx *sql.Tx) error {
-		var codigo string
-		err := tx.QueryRowContext(ctx, `SELECT p.id, p.codigo FROM reclamos c JOIN pedidos p ON p.id=c.pedido_id
-			WHERE c.id::text=$1 AND p.tienda_id=$2 AND c.estado IN ('abierto','en_revision') FOR UPDATE OF c`, chi.URLParam(r, "id"), tid).Scan(&pid, &codigo)
+		var codigo, estadoPedido string
+		err := tx.QueryRowContext(ctx, `SELECT p.id, p.codigo, p.estado FROM reclamos c JOIN pedidos p ON p.id=c.pedido_id
+			WHERE c.id::text=$1 AND p.tienda_id=$2 AND c.estado IN ('abierto','en_revision') FOR UPDATE OF c`, chi.URLParam(r, "id"), tid).Scan(&pid, &codigo, &estadoPedido)
 		if core.SinFilas(err) {
 			return httpx.Conflicto("reclamo_cerrado", "Este reclamo ya se resolvió o no existe.")
 		}
@@ -832,7 +851,14 @@ func (m *Modulo) devolverReclamo(w http.ResponseWriter, r *http.Request) error {
 			respondido_en=COALESCE(respondido_en, now()), resuelto_en=now() WHERE pedido_id=$1`, pid); err != nil {
 			return err
 		}
+		// Si había dicho que no le llegó el pago, al aceptar devolver reconoce el comprobante del comprador.
+		if err := reconocerComprobante(ctx, tx, pid, "La tienda reconoció el pago al aceptar el reclamo."); err != nil {
+			return err
+		}
 		if _, err := pagos.AbrirDevolucion(ctx, tx, pid, "reclamo"); err != nil {
+			return err
+		}
+		if err := cerrarSinEnviar(ctx, tx, pid, estadoPedido); err != nil {
 			return err
 		}
 		if _, err := tx.ExecContext(ctx, `UPDATE pedidos SET estado='cancelado', motivo_cancelacion='La tienda aceptó el reclamo y debe devolver el dinero', cerrado_en=now() WHERE id=$1`, pid); err != nil {
@@ -883,7 +909,8 @@ func (m *Modulo) responderReclamo(w http.ResponseWriter, r *http.Request) error 
 		// La boleta del envío se adjunta sola como prueba.
 		var boleta sql.NullString
 		err := tx.QueryRowContext(ctx, `UPDATE reclamos c SET respuesta_vendedor=$3, evidencias=$4, estado='en_revision', respondido_en=now()
-			FROM pedidos p WHERE c.id::text=$1 AND p.id=c.pedido_id AND p.tienda_id=$2 AND c.estado='abierto'
+			FROM pedidos p WHERE c.id::text=$1 AND p.id=c.pedido_id AND p.tienda_id=$2
+			AND c.estado IN ('abierto','en_revision') AND c.respondido_en IS NULL
 			RETURNING p.id, (SELECT boleta_key FROM envios e WHERE e.pedido_id=p.id)`,
 			chi.URLParam(r, "id"), tid, in.Mensaje, pq.Array(in.Evidencias)).Scan(&pid, &boleta)
 		if core.SinFilas(err) {
@@ -1044,8 +1071,17 @@ func ResolverReclamo(ctx context.Context, app *core.App, tx *sql.Tx, reclamoID, 
 		if _, err := tx.ExecContext(ctx, `UPDATE reclamos SET estado='a_favor_comprador', nota_admin=$2, resuelto_en=now() WHERE id::text=$1`, reclamoID, nota); err != nil {
 			return "", err
 		}
+		if motivo == "pago_no_reconocido" {
+			// VendiGo revisó el comprobante y le da la razón al comprador: la tienda debe devolverle lo que pagó.
+			if err := reconocerComprobante(ctx, tx, pid, "VendiGo revisó el comprobante del comprador."); err != nil {
+				return "", err
+			}
+		}
 		devolver, err := pagos.AbrirDevolucion(ctx, tx, pid, "reclamo")
 		if err != nil {
+			return "", err
+		}
+		if err := cerrarSinEnviar(ctx, tx, pid, estado); err != nil {
 			return "", err
 		}
 		if _, err := tx.ExecContext(ctx, `UPDATE pedidos SET estado='cancelado', motivo_cancelacion='VendiGo resolvió el reclamo a favor del comprador', cerrado_en=now() WHERE id=$1`, pid); err != nil {
@@ -1056,9 +1092,7 @@ func ResolverReclamo(ctx context.Context, app *core.App, tx *sql.Tx, reclamoID, 
 		if devolver {
 			texto += " La tienda debe devolverte tu dinero; verás aquí cuando lo informe."
 			aviso += " Devuelve el pago al comprador e infórmalo con tu captura desde el pedido."
-			if motivo == "no_llego" {
-				aviso += " Tu tienda seguirá suspendida hasta que informes la devolución."
-			}
+			aviso += " Mientras no la informes, tu tienda no recibirá pedidos nuevos."
 		}
 		if err := eventoConSMS(ctx, tx, pid, "cancelado", texto); err != nil {
 			return "", err
@@ -1068,6 +1102,20 @@ func ResolverReclamo(ctx context.Context, app *core.App, tx *sql.Tx, reclamoID, 
 	case "vendedor":
 		if _, err := tx.ExecContext(ctx, `UPDATE reclamos SET estado='a_favor_vendedor', nota_admin=$2, resuelto_en=now() WHERE id::text=$1`, reclamoID, nota); err != nil {
 			return "", err
+		}
+		if motivo == "pago_no_reconocido" {
+			// No hay prueba de que el pago llegó a la tienda: el pedido se cancela y el stock vuelve.
+			if err := cerrarSinEnviar(ctx, tx, pid, estado); err != nil {
+				return "", err
+			}
+			if _, err := tx.ExecContext(ctx, `UPDATE pedidos SET estado='cancelado', motivo_cancelacion='VendiGo revisó el reclamo: el pago no llegó a la tienda', cerrado_en=now() WHERE id=$1`, pid); err != nil {
+				return "", err
+			}
+			if err := eventoConSMS(ctx, tx, pid, "cancelado", "VendiGo revisó tu reclamo: no hay prueba de que el pago llegó a la tienda, así que el pedido se canceló. Si tu banco o Yape muestra el pago, puedes seguir el caso por el Libro de Reclamaciones."); err != nil {
+				return "", err
+			}
+			billetera.Notificar(ctx, tx, tid, "Reclamo resuelto a tu favor", "Pedido "+codigo+": el pago no llegó, el pedido se canceló y el stock volvió.", "/vendedor/pedidos/"+pid)
+			break
 		}
 		if estado == "enviado" {
 			// Sin esto el pedido se quedaría "enviado" para siempre: la confirmación automática no toca pedidos con reclamo.
@@ -1079,9 +1127,6 @@ func ResolverReclamo(ctx context.Context, app *core.App, tx *sql.Tx, reclamoID, 
 		}
 		billetera.SMSComprador(ctx, tx, pid, "pedido "+codigo+". VendiGo revisó tu reclamo y las pruebas de la tienda: el pedido queda como entregado.")
 		aviso := "Pedido " + codigo + ": el pedido queda como entregado."
-		if motivo == "no_llego" {
-			aviso += " Tu tienda ya puede recibir pedidos de nuevo."
-		}
 		billetera.Notificar(ctx, tx, tid, "Reclamo resuelto a tu favor", aviso, "/vendedor/cobros/reclamo/"+pid)
 		billetera.SMSTienda(ctx, tx, tid, aviso, "/vendedor/cobros/reclamo/"+pid)
 	default:
@@ -1169,6 +1214,10 @@ func CargarComoComprador(ctx context.Context, app *core.App, token string) (*Det
 	}
 	if d.ReclamoDet == nil && (d.Estado == "enviado" || (d.Estado == "entregado" && d.EntregadoEn != nil && time.Since(*d.EntregadoEn) <= DiasReclamo*24*time.Hour)) {
 		d.Acciones = append(d.Acciones, "reclamar")
+	}
+	// Pagó y la tienda no reconoce el pago (o no revisa su comprobante en 48 h): mismo módulo de reclamos.
+	if d.ReclamoDet == nil && d.Pago != nil && PuedeReclamarPago(ctx, app.DB, d.ID, d.Estado, d.Pago.Estado) {
+		d.Acciones = append(d.Acciones, "reclamar_pago")
 	}
 	var t TiendaPago
 	var qr, plinQR sql.NullString

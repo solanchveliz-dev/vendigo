@@ -36,7 +36,7 @@ type Panel = {
   por_revisar: { tienda_id: string; tienda: string; lugar: string; logo_url: string }[];
 };
 
-const MOTIVOS: Record<string, string> = { no_llego: "Pedido no entregado", danado: "Llegó dañado", distinto: "Producto distinto al publicado", incompleto: "Llegó incompleto", otro: "Otro motivo" };
+const MOTIVOS: Record<string, string> = { no_llego: "Pedido no entregado", danado: "Llegó dañado", distinto: "Producto distinto al publicado", incompleto: "Llegó incompleto", otro: "Otro motivo", pago_no_reconocido: "Pago no reconocido" };
 const COLORES = ["#ebe6dc", "#d9cfc0", "#203a43", "#1d2a44"];
 
 const num = (n: number) => n.toLocaleString("es-PE").replace(/,/g, " ");

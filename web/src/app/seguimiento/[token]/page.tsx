@@ -5,7 +5,7 @@ import { use, useEffect, useRef, useState } from "react";
 import { Check, ChevronRight, Copy, CreditCard, ExternalLink, Flag, ImagePlus, KeyRound, MessageCircle, ShieldCheck } from "lucide-react";
 import { api, ErrorApi, useApi } from "@/lib/api";
 import { fecha, soles } from "@/lib/formato";
-import type { PedidoDetalle } from "@/lib/tipos";
+import type { PedidoDetalle, Reclamo } from "@/lib/tipos";
 import { Area, Aviso, Boton, Campo, Cargando, Entrada, Modal, Selector, useAvisar } from "@/components/ui";
 import { LineaTiempo } from "@/components/pedidos/pasos";
 import { DEVOLUCION, EtiquetaPago } from "@/components/pagos/estado";
@@ -78,6 +78,26 @@ const ENTREGA: Record<string, string> = { recojo: "Recojo en tienda", agencia: "
 type Datos = { pedido: PedidoDetalle; tienda: TiendaPago };
 
 const MOTIVOS: Record<string, string> = { no_llego: "No me llegó", danado: "Llegó dañado", distinto: "Es distinto a lo publicado", incompleto: "Llegó incompleto", otro: "Otro problema" };
+
+// Lo único que ve el comprador de su reclamo: en qué va y qué sigue (sin la lógica interna de plazos o fondos).
+function estadoReclamo(rc: Reclamo): { titulo: string; sigue: string } {
+  const respondio = !!rc.respondido_en;
+  switch (rc.estado) {
+    case "abierto": {
+      const limite = new Date(new Date(rc.creado_en).getTime() + 48 * 3600 * 1000);
+      return { titulo: "Enviado a la tienda", sigue: `La tienda tiene hasta el ${fecha(limite.toISOString(), true)} para responder. Te avisaremos por SMS.` };
+    }
+    case "en_revision":
+      return respondio
+        ? { titulo: "La tienda respondió · VendiGo revisa", sigue: "VendiGo revisa las pruebas de ambos y te avisará por SMS con la decisión." }
+        : { titulo: "En revisión de VendiGo", sigue: "La tienda no respondió a tiempo. VendiGo revisa tu caso y te avisará por SMS." };
+    case "a_favor_comprador":
+      return { titulo: "Resuelto a tu favor", sigue: rc.motivo === "pago_no_reconocido" && rc.respuesta_vendedor?.includes("reconoció") ? "La tienda reconoció tu pago y sigue con tu pedido." : "Si te corresponde una devolución, verás aquí cuando la tienda la informe." };
+    case "a_favor_vendedor":
+      return { titulo: "Resuelto a favor de la tienda", sigue: "Si no estás de acuerdo, puedes registrar tu caso en el Libro de Reclamaciones." };
+  }
+  return { titulo: "En revisión", sigue: "Te avisaremos por SMS." };
+}
 
 // Sube una imagen al bucket privado con una URL firmada para este pedido.
 async function subir(token: string, tipo: "comprobante" | "reclamo", f: File) {
@@ -322,8 +342,11 @@ export default function Seguimiento({ params }: { params: Promise<{ token: strin
 
             {p.reclamo_detalle && (
               <Seccion titulo="Tu reclamo">
-                <p className="text-sm text-tinta"><b>{p.reclamo_detalle.motivo_texto}</b> · {p.reclamo_detalle.estado === "a_favor_comprador" ? "Resuelto a tu favor" : p.reclamo_detalle.estado === "a_favor_vendedor" ? "Resuelto a favor de la tienda" : "En revisión"}</p>
-                {p.reclamo_detalle.descripcion && <p className="mt-1 text-sm text-gris">{p.reclamo_detalle.descripcion}</p>}
+                <p className="text-sm text-tinta"><b>{p.reclamo_detalle.motivo_texto}</b> · {estadoReclamo(p.reclamo_detalle).titulo}</p>
+                <p className="mt-1 text-sm text-gris">{estadoReclamo(p.reclamo_detalle).sigue}</p>
+                {p.reclamo_detalle.estado === "a_favor_vendedor" && (
+                  <Link href="/libro-reclamaciones" className="mt-2 inline-block text-sm font-semibold text-pino underline">Libro de Reclamaciones</Link>
+                )}
               </Seccion>
             )}
           </div>
@@ -349,10 +372,17 @@ export default function Seguimiento({ params }: { params: Promise<{ token: strin
               )}
             </Seccion>
 
+            {puede("reclamar_pago") && (
+              <section className="rounded-[22px] bg-white p-5 shadow-suave ring-1 ring-linea/60">
+                <p className="text-sm text-gris">¿Pagaste y la tienda no reconoce tu pago? Abre un reclamo: tu comprobante se adjunta solo y VendiGo revisa el caso con ambas partes.</p>
+                <Boton variante="secundario" className="mt-3" onClick={() => { setRec({ motivo: "pago_no_reconocido", descripcion: "", fotos: [] }); setReclamar(true); }}><Flag className="size-4" /> Reclamar mi pago</Boton>
+              </section>
+            )}
+
             {puede("reclamar") && (
               <section className="rounded-[22px] bg-white p-5 shadow-suave ring-1 ring-linea/60">
                 <p className="text-sm text-gris">¿Algo salió mal? Tienes 7 días desde la entrega para reclamar. VendiGo revisa el caso con ambas partes.</p>
-                <Boton variante="secundario" className="mt-3" onClick={() => setReclamar(true)}><Flag className="size-4" /> Abrir un reclamo</Boton>
+                <Boton variante="secundario" className="mt-3" onClick={() => { if (rec.motivo === "pago_no_reconocido") setRec({ ...rec, motivo: "" }); setReclamar(true); }}><Flag className="size-4" /> Abrir un reclamo</Boton>
               </section>
             )}
 
@@ -367,6 +397,9 @@ export default function Seguimiento({ params }: { params: Promise<{ token: strin
 
       <Modal abierto={reclamar} onCerrar={() => setReclamar(false)} titulo="Abrir un reclamo">
         <div className="space-y-4">
+          {rec.motivo === "pago_no_reconocido" ? (
+            <p className="rounded-2xl bg-crema/70 px-4 py-3 text-sm text-tinta"><b>Pagué y la tienda no reconoce mi pago.</b> Tu comprobante va adjunto. Cuéntanos cuándo y por qué medio pagaste.</p>
+          ) : (
           <Campo etiqueta="¿Qué pasó?">
             <Selector value={rec.motivo} onChange={(e) => setRec({ ...rec, motivo: e.target.value })}>
               <option value="">Elige</option>
@@ -375,6 +408,7 @@ export default function Seguimiento({ params }: { params: Promise<{ token: strin
                 .map(([k, v]) => <option key={k} value={k}>{v}</option>)}
             </Selector>
           </Campo>
+          )}
           <Area value={rec.descripcion} onChange={(e) => setRec({ ...rec, descripcion: e.target.value })} placeholder="Cuéntanos con detalle (mínimo 10 caracteres)" maxLength={1000} />
           <div>
             <input ref={fotos} type="file" accept="image/*" multiple hidden onChange={(e) => subirFotos(e.target.files)} />

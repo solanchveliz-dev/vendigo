@@ -22,7 +22,7 @@ const AREAS = [
   { id: "pagos", t: "Pagos", d: "Pagos informados por las tiendas y devoluciones", icono: Wallet },
   { id: "reclamos", t: "Reclamos", d: "Motivos y resolución", icono: Flag },
 ];
-const MOTIVOS: Record<string, string> = { no_llego: "No llegó", danado: "Llegó dañado", distinto: "Distinto a lo publicado", incompleto: "Incompleto", otro: "Otro" };
+const MOTIVOS: Record<string, string> = { no_llego: "No llegó", danado: "Llegó dañado", distinto: "Distinto a lo publicado", incompleto: "Incompleto", otro: "Otro", pago_no_reconocido: "Pago no reconocido" };
 
 function meses() {
   const out: { v: string; t: string }[] = [];

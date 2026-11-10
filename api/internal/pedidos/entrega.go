@@ -35,6 +35,9 @@ func MarcarEntregado(ctx context.Context, tx *sql.Tx, pedidoID, por string) erro
 // Barrer es la tarea programada (en AWS la dispara EventBridge; en local, el worker):
 // da por recibidos los envíos por agencia que no se confirmaron ni reclamaron en 7 días.
 func Barrer(ctx context.Context, app *core.App) (int, error) {
+	if err := EscalarReclamos(ctx, app); err != nil {
+		slog.Error("escalar reclamos", "err", err)
+	}
 	rows, err := app.DB.QueryContext(ctx, `SELECT p.id FROM pedidos p
 		WHERE p.estado='enviado' AND p.entrega='agencia' AND p.enviado_en < now() - interval '7 days'
 		AND NOT EXISTS (SELECT 1 FROM reclamos r WHERE r.pedido_id=p.id)`)
@@ -161,6 +164,19 @@ func (m *Modulo) informarPago(w http.ResponseWriter, r *http.Request) error {
 		if err := pagos.Cambiar(ctx, tx, pid, c); err != nil {
 			return err
 		}
+		if in.Recibido {
+			// "Sí me llegó": si el comprador había reclamado su pago, el reclamo se cierra y el pedido sigue.
+			res, err := tx.ExecContext(ctx, `UPDATE reclamos SET estado='a_favor_comprador',
+				respuesta_vendedor=COALESCE(respuesta_vendedor, 'La tienda reconoció el pago y sigue con el pedido.'),
+				respondido_en=COALESCE(respondido_en, now()), resuelto_en=now()
+				WHERE pedido_id::text=$1 AND motivo='pago_no_reconocido' AND estado IN ('abierto','en_revision')`, pid)
+			if err != nil {
+				return err
+			}
+			if n, _ := res.RowsAffected(); n > 0 {
+				texto = "La tienda reconoció tu pago y sigue con tu pedido. Tu reclamo quedó resuelto."
+			}
+		}
 		return eventoConSMS(ctx, tx, pid, estado, texto)
 	})
 	if err != nil {
@@ -285,4 +301,39 @@ func (m *Modulo) ventas(w http.ResponseWriter, r *http.Request) error {
 // avisarTienda es un atajo para notificar a la tienda de un pedido.
 func avisarTienda(ctx context.Context, tx *sql.Tx, tid, titulo, cuerpo, enlace string) {
 	billetera.Notificar(ctx, tx, tid, titulo, cuerpo, enlace)
+}
+
+// EscalarReclamos: si la tienda no responde un reclamo en 48 h, el caso pasa a revisión de VendiGo y la tienda
+// deja de recibir pedidos hasta que responda (la pausa la calcula tienda_reclamo_bloqueante). Se avisa una sola vez.
+func EscalarReclamos(ctx context.Context, app *core.App) error {
+	return app.EnTransaccion(ctx, func(tx *sql.Tx) error {
+		rows, err := tx.QueryContext(ctx, `UPDATE reclamos c SET estado='en_revision'
+			FROM pedidos p WHERE p.id=c.pedido_id AND c.estado='abierto' AND c.respondido_en IS NULL
+			AND c.creado_en < now() - make_interval(hours => $1)
+			RETURNING p.id, p.tienda_id, p.codigo`, HorasRespuesta)
+		if err != nil {
+			return err
+		}
+		type caso struct{ pid, tid, codigo string }
+		var casos []caso
+		for rows.Next() {
+			var c caso
+			if err := rows.Scan(&c.pid, &c.tid, &c.codigo); err != nil {
+				rows.Close()
+				return err
+			}
+			casos = append(casos, c)
+		}
+		rows.Close()
+		for _, c := range casos {
+			if err := evento(ctx, tx, c.pid, "reclamo", "La tienda no respondió en 48 horas: VendiGo revisará tu caso y te avisará."); err != nil {
+				return err
+			}
+			billetera.Notificar(ctx, tx, c.tid, "Reclamo sin responder: tu tienda está en pausa",
+				"No respondiste el reclamo del pedido "+c.codigo+" en 48 horas. Tu tienda no recibe pedidos nuevos hasta que respondas. VendiGo revisará el caso.",
+				"/vendedor/cobros/reclamo/"+c.pid)
+			billetera.SMSTienda(ctx, tx, c.tid, "No respondiste el reclamo del pedido "+c.codigo+" en 48 h. Tu tienda está en pausa hasta que respondas:", "/vendedor/cobros/reclamo/"+c.pid)
+		}
+		return nil
+	})
 }

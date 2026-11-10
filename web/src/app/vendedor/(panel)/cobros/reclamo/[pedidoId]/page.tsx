@@ -42,8 +42,10 @@ export default function ResponderReclamo({ params }: { params: Promise<{ pedidoI
   const reclamo = r;
   const nombre = p.comprador.split(" ")[0];
   const caso = `C-${p.codigo.replace(/\D/g, "").slice(-4)}`;
-  const horas = Math.max(0, Math.ceil(24 - (Date.now() - new Date(reclamo.creado_en).getTime()) / 3600000));
-  const abierto = reclamo.estado === "abierto";
+  const horas = Math.max(0, Math.ceil(48 - (Date.now() - new Date(reclamo.creado_en).getTime()) / 3600000));
+  // La tienda puede responder mientras no lo haya hecho, aunque el caso ya haya pasado a VendiGo por las 48 h.
+  const abierto = (reclamo.estado === "abierto" || reclamo.estado === "en_revision") && !reclamo.respondido_en;
+  const porPago = reclamo.motivo === "pago_no_reconocido";
   const resuelto = reclamo.estado === "a_favor_comprador" || reclamo.estado === "a_favor_vendedor";
   const paso = abierto ? 1 : reclamo.estado === "en_revision" ? 2 : 3;
 
@@ -73,6 +75,21 @@ export default function ResponderReclamo({ params }: { params: Promise<{ pedidoI
     }
   }
 
+  // "Sí me llegó": confirma el pago como siempre y el reclamo se cierra solo; el pedido sigue.
+  async function meLlego() {
+    setEnviando(true);
+    try {
+      setDatos(await api.post<PedidoDetalle>(`/vendedor/pedidos/${pedidoId}/pago`, { recibido: true }));
+      recargarResumen();
+      avisar(`Listo: confirmaste el pago de ${nombre}. El reclamo se cerró y el pedido sigue.`);
+      router.push(`/vendedor/pedidos/${pedidoId}`);
+    } catch (e) {
+      avisar((e as ErrorApi).message, "error");
+    } finally {
+      setEnviando(false);
+    }
+  }
+
   async function confirmarDevolucion() {
     setEnviando(true);
     try {
@@ -92,7 +109,7 @@ export default function ResponderReclamo({ params }: { params: Promise<{ pedidoI
     { t: "Reclamo enviado", d: "El cliente abrió el caso" },
     { t: "La tienda responde", d: abierto ? (horas > 0 ? `Tienes ${horas} h` : "Responde lo antes posible") : reclamo.respondido_en ? `Respondiste el ${fecha(reclamo.respondido_en)}` : "" },
     { t: "VendiGo revisa", d: reclamo.estado === "en_revision" ? "Revisando tus pruebas" : "" },
-    { t: "Resuelto", d: reclamo.estado === "a_favor_vendedor" ? "A tu favor: el pedido queda entregado" : reclamo.estado === "a_favor_comprador" ? "A favor del cliente: debes devolverle su pago" : "" },
+    { t: "Resuelto", d: reclamo.estado === "a_favor_vendedor" ? (porPago ? "A tu favor: el pedido se canceló" : "A tu favor: el pedido queda entregado") : reclamo.estado === "a_favor_comprador" ? (reclamo.respuesta_vendedor?.includes("reconoció") ? "Reconociste el pago y el pedido sigue" : "A favor del cliente: debes devolverle su pago") : "" },
   ];
 
   return (
@@ -121,20 +138,25 @@ export default function ResponderReclamo({ params }: { params: Promise<{ pedidoI
           )}
         </div>
         {abierto && (
-          <span className="inline-flex items-center gap-1.5 text-sm font-bold text-aviso"><Clock className="size-4" /> {horas > 0 ? `${horas} h para responder` : "Responde ya"}</span>
+          <span className="inline-flex items-center gap-1.5 text-sm font-bold text-aviso"><Clock className="size-4" /> {horas > 0 ? `${horas} h para responder` : "Responde ya: tu tienda está en pausa hasta que respondas"}</span>
         )}
       </div>
 
       {abierto && (
         <div className="flex gap-2.5 rounded-2xl bg-arena/60 px-4 py-3 text-sm text-tinta">
           <ShieldCheck className="mt-0.5 size-4 shrink-0" />
-          <span><b>VendiGo te pide tu boleta de envío.</b> Revisaremos que esté a nombre de tu cliente, con la agencia que eligió, y consultaremos el código en la agencia.</span>
+          {porPago ? (
+            <span><b>Revisa tu Yape, Plin o banco con el comprobante de {nombre}.</b> Si te llegó, toca “Sí me llegó” y sigue con el pedido. Si no te llegó, responde con tu prueba (por ejemplo, tu historial de movimientos).</span>
+          ) : (
+            <span><b>VendiGo te pide tu boleta de envío.</b> Revisaremos que esté a nombre de tu cliente, con la agencia que eligió, y consultaremos el código en la agencia.</span>
+          )}
         </div>
       )}
 
       <div className="grid items-start gap-5 lg:grid-cols-2">
         <section className="space-y-4 rounded-[22px] bg-white p-6 shadow-suave ring-1 ring-linea/60">
           <h3 className="text-lg font-extrabold text-tinta">Tus pruebas</h3>
+          {!porPago && (<>
           <div className="flex items-center gap-3">
             <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-crema text-tinta"><FileText className="size-4" /></span>
             <div className="min-w-0 flex-1 text-sm">
@@ -154,6 +176,7 @@ export default function ResponderReclamo({ params }: { params: Promise<{ pedidoI
               <Check className="size-4" /> Ver boleta de envío
             </a>
           )}
+          </>)}
 
           {abierto ? (
             <>
@@ -162,17 +185,18 @@ export default function ResponderReclamo({ params }: { params: Promise<{ pedidoI
                 <div className="flex flex-wrap items-center gap-2">
                   {fotos.map((f) => <img key={f.key} src={f.url} alt="" className="size-14 rounded-lg object-cover" />)}
                   <label className="inline-flex h-11 cursor-pointer items-center gap-2 rounded-full bg-white px-4 text-sm font-bold text-tinta ring-1 ring-linea hover:bg-crema">
-                    <Camera className="size-4" /> {subiendo ? "Subiendo…" : "Foto del paquete o del rastreo"}
+                    <Camera className="size-4" /> {subiendo ? "Subiendo…" : porPago ? "Captura de tu historial" : "Foto del paquete o del rastreo"}
                     <input type="file" accept="image/*" className="hidden" onChange={(e) => agregar(e.target.files?.[0])} />
                   </label>
                 </div>
               </div>
               <div>
                 <p className="mb-1.5 text-sm font-semibold text-tinta">Tu respuesta</p>
-                <Area rows={4} maxLength={600} value={mensaje} onChange={(e) => setMensaje(e.target.value)} placeholder="Ej. Lo dejé en Shalom el 19/09, aquí está la boleta." />
+                <Area rows={4} maxLength={600} value={mensaje} onChange={(e) => setMensaje(e.target.value)} placeholder={porPago ? "Ej. Revisé mi Yape del 19/09 y no hay ningún pago de ese monto; adjunto mi historial." : "Ej. Lo dejé en Shalom el 19/09, aquí está la boleta."} />
               </div>
               <div className="flex flex-wrap gap-2">
-                <Boton cargando={enviando} disabled={mensaje.trim().length < 10} onClick={enviar}>Enviar pruebas</Boton>
+                {porPago && <Boton variante="acento" cargando={enviando} onClick={meLlego}><Check className="size-4" /> Sí me llegó, sigo con el pedido</Boton>}
+                <Boton cargando={enviando} disabled={mensaje.trim().length < 10} onClick={enviar}>{porPago ? "No me llegó: enviar prueba" : "Enviar pruebas"}</Boton>
                 <Boton variante="secundario" onClick={() => setDevolver(true)}>Devolver el dinero</Boton>
               </div>
             </>
@@ -209,7 +233,7 @@ export default function ResponderReclamo({ params }: { params: Promise<{ pedidoI
           </ol>
           <div className="mt-4 flex gap-2.5 rounded-2xl bg-arena/60 px-4 py-3 text-sm text-tinta">
             <ShieldCheck className="mt-0.5 size-4 shrink-0" />
-            <span>La boleta de envío es la prueba más fuerte: muestra que lo enviaste y a quién.</span>
+            <span>{porPago ? "Tu historial de Yape, Plin o del banco es la prueba más fuerte: muestra qué pagos te llegaron." : "La boleta de envío es la prueba más fuerte: muestra que lo enviaste y a quién."}</span>
           </div>
         </section>
       </div>

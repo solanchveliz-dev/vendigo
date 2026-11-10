@@ -298,30 +298,65 @@ func ConfirmarRecibido(ctx context.Context, tx *sql.Tx, pid string) error {
 // DiasReclamo es el plazo para reclamar después de recibir el pedido.
 const DiasReclamo = 7
 
-// AbrirReclamo registra el problema para que la tienda responda y VendiGo medie.
+// HorasRespuesta: la tienda tiene 48 h para responder un reclamo. Si no responde, el caso pasa a VendiGo y la
+// tienda deja de recibir pedidos hasta que responda (tienda_reclamo_bloqueante). Un reclamo solo no la detiene.
+const HorasRespuesta = 48
+
+// PuedeReclamarPago: el comprador puede reclamar un pago no reconocido si la tienda dijo que no le llegó, o si
+// subió su comprobante hace más de 48 h y la tienda todavía no lo revisa. Lo usan AbrirReclamo y el seguimiento.
+func PuedeReclamarPago(ctx context.Context, q core.Ejecutor, pid, estadoPedido, estadoPago string) bool {
+	if estadoPedido == "rechazado" || estadoPedido == "cancelado" || estadoPedido == "entregado" {
+		return false
+	}
+	switch estadoPago {
+	case "no_recibido":
+		return true
+	case "comprobante_enviado":
+		var viejo bool
+		q.QueryRowContext(ctx, `SELECT COALESCE(max(e.creado_en) < now() - make_interval(hours => $2), false)
+			FROM pago_eventos e JOIN pagos g ON g.id=e.pago_id WHERE g.pedido_id::text=$1 AND e.estado='comprobante_enviado'`,
+			pid, HorasRespuesta).Scan(&viejo)
+		return viejo
+	}
+	return false
+}
+
+// AbrirReclamo registra el problema para que la tienda responda y VendiGo medie. Un solo módulo para todo:
+// pago no reconocido, pedido no entregado, dañado, distinto o incompleto.
 // Si pagaba al recibir y no le llegó, no hay nada que reclamar: no pagó.
 func AbrirReclamo(ctx context.Context, tx *sql.Tx, pid, motivo, descripcion string, fotos []string) error {
 	var tid, codigo, entrega, estado, pago string
 	var entregado *time.Time
-	err := tx.QueryRowContext(ctx, `SELECT p.tienda_id, p.codigo, p.entrega, p.estado, p.entregado_en, g.estado FROM pedidos p JOIN pagos g ON g.pedido_id=p.id
-		WHERE p.id::text=$1 FOR UPDATE OF p`, pid).Scan(&tid, &codigo, &entrega, &estado, &entregado, &pago)
+	var comprobante sql.NullString
+	err := tx.QueryRowContext(ctx, `SELECT p.tienda_id, p.codigo, p.entrega, p.estado, p.entregado_en, g.estado, g.comprobante_key FROM pedidos p JOIN pagos g ON g.pedido_id=p.id
+		WHERE p.id::text=$1 FOR UPDATE OF p`, pid).Scan(&tid, &codigo, &entrega, &estado, &entregado, &pago, &comprobante)
 	if err != nil {
 		return httpx.ErrNoEncontrado
 	}
 	if _, ok := MotivosReclamo[motivo]; !ok {
 		return httpx.Invalido("Elige el motivo del reclamo.")
 	}
-	if motivo == "no_llego" && pago == "paga_al_recibir" {
-		return httpx.Invalido("Pagas al recibir: si no llega, no pagas nada.")
-	}
-	if estado != "enviado" && estado != "entregado" {
-		return httpx.Conflicto("estado_invalido", "Solo puedes reclamar un pedido enviado o entregado.")
-	}
-	if estado == "entregado" && entregado != nil && time.Since(*entregado) > DiasReclamo*24*time.Hour {
-		return httpx.Conflicto("plazo_vencido", "El plazo para reclamar este pedido ya terminó (7 días después de recibirlo).")
-	}
 	if fotos == nil {
 		fotos = []string{}
+	}
+	if motivo == "pago_no_reconocido" {
+		if !PuedeReclamarPago(ctx, tx, pid, estado, pago) {
+			return httpx.Conflicto("estado_invalido", "Puedes reclamar tu pago si la tienda dice que no le llegó, o si no revisa tu comprobante en 48 horas.")
+		}
+		// El comprobante que subió el comprador va como su prueba.
+		if comprobante.Valid && comprobante.String != "" {
+			fotos = append([]string{comprobante.String}, fotos...)
+		}
+	} else {
+		if motivo == "no_llego" && pago == "paga_al_recibir" {
+			return httpx.Invalido("Pagas al recibir: si no llega, no pagas nada.")
+		}
+		if estado != "enviado" && estado != "entregado" {
+			return httpx.Conflicto("estado_invalido", "Solo puedes reclamar un pedido enviado o entregado.")
+		}
+		if estado == "entregado" && entregado != nil && time.Since(*entregado) > DiasReclamo*24*time.Hour {
+			return httpx.Conflicto("plazo_vencido", "El plazo para reclamar este pedido ya terminó (7 días después de recibirlo).")
+		}
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO reclamos (pedido_id, motivo, descripcion, fotos) VALUES ($1,$2,$3,$4)`,
 		pid, motivo, descripcion, pq.Array(fotos)); err != nil {
@@ -330,20 +365,15 @@ func AbrirReclamo(ctx context.Context, tx *sql.Tx, pid, motivo, descripcion stri
 		}
 		return err
 	}
-	if err := evento(ctx, tx, pid, "reclamo", "Abriste un reclamo: "+MotivosReclamo[motivo]+". La tienda responderá y VendiGo revisará el caso."); err != nil {
+	if err := evento(ctx, tx, pid, "reclamo", "Abriste un reclamo: "+MotivosReclamo[motivo]+". La tienda tiene 48 horas para responder."); err != nil {
 		return err
 	}
-	aviso := "Responde con tu boleta de envío o tu prueba. VendiGo revisará el caso."
-	if motivo == "no_llego" {
-		// El comprador ya pagó y dice que no le llegó: la tienda queda suspendida mientras se revisa (tienda_reclamo_bloqueante).
-		aviso = "El cliente dice que no recibió su pedido. Tu tienda queda suspendida (no recibe pedidos nuevos ni aparece en las búsquedas) " +
-			"hasta que VendiGo revise el caso. Envía tus pruebas: boleta o guía de envío, conversación con el cliente, etc."
+	aviso := "Responde en 48 horas con tu prueba (boleta de envío, conversación, fotos). Si no respondes, tu tienda deja de recibir pedidos hasta que lo hagas y VendiGo revisa el caso."
+	if motivo == "pago_no_reconocido" {
+		aviso = "El cliente dice que te pagó y adjuntó su comprobante. Revisa tu Yape, Plin o banco: si te llegó, toca \"Sí me llegó\" y sigue con el pedido; " +
+			"si te llegó pero no puedes atenderlo, registra la devolución; si no te llegó, responde con tu prueba. Tienes 48 horas."
 	}
 	billetera.Notificar(ctx, tx, tid, "Reclamo en el pedido "+codigo, aviso, "/vendedor/cobros/reclamo/"+pid)
-	if motivo == "no_llego" {
-		billetera.SMSTienda(ctx, tx, tid, "Reclamo en el pedido "+codigo+": el cliente dice que no le llegó. Tu tienda está suspendida hasta revisar el caso. Envía tus pruebas:", "/vendedor/cobros/reclamo/"+pid)
-	} else {
-		billetera.SMSTienda(ctx, tx, tid, "Reclamo en el pedido "+codigo+". Responde con tus pruebas:", "/vendedor/cobros/reclamo/"+pid)
-	}
+	billetera.SMSTienda(ctx, tx, tid, "Reclamo en el pedido "+codigo+" ("+MotivosReclamo[motivo]+"). Tienes 48 horas para responder:", "/vendedor/cobros/reclamo/"+pid)
 	return nil
 }

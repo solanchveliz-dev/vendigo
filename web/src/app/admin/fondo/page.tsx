@@ -14,7 +14,7 @@ type Pendiente = {
   origen: "cancelacion" | "reclamo"; monto_centimos: number; cubre_centimos: number; desde: string; dias_habiles: number; vencida: boolean; casos_tienda: number;
 };
 type Pagada = {
-  id: string; pedido_id: string; codigo: string; tienda: string; tienda_id: string; tienda_suspendida: boolean; casos_tienda: number; suspension_definitiva: boolean; monto_centimos: number;
+  id: string; pedido_id: string; codigo: string; tienda: string; tienda_id: string; tienda_suspendida: boolean; casos_tienda: number; monto_centimos: number;
   estado: "pagada" | "recuperada"; referencia: string; pagada_en: string; recuperada_ref: string; recuperada_en: string | null;
 };
 type Datos = {
@@ -26,7 +26,7 @@ type Datos = {
 
 // Fondo de emergencia: un solo fondo común que se alimenta con un porcentaje de todo lo que cobra VendiGo
 // (más un aporte inicial) y cubre, hasta un tope, los pedidos que no llegaron cuando la tienda no devuelve a tiempo.
-// La tienda queda suspendida; no se le pide reponer: el admin decide si la reactiva tras revisar el caso.
+// Es limitado y sujeto a revisión. Usarlo no suspende la tienda ni le crea deuda: eso es otra decisión del admin.
 export default function AdminFondo() {
   const { datos, recargar } = useApi<Datos>("/admin/garantias");
   const avisar = useAvisar();
@@ -58,7 +58,7 @@ export default function AdminFondo() {
     <div className="space-y-5">
       <Titulo
         titulo="Fondo de emergencia"
-        detalle={`El ${g.porcentaje} % de todo lo que cobra VendiGo (planes, ventas extra, impulsos y créditos de IA) va a este fondo común. Si un pedido no llega y la tienda no le devuelve al comprador en ${g.dias_habiles} días hábiles, VendiGo le devuelve hasta ${soles(g.tope_centimos)} y la tienda queda suspendida mientras el equipo revisa el caso. La primera vez puedes reactivarla si fue un descuido; a la segunda, la suspensión es definitiva.`}
+        detalle={`El ${g.porcentaje} % de todo lo que cobra VendiGo (planes, ventas extra, impulsos y créditos de IA) va a este fondo común. Si un pedido no llega y la tienda no le devuelve al comprador en ${g.dias_habiles} días hábiles, VendiGo le devuelve hasta ${soles(g.tope_centimos)} después de que revises el caso. Usar el fondo no suspende la tienda ni le crea una deuda: si corresponde suspenderla, hazlo desde Tiendas.`}
       />
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Indicador oscuro titulo="Fondo disponible" valor={soles(k.fondo_centimos)} detalle={k.fondo_centimos < 0 ? "En negativo: VendiGo responde con su propio dinero" : "Aportes menos lo devuelto a compradores"} icono={<PiggyBank className="size-4" />} alerta={k.fondo_centimos < 0} />
@@ -78,7 +78,7 @@ export default function AdminFondo() {
                 <span className="text-gris"> · {x.tienda} → {x.comprador} ({x.celular})</span>
                 <span className="block text-xs text-gris">
                   {x.origen === "cancelacion" ? "La tienda canceló después de cobrar" : "Reclamo “no me llegó” a favor del cliente"} · {x.dias_habiles} de {g.dias_habiles} días hábiles
-                  {x.casos_tienda > 0 && <b className="text-error"> · El fondo ya cubrió a esta tienda {x.casos_tienda === 1 ? "1 vez" : `${x.casos_tienda} veces`}: sería suspensión definitiva</b>}
+                  {x.casos_tienda > 0 && <b className="text-error"> · El fondo ya cubrió a esta tienda {x.casos_tienda === 1 ? "1 vez" : `${x.casos_tienda} veces`} (tenlo en cuenta al revisar)</b>}
                 </span>
               </span>
               <b className="text-tinta">{soles(x.monto_centimos)}</b>
@@ -103,9 +103,7 @@ export default function AdminFondo() {
                 </span>
               </span>
               <b className="text-tinta">{soles(x.monto_centimos)}</b>
-              {x.tienda_suspendida && x.suspension_definitiva ? (
-                <Estado tono="error">Suspensión definitiva ({x.casos_tienda} casos)</Estado>
-              ) : x.tienda_suspendida ? (
+              {x.tienda_suspendida ? (
                 <>
                   <Estado tono="error">Tienda suspendida</Estado>
                   <Boton tamano="sm" variante="secundario" onClick={() => { setNota(""); setReactivar(x); }}>Reactivar tienda</Boton>
@@ -145,7 +143,7 @@ export default function AdminFondo() {
           <div className="space-y-4">
             <p className="text-sm text-gris">
               {reactivar.tienda} quedó suspendida porque VendiGo cubrió el pedido {reactivar.codigo}. Reactívala solo si revisaste el caso y fue un descuido, no una estafa.
-              La tienda verá el motivo y el aviso de que, si vuelve a pasar, la suspensión será definitiva.
+              La tienda verá el motivo.
             </p>
             <Area value={nota} onChange={(e) => setNota(e.target.value)} placeholder="¿Por qué se reactiva? (lo verá la tienda)" maxLength={300} />
             <div className="flex justify-end gap-2">

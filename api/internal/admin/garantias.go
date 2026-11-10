@@ -1,7 +1,6 @@
 package admin
 
 import (
-	"context"
 	"database/sql"
 	"fmt"
 	"net/http"
@@ -17,12 +16,10 @@ import (
 
 // cubierto: el fondo de emergencia cubre pedidos que no le llegaron al comprador
 // (la tienda canceló después de cobrar, o VendiGo le dio la razón en un reclamo "no llegó").
-const cubierto = `(d.origen = 'cancelacion' OR EXISTS (SELECT 1 FROM reclamos rc WHERE rc.pedido_id = p.id AND rc.motivo = 'no_llego'))`
+const cubierto = `(d.origen = 'cancelacion' OR EXISTS (SELECT 1 FROM reclamos rc WHERE rc.pedido_id = p.id AND rc.motivo IN ('no_llego', 'pago_no_reconocido')))`
 
-// CasosReactivables: veces que el fondo puede cubrir a una misma tienda y que el admin aún pueda reactivarla.
-// "A la segunda, no se reactiva": una tienda honesta a la que se le pasó tiene una oportunidad; si se repite,
-// la suspensión es definitiva.
-const CasosReactivables = 1
+// El fondo es limitado y sujeto a revisión: el admin decide caso por caso si lo usa (no hay cobertura garantizada).
+// Usarlo NO suspende la tienda ni le crea una deuda: suspenderla es otra decisión del admin, desde Tiendas.
 
 // diasHabilesDesde cuenta los días hábiles (Perú) completos desde t hasta ahora.
 func diasHabilesDesde(t time.Time) int {
@@ -88,7 +85,6 @@ func (m *Modulo) garantias(w http.ResponseWriter, r *http.Request) error {
 		TiendaID   string     `json:"tienda_id"`
 		Suspendida bool       `json:"tienda_suspendida"`
 		Casos      int        `json:"casos_tienda"`
-		Definitiva bool       `json:"suspension_definitiva"`
 		Monto      int        `json:"monto_centimos"`
 		Estado     string     `json:"estado"` // pagada · recuperada (sistema anterior, cuando la tienda reponía)
 		Referencia string     `json:"referencia"`
@@ -108,7 +104,6 @@ func (m *Modulo) garantias(w http.ResponseWriter, r *http.Request) error {
 		if err := rows.Scan(&x.ID, &x.PedidoID, &x.Codigo, &x.Tienda, &x.TiendaID, &x.Suspendida, &x.Casos, &x.Monto, &x.Estado, &x.Referencia, &x.PagadaEn, &x.RecupRef, &x.RecupEn); err != nil {
 			return err
 		}
-		x.Definitiva = x.Casos > CasosReactivables
 		hechas = append(hechas, x)
 	}
 	// Saldo del fondo (con todas las garantías, no solo las 100 que se listan):
@@ -168,31 +163,28 @@ func (m *Modulo) pagarGarantia(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 		nota := fmt.Sprintf("Fondo de emergencia: VendiGo devolvió S/ %.2f al comprador.", float64(monto)/100)
+		aComprador := fmt.Sprintf("VendiGo te devolvió S/ %.2f del pedido %s con su fondo de emergencia.", float64(monto)/100, codigo)
 		if total > monto {
-			// El tope cubre solo una parte: la devolución sigue abierta por la diferencia, que la tienda debe devolver
-			// e informar con su captura (el comprador lo ve en su seguimiento).
-			nota += fmt.Sprintf(" La tienda aún debe devolver S/ %.2f al comprador.", float64(total-monto)/100)
-			if _, err := tx.ExecContext(ctx, `UPDATE devoluciones SET monto_centimos=$3, nota=$2 WHERE id=$1`, devID, nota, total-monto); err != nil {
-				return err
-			}
-		} else if _, err := tx.ExecContext(ctx, `UPDATE devoluciones SET estado='cubierta_vendigo', nota=$2, informada_en=now() WHERE id=$1`, devID, nota); err != nil {
+			// El fondo tiene tope: cubre solo una parte. No se registra una deuda de la tienda; el comprador puede
+			// seguir el resto por el Libro de Reclamaciones.
+			nota += fmt.Sprintf(" Monto no cubierto por el fondo: S/ %.2f.", float64(total-monto)/100)
+			aComprador += " Por el resto puedes seguir tu caso en el Libro de Reclamaciones."
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE devoluciones SET estado='cubierta_vendigo', nota=$2, informada_en=now() WHERE id=$1`, devID, nota); err != nil {
 			return err
 		}
-		if _, err := tx.ExecContext(ctx, `UPDATE tiendas SET suspendida_garantia=true WHERE id=$1`, tid); err != nil {
-			return err
-		}
-		billetera.Notificar(ctx, tx, tid, "Tu tienda está suspendida",
-			avisoSuspension(codigo, monto, total, casosTienda(ctx, tx, tid)),
+		billetera.Notificar(ctx, tx, tid, "VendiGo cubrió una devolución de tu tienda",
+			fmt.Sprintf("No informaste a tiempo la devolución del pedido %s y VendiGo le devolvió S/ %.2f al comprador con su fondo de emergencia. "+
+				"El equipo de VendiGo revisará el caso. Si crees que es un error, escríbenos desde Ayuda.", codigo, float64(monto)/100),
 			"/vendedor/pedidos/"+pid)
-		billetera.SMSTienda(ctx, tx, tid, "Tu tienda fue suspendida: VendiGo le devolvió el dinero al cliente del pedido "+codigo+". Revisa los detalles:", "/vendedor")
-		billetera.SMSComprador(ctx, tx, pid, fmt.Sprintf("VendiGo te devolvió S/ %.2f del pedido %s con su fondo de emergencia.", float64(monto)/100, codigo))
+		billetera.SMSComprador(ctx, tx, pid, aComprador)
 		m.app.Auditar(ctx, tx, adminID(ctx), "pagar_garantia", "pedido", pid, map[string]any{"monto": monto, "referencia": in.Referencia})
 		return nil
 	})
 	if err != nil {
 		return err
 	}
-	httpx.OK(w, map[string]string{"mensaje": fmt.Sprintf("Devolución registrada: S/ %.2f del fondo de emergencia. La tienda quedó suspendida.", float64(monto)/100)})
+	httpx.OK(w, map[string]string{"mensaje": fmt.Sprintf("Devolución registrada: S/ %.2f del fondo de emergencia. Si corresponde suspender la tienda, hazlo desde Tiendas.", float64(monto)/100)})
 	return nil
 }
 
@@ -206,11 +198,6 @@ func (m *Modulo) reactivarTiendaFondo(w http.ResponseWriter, r *http.Request) er
 	}
 	id := chi.URLParam(r, "id")
 	err = m.app.EnTransaccion(ctx, func(tx *sql.Tx) error {
-		var casos int
-		tx.QueryRowContext(ctx, `SELECT count(*) FROM garantias WHERE tienda_id=(SELECT tienda_id FROM garantias WHERE id::text=$1)`, id).Scan(&casos)
-		if casos > CasosReactivables {
-			return httpx.Conflicto("suspension_definitiva", fmt.Sprintf("El fondo ya cubrió %d pedidos de esta tienda: la suspensión es definitiva y no se puede reactivar.", casos))
-		}
 		var tid string
 		err := tx.QueryRowContext(ctx, `UPDATE tiendas t SET suspendida_garantia=false FROM garantias g
 			WHERE g.id::text=$1 AND t.id=g.tienda_id AND t.suspendida_garantia RETURNING t.id`, id).Scan(&tid)
@@ -221,7 +208,7 @@ func (m *Modulo) reactivarTiendaFondo(w http.ResponseWriter, r *http.Request) er
 			return err
 		}
 		billetera.Notificar(ctx, tx, tid, "Tu tienda está activa de nuevo",
-			"El equipo de VendiGo revisó el caso y reactivó tu tienda: "+motivo+". Importante: si vuelve a pasar, la suspensión será definitiva.", "/vendedor")
+			"El equipo de VendiGo revisó el caso y reactivó tu tienda: "+motivo+".", "/vendedor")
 		m.app.Auditar(ctx, tx, adminID(ctx), "reactivar_tienda_fondo", "garantia", id, map[string]any{"motivo": motivo})
 		return nil
 	})
@@ -230,31 +217,4 @@ func (m *Modulo) reactivarTiendaFondo(w http.ResponseWriter, r *http.Request) er
 	}
 	httpx.OK(w, map[string]string{"mensaje": "Tienda reactivada. Ya puede recibir pedidos."})
 	return nil
-}
-
-// casosTienda: veces que el fondo cubrió a la tienda (incluido el caso que se acaba de registrar).
-func casosTienda(ctx context.Context, tx *sql.Tx, tid string) int {
-	var n int
-	tx.QueryRowContext(ctx, `SELECT count(*) FROM garantias WHERE tienda_id=$1`, tid).Scan(&n)
-	return n
-}
-
-// avisoSuspension: lo que se le dice a la tienda cuando VendiGo cubrió una devolución que ella no hizo.
-func avisoSuspension(codigo string, cubierto, total, casos int) string {
-	if casos > CasosReactivables {
-		t := fmt.Sprintf("No le devolviste el dinero al comprador del pedido %s y VendiGo le devolvió S/ %.2f de su fondo de emergencia. "+
-			"Es la %da vez que pasa: tu tienda queda suspendida de forma definitiva.", codigo, float64(cubierto)/100, casos)
-		if total > cubierto {
-			t += fmt.Sprintf(" Todavía debes devolverle S/ %.2f al comprador.", float64(total-cubierto)/100)
-		}
-		return t
-	}
-	t := fmt.Sprintf("No le devolviste el dinero al comprador del pedido %s a tiempo y VendiGo le devolvió S/ %.2f de su fondo de emergencia. "+
-		"Tu tienda no recibirá pedidos mientras el equipo de VendiGo revisa el caso. Si crees que es un error, escríbenos desde Ayuda. "+
-		"Si vuelve a pasar, la suspensión será definitiva.",
-		codigo, float64(cubierto)/100)
-	if total > cubierto {
-		t += fmt.Sprintf(" Además, todavía debes devolverle S/ %.2f al comprador e informarlo desde el pedido.", float64(total-cubierto)/100)
-	}
-	return t
 }

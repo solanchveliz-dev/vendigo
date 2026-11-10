@@ -96,8 +96,8 @@ export default function Inicio() {
         <Aviso tono="error">
           <span className="flex flex-wrap items-center justify-between gap-3">
             <span>
-              Tu tienda está suspendida: un cliente dice que no recibió su pedido. No recibes pedidos nuevos ni apareces en las búsquedas hasta que VendiGo revise el caso.
-              Envía tus pruebas (boleta o guía de envío, conversación con el cliente) o, si VendiGo le dio la razón al cliente, devuélvele su dinero e infórmalo.
+              Tu tienda está en pausa por un reclamo: no recibes pedidos nuevos ni apareces en las búsquedas. Se reactiva sola cuando respondes el reclamo
+              o, si VendiGo le dio la razón al cliente, cuando informas la devolución.
             </span>
             <Link href={`/vendedor/cobros/reclamo/${tienda.datos.reclamo_pedido_id}`} className="font-bold text-error underline">Ver el reclamo y enviar pruebas</Link>
           </span>

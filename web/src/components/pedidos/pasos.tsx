@@ -119,7 +119,9 @@ export function AvisoAccion({
   } else if (p.acciones.includes("responder_reclamo")) {
     icono = <Flag className="size-5" />;
     titulo = "Responde el reclamo";
-    texto = <>Envía tu prueba (la boleta de envío se adjunta sola). VendiGo revisa ambas partes y decide.</>;
+    texto = p.reclamo_detalle?.motivo === "pago_no_reconocido"
+      ? <>{nombre} dice que te pagó. Revisa tu Yape, Plin o banco: si te llegó, sigue con el pedido; si no, responde con tu prueba. Tienes 48 horas.</>
+      : <>Envía tu prueba (la boleta de envío se adjunta sola). Tienes 48 horas; VendiGo revisa ambas partes y decide.</>;
     botones = <Link href={`/vendedor/cobros/reclamo/${p.id}`}><Boton variante="acento">Responder reclamo</Boton></Link>;
     tono = "bg-error/10 ring-error/30";
   } else if (p.acciones.includes("confirmar_pago") && p.estado !== "por_aceptar") {

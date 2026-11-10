@@ -38,7 +38,7 @@ type Reclamo = {
 };
 type Datos = { reclamos: Reclamo[]; indicadores: { devoluciones_pendientes_centimos: number; devoluciones_pendientes: number; abiertos: number; ingresos_planes_mes_centimos: number } };
 
-const MOTIVOS: Record<string, string> = { no_llego: "No me llegó", danado: "Llegó dañado", distinto: "Es distinto a lo publicado", incompleto: "Llegó incompleto", otro: "Otro" };
+const MOTIVOS: Record<string, string> = { no_llego: "No me llegó", danado: "Llegó dañado", distinto: "Es distinto a lo publicado", incompleto: "Llegó incompleto", otro: "Otro", pago_no_reconocido: "Pago no reconocido" };
 const ESTADOS: Record<string, string> = { abierto: "Esperando a la tienda", en_revision: "Por decidir", a_favor_comprador: "A favor del cliente", a_favor_vendedor: "A favor de la tienda" };
 const REP: Record<string, string> = { nueva: "tienda nueva", buena: "buena reputación", excelente: "reputación excelente" };
 
@@ -125,7 +125,7 @@ export default function Reclamos() {
       ) : (
         datos.reclamos.map((c) => {
           const abierto = c.estado === "abierto" || c.estado === "en_revision";
-          const guia = c.entrega === "agencia";
+          const guia = c.entrega === "agencia" && c.motivo !== "pago_no_reconocido";
           return (
             <article key={c.id} className="rounded-[22px] bg-white p-6 ring-1 ring-linea/70">
               <div className="flex flex-wrap items-start justify-between gap-3">
