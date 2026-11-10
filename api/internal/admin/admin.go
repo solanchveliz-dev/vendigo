@@ -67,7 +67,7 @@ func (m *Modulo) Rutas(r chi.Router) {
 	r.Method("GET", "/pagos-plan", httpx.Handler(m.pagosPlan))
 	r.Method("GET", "/garantias", httpx.Handler(m.garantias))
 	r.Method("POST", "/garantias/{pedido}/pagar", httpx.Handler(m.pagarGarantia))
-	r.Method("POST", "/garantias/{id}/recuperar", httpx.Handler(m.recuperarGarantia))
+	r.Method("POST", "/garantias/{id}/reactivar", httpx.Handler(m.reactivarTiendaFondo))
 	r.Method("POST", "/pagos-plan/{id}/confirmar", httpx.Handler(m.confirmarPagoPlan))
 	r.Method("POST", "/pagos-plan/{id}/rechazar", httpx.Handler(m.rechazarPagoPlan))
 	r.Method("GET", "/planes", httpx.Handler(m.planes))

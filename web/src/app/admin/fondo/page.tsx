@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { HandCoins, PiggyBank, Rocket, Undo2 } from "lucide-react";
+import { Percent, PiggyBank, Store, Undo2 } from "lucide-react";
 import { api, ErrorApi, useApi } from "@/lib/api";
 import { soles } from "@/lib/formato";
 import { fechaHora } from "@/lib/admin";
@@ -13,21 +13,25 @@ type Pendiente = {
   pedido_id: string; codigo: string; tienda: string; tienda_id: string; comprador: string; celular: string;
   origen: "cancelacion" | "reclamo"; monto_centimos: number; cubre_centimos: number; desde: string; dias_habiles: number; vencida: boolean;
 };
-type Pagada = { id: string; pedido_id: string; codigo: string; tienda: string; monto_centimos: number; estado: "pagada" | "recuperada"; referencia: string; pagada_en: string; recuperada_ref: string; recuperada_en: string | null };
+type Pagada = {
+  id: string; pedido_id: string; codigo: string; tienda: string; tienda_id: string; tienda_suspendida: boolean; monto_centimos: number;
+  estado: "pagada" | "recuperada"; referencia: string; pagada_en: string; recuperada_ref: string; recuperada_en: string | null;
+};
 type Datos = {
-  reglas: { tope_centimos: number; dias_habiles: number };
+  reglas: { tope_centimos: number; dias_habiles: number; porcentaje: number; aporte_inicial_centimos: number };
   pendientes: Pendiente[];
   garantias: Pagada[];
-  resumen: { pagado_centimos: number; por_recuperar_centimos: number; ingresos_destacados_centimos: number; fondo_centimos: number; impulsos_activos: number };
+  resumen: { pagado_centimos: number; ingresos_vendigo_centimos: number; aporte_centimos: number; fondo_centimos: number; tiendas_suspendidas: number; impulsos_activos: number };
 };
 
-// Fondo de emergencia: se alimenta con lo cobrado por impulsos y cubre pedidos que no llegaron
-// cuando la tienda no le devuelve al comprador a tiempo.
+// Fondo de emergencia: un solo fondo común que se alimenta con un porcentaje de todo lo que cobra VendiGo
+// (más un aporte inicial) y cubre, hasta un tope, los pedidos que no llegaron cuando la tienda no devuelve a tiempo.
+// La tienda queda suspendida; no se le pide reponer: el admin decide si la reactiva tras revisar el caso.
 export default function AdminFondo() {
   const { datos, recargar } = useApi<Datos>("/admin/garantias");
   const avisar = useAvisar();
   const [pagar, setPagar] = useState<Pendiente | null>(null);
-  const [recuperar, setRecuperar] = useState<Pagada | null>(null);
+  const [reactivar, setReactivar] = useState<Pagada | null>(null);
   const [ref, setRef] = useState("");
   const [nota, setNota] = useState("");
   const [enviando, setEnviando] = useState(false);
@@ -41,7 +45,7 @@ export default function AdminFondo() {
       const r = await api.post<{ mensaje: string }>(ruta, cuerpo);
       avisar(r.mensaje);
       setPagar(null);
-      setRecuperar(null);
+      setReactivar(null);
       recargar();
     } catch (e) {
       avisar((e as ErrorApi).message, "error");
@@ -54,13 +58,13 @@ export default function AdminFondo() {
     <div className="space-y-5">
       <Titulo
         titulo="Fondo de emergencia"
-        detalle={`Se arma con lo que pagan las tiendas por impulsar productos. Si un pedido no llega y la tienda no le devuelve al comprador en ${g.dias_habiles} días hábiles, VendiGo le devuelve hasta ${soles(g.tope_centimos)} y la tienda queda pausada hasta reponerlo.`}
+        detalle={`El ${g.porcentaje} % de todo lo que cobra VendiGo (planes, ventas extra, impulsos y créditos de IA) va a este fondo común. Si un pedido no llega y la tienda no le devuelve al comprador en ${g.dias_habiles} días hábiles, VendiGo le devuelve hasta ${soles(g.tope_centimos)} y la tienda queda suspendida mientras el equipo revisa el caso.`}
       />
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Indicador oscuro titulo="Fondo disponible" valor={soles(k.fondo_centimos)} detalle="Ingresos por impulsos menos lo que falta reponer" icono={<PiggyBank className="size-4" />} />
-        <Indicador titulo="Impulsos activos" valor={k.impulsos_activos} detalle="Productos impulsados hoy" icono={<Rocket className="size-4" />} />
-        <Indicador titulo="Por recuperar" valor={soles(k.por_recuperar_centimos)} detalle="Lo que las tiendas deben reponer" icono={<HandCoins className="size-4" />} alerta={k.por_recuperar_centimos > 0} />
-        <Indicador titulo="Ingresos por impulsos" valor={soles(k.ingresos_destacados_centimos)} detalle={`${soles(k.pagado_centimos)} devueltos a compradores`} icono={<Undo2 className="size-4" />} />
+        <Indicador oscuro titulo="Fondo disponible" valor={soles(k.fondo_centimos)} detalle={k.fondo_centimos < 0 ? "En negativo: VendiGo responde con su propio dinero" : "Aportes menos lo devuelto a compradores"} icono={<PiggyBank className="size-4" />} alerta={k.fondo_centimos < 0} />
+        <Indicador titulo={`Aporte al fondo (${g.porcentaje} %)`} valor={soles(k.aporte_centimos + g.aporte_inicial_centimos)} detalle={`${g.porcentaje} % de ${soles(k.ingresos_vendigo_centimos)} cobrados${g.aporte_inicial_centimos ? ` + ${soles(g.aporte_inicial_centimos)} de aporte inicial` : ""}`} icono={<Percent className="size-4" />} />
+        <Indicador titulo="Devuelto a compradores" valor={soles(k.pagado_centimos)} detalle={`Hasta ${soles(g.tope_centimos)} por pedido`} icono={<Undo2 className="size-4" />} />
+        <Indicador titulo="Tiendas suspendidas" valor={k.tiendas_suspendidas} detalle="Por no devolver a tiempo" icono={<Store className="size-4" />} alerta={k.tiendas_suspendidas > 0} />
       </div>
 
       <Tarjeta titulo={`Pedidos que no llegaron, con devolución pendiente (${datos.pendientes.length})`}>
@@ -94,12 +98,17 @@ export default function AdminFondo() {
                 <b className="text-tinta">{x.codigo}</b> <span className="text-gris">· {x.tienda}</span>
                 <span className="block text-xs text-gris">
                   Pagado {fechaHora(x.pagada_en)} · Op. {x.referencia}
-                  {x.recuperada_en && ` · Repuesto ${fechaHora(x.recuperada_en)} · Op. ${x.recuperada_ref}`}
+                  {x.recuperada_en && ` · La tienda repuso el ${fechaHora(x.recuperada_en)} (sistema anterior)`}
                 </span>
               </span>
               <b className="text-tinta">{soles(x.monto_centimos)}</b>
-              {x.estado === "recuperada" ? <Estado tono="ok">Repuesto</Estado> : (
-                <Boton tamano="sm" variante="secundario" onClick={() => { setRef(""); setRecuperar(x); }}>La tienda repuso</Boton>
+              {x.tienda_suspendida ? (
+                <>
+                  <Estado tono="error">Tienda suspendida</Estado>
+                  <Boton tamano="sm" variante="secundario" onClick={() => { setNota(""); setReactivar(x); }}>Reactivar tienda</Boton>
+                </>
+              ) : (
+                <Estado tono="neutro">Tienda activa</Estado>
               )}
             </div>
           ))
@@ -111,8 +120,11 @@ export default function AdminFondo() {
           <div className="space-y-4">
             <p className="text-sm text-gris">
               Yapea o transfiere <b className="text-tinta">{soles(pagar.cubre_centimos)}</b> desde la cuenta de VendiGo a {pagar.comprador} ({pagar.celular}) y registra el número de operación.
-              {pagar.monto_centimos > pagar.cubre_centimos && ` El pedido era de ${soles(pagar.monto_centimos)}: la tienda sigue debiendo la diferencia.`} La tienda quedará pausada hasta reponerlo.
+              {pagar.monto_centimos > pagar.cubre_centimos && ` El pedido era de ${soles(pagar.monto_centimos)}: la tienda sigue debiendo la diferencia al comprador.`} La tienda quedará suspendida, sin recibir pedidos, hasta que el equipo revise el caso.
             </p>
+            {k.fondo_centimos < pagar.cubre_centimos && (
+              <p className="rounded-xl bg-aviso-claro px-3 py-2 text-sm text-tinta">El fondo tiene {soles(k.fondo_centimos)}: no alcanza. VendiGo igual responde al comprador con su propio dinero.</p>
+            )}
             <Campo etiqueta="N.° de operación">
               <Entrada value={ref} onChange={(e) => setRef(e.target.value)} maxLength={40} />
             </Campo>
@@ -125,16 +137,16 @@ export default function AdminFondo() {
         )}
       </Modal>
 
-      <Modal abierto={!!recuperar} onCerrar={() => setRecuperar(null)} titulo="La tienda repuso el monto">
-        {recuperar && (
+      <Modal abierto={!!reactivar} onCerrar={() => setReactivar(null)} titulo="Reactivar tienda">
+        {reactivar && (
           <div className="space-y-4">
-            <p className="text-sm text-gris">{recuperar.tienda} repuso {soles(recuperar.monto_centimos)} a VendiGo. Si no debe nada más, su tienda se reactiva.</p>
-            <Campo etiqueta="N.° de operación">
-              <Entrada value={ref} onChange={(e) => setRef(e.target.value)} maxLength={40} />
-            </Campo>
+            <p className="text-sm text-gris">
+              {reactivar.tienda} quedó suspendida porque VendiGo cubrió el pedido {reactivar.codigo}. Reactívala solo si revisaste el caso y no fue una estafa. La tienda verá el motivo.
+            </p>
+            <Area value={nota} onChange={(e) => setNota(e.target.value)} placeholder="¿Por qué se reactiva? (lo verá la tienda)" maxLength={300} />
             <div className="flex justify-end gap-2">
-              <Boton variante="secundario" onClick={() => setRecuperar(null)}>Cancelar</Boton>
-              <Boton cargando={enviando} disabled={ref.trim().length < 4} onClick={() => enviar(`/admin/garantias/${recuperar.id}/recuperar`, { referencia: ref.trim() })}>Confirmar</Boton>
+              <Boton variante="secundario" onClick={() => setReactivar(null)}>Cancelar</Boton>
+              <Boton cargando={enviando} disabled={nota.trim().length < 5} onClick={() => enviar(`/admin/garantias/${reactivar.id}/reactivar`, { motivo: nota.trim() })}>Reactivar tienda</Boton>
             </div>
           </div>
         )}

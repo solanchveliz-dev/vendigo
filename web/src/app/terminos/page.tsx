@@ -46,8 +46,8 @@ export default function Terminos() {
           <p>Además, cualquier persona puede usar nuestro <Link href="/libro-reclamaciones" className="font-semibold underline">Libro de Reclamaciones</Link>.</p>
         </>],
         ["Fondo de emergencia de VendiGo", <>
-          <p>VendiGo mantiene un fondo propio, que se alimenta con lo que cobra por impulsar productos, para los pedidos que <b>no le llegaron al comprador</b>: cuando la tienda canceló después de cobrar, o cuando VendiGo resolvió a favor del comprador un reclamo de “No me llegó”.</p>
-          <p>Si en esos casos la tienda no devuelve el dinero en <PlazoFondo />, VendiGo le devuelve al comprador hasta <TopeFondo /> por pedido. La tienda queda suspendida hasta que reponga a VendiGo lo que este pagó por ella.</p>
+          <p>VendiGo mantiene un fondo común, que se alimenta con un porcentaje de todo lo que cobra por sus servicios (planes, ventas extra, impulsos y créditos de IA), para los pedidos que <b>no le llegaron al comprador</b>: cuando la tienda canceló después de cobrar, o cuando VendiGo resolvió a favor del comprador un reclamo de “No me llegó”.</p>
+          <p>Si en esos casos la tienda no devuelve el dinero en <PlazoFondo />, VendiGo le devuelve al comprador hasta <TopeFondo /> por pedido. La tienda queda suspendida y no recibe pedidos mientras VendiGo revisa el caso; VendiGo puede mantener la suspensión si confirma un mal uso de la plataforma.</p>
           <p>El fondo no cubre productos dañados, distintos o incompletos: en esos casos la devolución corresponde a la tienda.</p>
         </>],
         ["Responsabilidad", <>

@@ -86,7 +86,7 @@ export default function Inicio() {
     <div className="space-y-5 pt-2">
       {tienda.datos?.suspendida_garantia && (
         <Aviso tono="error">
-          Tu tienda está pausada: VendiGo le devolvió el dinero a un cliente porque no se lo devolviste a tiempo. Repón ese monto con Yape a VendiGo y escríbenos desde Ayuda para reactivarla.
+          Tu tienda está suspendida: un cliente no recibió su pedido, no le devolviste su dinero a tiempo y VendiGo se lo devolvió con su fondo de emergencia. No recibirás pedidos mientras el equipo de VendiGo revisa el caso. Si crees que es un error, escríbenos desde Ayuda.
         </Aviso>
       )}
       <div className="relative flex flex-wrap items-center justify-between gap-4 overflow-hidden rounded-2xl bg-pino px-6 py-7 text-white">

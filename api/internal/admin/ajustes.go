@@ -117,8 +117,10 @@ func (m *Modulo) correoSoporte(ctx context.Context) string {
 }
 
 // Ajustes de los ingresos extra (en céntimos o días) con su valor por defecto y su rango permitido.
-var extrasPorDefecto = map[string]int{"garantia_tope_centimos": 15000, "garantia_dias_habiles": 5, "destacado_precio_centimos": 500, "destacado_dias": 7}
-var limitesExtras = map[string][2]int{"garantia_tope_centimos": {1000, 500000}, "garantia_dias_habiles": {1, 30}, "destacado_precio_centimos": {100, 100000}, "destacado_dias": {1, 60}}
+var extrasPorDefecto = map[string]int{"garantia_tope_centimos": 15000, "garantia_dias_habiles": 5, "destacado_precio_centimos": 500, "destacado_dias": 7,
+	"fondo_porcentaje": 4, "fondo_aporte_inicial_centimos": 0}
+var limitesExtras = map[string][2]int{"garantia_tope_centimos": {1000, 500000}, "garantia_dias_habiles": {1, 30}, "destacado_precio_centimos": {100, 100000}, "destacado_dias": {1, 60},
+	"fondo_porcentaje": {0, 50}, "fondo_aporte_inicial_centimos": {0, 100000000}}
 
 func (m *Modulo) configuracion(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()

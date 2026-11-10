@@ -126,7 +126,7 @@ export default function Impulsar({ params }: { params: Promise<{ id: string }> }
                 <Boton bloque variante="secundario" onClick={() => setPaso(1)}>Volver</Boton>
               </>
             )}
-            <p className="text-xs text-gris">Lo que pagas por impulsos va al fondo de emergencia de VendiGo, que ayuda a compradores y tiendas cuando un pedido no llega.</p>
+            <p className="text-xs text-gris">Una parte de todo lo que cobra VendiGo va a su fondo de emergencia, que protege a los compradores cuando un pedido no llega.</p>
           </aside>
         </div>
       )}

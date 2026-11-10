@@ -14,6 +14,8 @@ const EXTRAS: { k: string; t: string; ayuda: string; dias?: boolean }[] = [
   { k: "garantia_tope_centimos", t: "Tope del fondo de emergencia (S/)", ayuda: "Máximo que devuelve VendiGo por pedido que no llegó." },
   { k: "garantia_dias_habiles", t: "Plazo de la tienda (días hábiles)", ayuda: "Para devolver antes de que pague VendiGo.", dias: true },
   { k: "destacado_precio_centimos", t: "Impulsar 7 días (S/)", ayuda: "Los paquetes de 3 y 15 días se calculan en proporción." },
+  { k: "fondo_porcentaje", t: "Aporte al fondo (% de los ingresos)", ayuda: "Parte de todo lo que cobra VendiGo que va al fondo de emergencia (0 a 50).", dias: true },
+  { k: "fondo_aporte_inicial_centimos", t: "Aporte inicial al fondo (S/)", ayuda: "Lo que VendiGo pone de su capital para que el fondo no empiece en cero." },
 ];
 const aTexto = (e: { dias?: boolean }, v: number) => (e.dias ? String(v) : (v / 100).toFixed(2));
 type Plan = { id: string; nombre: string; creditos_ia: number };

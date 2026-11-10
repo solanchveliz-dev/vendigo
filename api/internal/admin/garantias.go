@@ -77,14 +77,16 @@ func (m *Modulo) garantias(w http.ResponseWriter, r *http.Request) error {
 		PedidoID   string     `json:"pedido_id"`
 		Codigo     string     `json:"codigo"`
 		Tienda     string     `json:"tienda"`
+		TiendaID   string     `json:"tienda_id"`
+		Suspendida bool       `json:"tienda_suspendida"`
 		Monto      int        `json:"monto_centimos"`
-		Estado     string     `json:"estado"`
+		Estado     string     `json:"estado"` // pagada · recuperada (sistema anterior, cuando la tienda reponía)
 		Referencia string     `json:"referencia"`
 		PagadaEn   time.Time  `json:"pagada_en"`
 		RecupRef   string     `json:"recuperada_ref"`
 		RecupEn    *time.Time `json:"recuperada_en"`
 	}
-	rows, err = m.app.DB.QueryContext(ctx, `SELECT g.id, p.id, p.codigo, t.nombre, g.monto_centimos, g.estado, g.referencia, g.pagada_en, g.recuperada_ref, g.recuperada_en
+	rows, err = m.app.DB.QueryContext(ctx, `SELECT g.id, p.id, p.codigo, t.nombre, t.id, t.suspendida_garantia, g.monto_centimos, g.estado, g.referencia, g.pagada_en, g.recuperada_ref, g.recuperada_en
 		FROM garantias g JOIN pedidos p ON p.id=g.pedido_id JOIN tiendas t ON t.id=g.tienda_id ORDER BY g.pagada_en DESC LIMIT 100`)
 	if err != nil {
 		return err
@@ -93,22 +95,25 @@ func (m *Modulo) garantias(w http.ResponseWriter, r *http.Request) error {
 	hechas := []pagada{}
 	for rows.Next() {
 		var x pagada
-		if err := rows.Scan(&x.ID, &x.PedidoID, &x.Codigo, &x.Tienda, &x.Monto, &x.Estado, &x.Referencia, &x.PagadaEn, &x.RecupRef, &x.RecupEn); err != nil {
+		if err := rows.Scan(&x.ID, &x.PedidoID, &x.Codigo, &x.Tienda, &x.TiendaID, &x.Suspendida, &x.Monto, &x.Estado, &x.Referencia, &x.PagadaEn, &x.RecupRef, &x.RecupEn); err != nil {
 			return err
 		}
 		hechas = append(hechas, x)
 	}
-	// Totales de todas las garantías (la lista muestra solo las últimas 100).
-	var porRecuperar, pagadoTotal int
+	// Saldo del fondo (con todas las garantías, no solo las 100 que se listan):
+	// aporte inicial + porcentaje de todo lo cobrado por VendiGo − lo devuelto a compradores.
+	// Las garantías "recuperadas" del sistema anterior no se descuentan: la tienda las repuso.
+	var pagadoTotal, devueltoNeto, ingresos, suspendidas, impulsosActivos int
 	m.app.DB.QueryRowContext(ctx, `SELECT COALESCE(SUM(monto_centimos),0), COALESCE(SUM(monto_centimos) FILTER (WHERE estado='pagada'),0) FROM garantias`).
-		Scan(&pagadoTotal, &porRecuperar)
-	var ingresosDestacados, impulsosActivos int
-	m.app.DB.QueryRowContext(ctx, `SELECT COALESCE(SUM(monto_centimos),0) FROM pagos_plan WHERE tipo='destacado' AND estado='confirmado'`).Scan(&ingresosDestacados)
+		Scan(&pagadoTotal, &devueltoNeto)
+	m.app.DB.QueryRowContext(ctx, `SELECT COALESCE(SUM(monto_centimos),0) FROM pagos_plan WHERE estado='confirmado'`).Scan(&ingresos)
+	m.app.DB.QueryRowContext(ctx, `SELECT count(*) FROM tiendas WHERE suspendida_garantia`).Scan(&suspendidas)
 	m.app.DB.QueryRowContext(ctx, `SELECT count(*) FROM impulsos WHERE now() BETWEEN inicio AND fin`).Scan(&impulsosActivos)
+	aporte := ingresos * g.Porcentaje / 100
 	httpx.OK(w, map[string]any{
 		"reglas": g, "pendientes": pend, "garantias": hechas,
-		"resumen": map[string]int{"pagado_centimos": pagadoTotal, "por_recuperar_centimos": porRecuperar, "ingresos_destacados_centimos": ingresosDestacados,
-			"fondo_centimos": ingresosDestacados - porRecuperar, "impulsos_activos": impulsosActivos},
+		"resumen": map[string]int{"pagado_centimos": pagadoTotal, "ingresos_vendigo_centimos": ingresos, "aporte_centimos": aporte,
+			"fondo_centimos": g.AporteInicial + aporte - devueltoNeto, "tiendas_suspendidas": suspendidas, "impulsos_activos": impulsosActivos},
 	})
 	return nil
 }
@@ -174,61 +179,44 @@ func (m *Modulo) pagarGarantia(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	httpx.OK(w, map[string]string{"mensaje": fmt.Sprintf("Devolución registrada: S/ %.2f. La tienda quedó suspendida hasta reponerlo.", float64(monto)/100)})
+	httpx.OK(w, map[string]string{"mensaje": fmt.Sprintf("Devolución registrada: S/ %.2f del fondo de emergencia. La tienda quedó suspendida.", float64(monto)/100)})
 	return nil
 }
 
-// POST /admin/garantias/{id}/recuperar: la tienda repuso a VendiGo el monto de la garantía.
-func (m *Modulo) recuperarGarantia(w http.ResponseWriter, r *http.Request) error {
+// POST /admin/garantias/{id}/reactivar {motivo}: el admin revisó el caso y reactiva la tienda suspendida.
+// Ya no se le pide a la tienda reponer el dinero: lo cubre el fondo de emergencia de VendiGo.
+func (m *Modulo) reactivarTiendaFondo(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
-	var in struct {
-		Referencia string `json:"referencia"`
-	}
-	if err := httpx.Leer(r, &in); err != nil {
+	motivo, err := motivoObligatorio(r)
+	if err != nil {
 		return err
 	}
-	in.Referencia = strings.TrimSpace(in.Referencia)
-	if len(in.Referencia) < 4 {
-		return httpx.Invalido("Escribe el número de operación con el que la tienda repuso el monto.")
-	}
 	id := chi.URLParam(r, "id")
-	var reactivada bool
-	err := m.app.EnTransaccion(ctx, func(tx *sql.Tx) error {
+	err = m.app.EnTransaccion(ctx, func(tx *sql.Tx) error {
 		var tid string
-		err := tx.QueryRowContext(ctx, `UPDATE garantias SET estado='recuperada', recuperada_ref=$2, recuperada_en=now()
-			WHERE id::text=$1 AND estado='pagada' RETURNING tienda_id`, id, in.Referencia).Scan(&tid)
+		err := tx.QueryRowContext(ctx, `UPDATE tiendas t SET suspendida_garantia=false FROM garantias g
+			WHERE g.id::text=$1 AND t.id=g.tienda_id AND t.suspendida_garantia RETURNING t.id`, id).Scan(&tid)
 		if core.SinFilas(err) {
-			return httpx.Conflicto("no_aplica", "Esta garantía ya fue recuperada.")
+			return httpx.Conflicto("no_aplica", "Esta tienda ya está activa.")
 		}
 		if err != nil {
 			return err
 		}
-		var otras bool
-		tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM garantias WHERE tienda_id=$1 AND estado='pagada')`, tid).Scan(&otras)
-		if !otras {
-			if _, err := tx.ExecContext(ctx, `UPDATE tiendas SET suspendida_garantia=false WHERE id=$1`, tid); err != nil {
-				return err
-			}
-			reactivada = true
-			billetera.Notificar(ctx, tx, tid, "Tu tienda está activa de nuevo", "Recibimos tu pago. Ya puedes recibir pedidos.", "/vendedor")
-		}
-		m.app.Auditar(ctx, tx, adminID(ctx), "recuperar_garantia", "garantia", id, map[string]any{"referencia": in.Referencia})
+		billetera.Notificar(ctx, tx, tid, "Tu tienda está activa de nuevo", "El equipo de VendiGo revisó el caso y reactivó tu tienda: "+motivo, "/vendedor")
+		m.app.Auditar(ctx, tx, adminID(ctx), "reactivar_tienda_fondo", "garantia", id, map[string]any{"motivo": motivo})
 		return nil
 	})
 	if err != nil {
 		return err
 	}
-	msg := "Monto recuperado."
-	if reactivada {
-		msg += " La tienda ya puede recibir pedidos."
-	}
-	httpx.OK(w, map[string]string{"mensaje": msg})
+	httpx.OK(w, map[string]string{"mensaje": "Tienda reactivada. Ya puede recibir pedidos."})
 	return nil
 }
 
 // avisoSuspension: lo que se le dice a la tienda cuando VendiGo cubrió una devolución que ella no hizo.
 func avisoSuspension(codigo string, cubierto, total int) string {
-	t := fmt.Sprintf("No devolviste el dinero del pedido %s a tiempo y VendiGo le devolvió S/ %.2f al comprador. Repón ese monto a VendiGo para volver a recibir pedidos.",
+	t := fmt.Sprintf("No le devolviste el dinero al comprador del pedido %s a tiempo y VendiGo le devolvió S/ %.2f de su fondo de emergencia. "+
+		"Tu tienda no recibirá pedidos mientras el equipo de VendiGo revisa el caso. Si crees que es un error, escríbenos desde Ayuda.",
 		codigo, float64(cubierto)/100)
 	if total > cubierto {
 		t += fmt.Sprintf(" Además, todavía debes devolverle S/ %.2f al comprador e informarlo desde el pedido.", float64(total-cubierto)/100)

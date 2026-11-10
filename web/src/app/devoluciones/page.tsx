@@ -30,7 +30,7 @@ export default function Devoluciones() {
           </ul>
         </>],
         ["Fondo de emergencia", <>
-          <p>Si tu pedido no te llegó (la tienda lo canceló después de cobrar, o VendiGo te dio la razón en un reclamo de “No me llegó”) y la tienda no te devuelve en <PlazoFondo />, VendiGo te devuelve de su propio fondo hasta <TopeFondo /> por pedido.</p>
+          <p>Si tu pedido no te llegó (la tienda lo canceló después de cobrar, o VendiGo te dio la razón en un reclamo de “No me llegó”) y la tienda no te devuelve en <PlazoFondo />, VendiGo te devuelve de su fondo de emergencia hasta <TopeFondo /> por pedido. Si tu pedido costaba más, la tienda sigue obligada a devolverte la diferencia.</p>
           <p>El fondo no cubre productos dañados, distintos o incompletos: esas devoluciones las hace la tienda.</p>
         </>],
         ["Productos que no aplican", <>
