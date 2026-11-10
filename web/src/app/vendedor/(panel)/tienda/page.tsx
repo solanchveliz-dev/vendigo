@@ -14,7 +14,7 @@ type Img = { key: string; url: string };
 
 // "Tu tienda": todo en una sola página, igual que en el prototipo.
 export default function TuTienda() {
-  const { datos: t, setDatos } = useApi<Tienda>("/vendedor/tienda");
+  const { datos: t, setDatos, error: errorCarga } = useApi<Tienda>("/vendedor/tienda");
   const avisar = useAvisar();
   const [f, setF] = useState<Record<string, string> | null>(null);
   const [img, setImg] = useState<{ logo?: Img; portada?: Img }>({});
@@ -29,6 +29,9 @@ export default function TuTienda() {
         correo: t.correo, horario: t.horario || t.entrega.horario_recojo, instagram: t.instagram, tiktok: t.tiktok, facebook: t.facebook, politicas: t.politicas,
       });
   }, [t, f]);
+  if (errorCarga && !t) {
+    return <Aviso tono="error">No pudimos cargar tu tienda: {errorCarga.message}. Si acabas de actualizar, reinicia la API para que se apliquen los cambios de la base de datos.</Aviso>;
+  }
   if (!t || !f) return <Cargando />;
   const c = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => setF({ ...f, [k]: e.target.value });
   const logo = img.logo?.url ?? t.logo_url;

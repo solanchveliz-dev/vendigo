@@ -13,7 +13,7 @@ import (
 )
 
 // Métodos de pago directo a la tienda.
-var MetodosDirectos = map[string]string{"yape_directo": "Yape a la tienda", "plin_directo": "Plin a la tienda", "tarjeta_tienda": "Tarjeta (link de la tienda)", "efectivo": "Efectivo (pedidos antiguos)"}
+var MetodosDirectos = map[string]string{"yape_directo": "Yape a la tienda", "plin_directo": "Plin a la tienda", "tarjeta_tienda": "Tarjeta (link de la tienda)", "transferencia_tienda": "Transferencia a la tienda", "efectivo": "Efectivo (pedidos antiguos)"}
 
 // Textos de cada estado (los mismos en la web).
 var Textos = map[string]string{

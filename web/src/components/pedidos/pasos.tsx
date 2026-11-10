@@ -12,7 +12,7 @@ type Paso = { titulo: string; cliente: string; quien: "cliente" | "tienda"; como
 export function pasosPedido(p: PedidoDetalle): { pasos: Paso[]; actual: number; cancelado: boolean } {
   const pagaAlRecibir = p.pago?.momento === "al_recibir";
   const adel = p.pago?.momento === "adelanto" ? p.pago.adelanto_centimos : 0;
-  const medio = p.pago?.metodo === "tarjeta_tienda" ? "con tarjeta" : "por Yape o Plin";
+  const medio = p.pago?.metodo === "tarjeta_tienda" ? "con tarjeta" : p.pago?.metodo === "transferencia_tienda" ? "por transferencia" : "por Yape o Plin";
   const fechaPago = p.pago?.informado_en ?? (p.pago?.estado === "de_prueba" ? p.creado_en : null);
   const nombre = p.comprador.split(" ")[0];
   const pasos: Paso[] =

@@ -88,7 +88,7 @@ export default function Pagos() {
               </select>
               <select value={metodo} onChange={(e) => { setMetodo(e.target.value); setPagina(1); }} className="h-11 rounded-xl border border-linea bg-white px-4 text-sm outline-none" aria-label="Método">
                 <option value="">Método: todos</option>
-                {["yape_directo", "plin_directo", "tarjeta_tienda"].map((k) => <option key={k} value={k}>{METODOS[k]}</option>)}
+                {["yape_directo", "plin_directo", "tarjeta_tienda", "transferencia_tienda"].map((k) => <option key={k} value={k}>{METODOS[k]}</option>)}
               </select>
               <span className="ml-auto text-sm text-gris">{lista.length} registros</span>
             </div>

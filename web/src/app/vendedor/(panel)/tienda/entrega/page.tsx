@@ -193,9 +193,9 @@ export default function EntregaYPagos() {
             <span className="grid size-10 place-items-center rounded-xl bg-white text-pino"><Smartphone className="size-5" /></span>
             <span className="min-w-0 flex-1">
               <b className="block text-sm text-tinta">
-                {t.metodos_pago?.length ? t.metodos_pago.map((m) => ({ yape_directo: "Yape", plin_directo: "Plin", tarjeta_tienda: "Tarjeta" })[m] ?? m).join(" · ") : "Aún no configuras cómo te pagan"}
+                {t.metodos_pago?.length ? t.metodos_pago.map((m) => ({ yape_directo: "Yape", plin_directo: "Plin", tarjeta_tienda: "Tarjeta", transferencia_tienda: "Transferencia" })[m] ?? m).join(" · ") : "Aún no configuras cómo te pagan"}
               </b>
-              <span className="text-xs text-gris">{t.metodos_pago?.length ? "Toca para cambiar tus datos de pago" : "Agrega tu Yape, Plin o link de tarjeta para recibir pedidos"}</span>
+              <span className="text-xs text-gris">{t.metodos_pago?.length ? "Toca para cambiar tus datos de pago" : "Elige tus métodos de pago para recibir pedidos"}</span>
             </span>
             <ChevronRight className="size-4 text-gris" />
           </Link>
