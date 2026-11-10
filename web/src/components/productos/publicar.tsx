@@ -14,7 +14,7 @@ import { subirImagen } from "@/lib/subir";
 import { soles } from "@/lib/formato";
 import type { Producto, Tienda } from "@/lib/tipos";
 import {
-  CARACTERISTICAS, CATALOGO, COLORES, DATOS_FICHA, GRUPOS_SUGERIDOS, RUBROS_PUBLICAR, leerFicha, rubroPublicar, type Dim, type TipoProducto,
+  CARACTERISTICAS, CATALOGO, COLORES, DATOS_FICHA, GRUPOS_SUGERIDOS, MAX_DATOS_FICHA, RUBROS_PUBLICAR, leerFichaDetalle, normalClave, rubroPublicar, type Dim, type TipoProducto,
 } from "@/lib/catalogo-productos";
 import { useAvisar } from "@/components/ui";
 
@@ -731,14 +731,31 @@ function FichaTecnica({ tipo, ficha, on, abierto, setAbierto, cambiar, avisar }:
     cambiar(f, on.filter((x) => x !== k));
   };
   function ordenar() {
-    const filas = leerFicha(pegado);
-    if (!filas.length) return avisar('No encontramos datos. Pega una línea por dato, por ejemplo "Batería: 20 h"', "error");
+    const { filas, noEntendido, sobrantes } = leerFichaDetalle(pegado);
+    if (!filas.length) {
+      return avisar('No encontramos datos. Escribe cada dato con dos puntos, por ejemplo "Batería: 20 h, Garantía: 3 meses".', "error");
+    }
+    // Si el dato ya estaba (aunque esté escrito sin tilde o en minúsculas), se actualiza en vez de repetirse.
     const f = { ...ficha };
-    filas.forEach(([k, v]) => (f[k.charAt(0).toUpperCase() + k.slice(1)] = v));
-    cambiar(f, [...new Set([...on, ...Object.keys(f)])]);
+    const nombres: string[] = [];
+    for (const [k, v] of filas) {
+      const existente = Object.keys(f).find((x) => normalClave(x) === normalClave(k)) ?? on.find((x) => normalClave(x) === normalClave(k));
+      const nombre = existente ?? k;
+      f[nombre] = v;
+      nombres.push(nombre);
+    }
+    cambiar(f, [...new Set([...on, ...nombres])]);
+    let texto = `Listo: ${filas.length} ${filas.length === 1 ? "dato completado" : "datos completados"}`;
+    if (sobrantes) texto += `. Solo entran ${MAX_DATOS_FICHA} datos: ${sobrantes} no se agregaron`;
+    if (noEntendido.length) {
+      // Lo que no se entendió se queda en el cuadro para corregirlo (por ejemplo, agregarle los dos puntos).
+      setPegado(noEntendido.join("\n"));
+      avisar(`${texto}. Revisa lo que quedó en el cuadro: le faltan los dos puntos.`);
+      return;
+    }
     setPegado("");
     setAbierto(false);
-    avisar(`Listo: ${filas.length} datos completados`);
+    avisar(texto);
   }
   return (
     <div>
@@ -748,7 +765,7 @@ function FichaTecnica({ tipo, ficha, on, abierto, setAbierto, cambiar, avisar }:
       </div>
       {abierto && (
         <div className="mt-3 rounded-2xl bg-coral-claro/60 p-3">
-          <textarea value={pegado} onChange={(e) => setPegado(e.target.value)} rows={4} placeholder={"Pega aquí la ficha (de tu proveedor, catálogo o WhatsApp). Ejemplo:\nBatería: 20 h\nGarantía: 3 meses"} className="w-full rounded-xl bg-white px-4 py-3 text-sm outline-none ring-1 ring-linea" />
+          <textarea value={pegado} onChange={(e) => setPegado(e.target.value)} rows={4} placeholder={"Pega aquí la ficha (de tu proveedor, catálogo o WhatsApp). Cada dato con dos puntos, uno por línea o separados por comas:\nBatería: 20 h, Garantía: 3 meses\nMaterial: Aluminio"} className="w-full rounded-xl bg-white px-4 py-3 text-sm outline-none ring-1 ring-linea" />
           <button onClick={ordenar} className={`${btn("primario")} mt-2`}><Zap className="size-4" /> Ordenar la ficha</button>
         </div>
       )}

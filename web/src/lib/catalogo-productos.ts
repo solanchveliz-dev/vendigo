@@ -148,15 +148,97 @@ export const GRUPOS_SUGERIDOS: [string, string[]][] = [
   ["Talla", ["S", "M", "L"]], ["Color", []], ["Tamaño", ["Pequeño", "Mediano", "Grande"]], ["Sabor", []], ["Presentación", []], ["Material", []], ["Modelo", []], ["Aroma", []],
 ];
 
-// Lee una ficha pegada: "Clave: valor", "Clave<tab>valor" o líneas alternadas (clave / valor).
-export function leerFicha(txt: string): [string, string][] {
-  const lineas = txt.split(/\r?\n/).map((l) => l.replace(/^[•\-*·]\s*/, "").trim()).filter(Boolean);
-  const out: [string, string][] = [];
-  if (lineas.some((l) => /[:\t]| - /.test(l))) {
-    for (const l of lineas) {
-      const m = l.split(/\t|:\s*| - /);
-      if (m.length >= 2 && m[0].trim() && m.slice(1).join(" ").trim()) out.push([m[0].trim(), m.slice(1).join(" ").trim()]);
+/* ---------- Pegar ficha: reglas fijas (no usa IA) ----------
+ * Cada dato es "Nombre: valor". Los datos se separan con salto de línea, coma, punto y coma o barra:
+ *   "Batería: 20 h, Garantía: 3 meses | Material: Aluminio"
+ * Una coma solo separa si después viene otro "Nombre:"; así "Color: Negro, Rojo" queda como un solo dato.
+ * Los dos puntos de una hora o un enlace no separan ("Horario: 9:00 a 18:00", "Web: https://…").
+ * También acepta "Nombre<tab>valor" (copiado de Excel), "Nombre - valor" y, si no hay ningún separador,
+ * líneas alternadas (nombre / valor). Lo que no se entiende se devuelve para que la vendedora lo corrija.
+ */
+export const MAX_DATOS_FICHA = 15;
+const MAX_VALOR = 150;
+
+// Nombre: empieza con letra, hasta 40 caracteres; va al inicio de la línea o después de , ; | •
+const CLAVE = /(^|[,;|•·]\s*)(\p{L}[\p{L}\p{N} .()/%°ºª+-]{0,39}?)\s*:(?!\/\/)\s*/gu;
+
+export type FichaLeida = { filas: [string, string][]; noEntendido: string[]; sobrantes: number };
+
+// Para comparar nombres sin mayúsculas ni tildes ("garantia" = "Garantía").
+export function normalClave(k: string) {
+  return k.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+function limpiarLinea(l: string) {
+  return l
+    .replace(/^\s*(?:\d+[.)]\s+)/, "") // "1. " o "1) "
+    .replace(/^[^\p{L}\p{N}]+/u, "") // viñetas, guiones y emojis del inicio
+    .trim();
+}
+
+function recortar(v: string) {
+  const s = v.replace(/^[,;|•·\s]+|[,;|•·\s]+$/g, "").trim();
+  return s.length > MAX_VALOR ? s.slice(0, MAX_VALOR).trim() : s;
+}
+
+// Datos de una línea con "Nombre: valor" (uno o varios). Devuelve también el texto suelto que no se entendió.
+function porDosPuntos(linea: string): { pares: [string, string][]; suelto: string } {
+  const marcas = [...linea.matchAll(CLAVE)];
+  const pares: [string, string][] = [];
+  if (!marcas.length) return { pares, suelto: "" };
+  const suelto = recortar(linea.slice(0, marcas[0].index));
+  marcas.forEach((m, i) => {
+    const desde = (m.index ?? 0) + m[0].length;
+    const hasta = i + 1 < marcas.length ? marcas[i + 1].index : linea.length;
+    const v = recortar(linea.slice(desde, hasta));
+    if (v) pares.push([m[2].trim(), v]);
+  });
+  return { pares, suelto };
+}
+
+function porSeparador(linea: string): [string, string] | null {
+  const m = linea.match(/^([^\t]+)\t+(.+)$/) ?? linea.match(/^(.+?)\s+[-–—]\s+(.+)$/);
+  if (!m) return null;
+  const k = m[1].trim(), v = recortar(m[2].replace(/\t+/g, " "));
+  return k && v && k.length <= 40 ? [k, v] : null;
+}
+
+export function leerFichaDetalle(txt: string): FichaLeida {
+  const lineas = txt.split(/\r?\n/).map(limpiarLinea).filter(Boolean);
+  const leidas: [string, string][] = [];
+  const noEntendido: string[] = [];
+  const sinSeparador: string[] = [];
+
+  for (const l of lineas) {
+    const { pares, suelto } = porDosPuntos(l);
+    if (pares.length) {
+      leidas.push(...pares);
+      if (suelto) noEntendido.push(suelto);
+      continue;
     }
-  } else for (let i = 0; i + 1 < lineas.length; i += 2) out.push([lineas[i], lineas[i + 1]]);
-  return out.slice(0, 15);
+    const par = porSeparador(l);
+    if (par) leidas.push(par);
+    else sinSeparador.push(l);
+  }
+
+  if (!leidas.length) {
+    // Sin ningún separador: se lee por pares de líneas (nombre / valor).
+    for (let i = 0; i + 1 < sinSeparador.length; i += 2) leidas.push([sinSeparador[i], recortar(sinSeparador[i + 1])]);
+    if (sinSeparador.length % 2) noEntendido.push(sinSeparador[sinSeparador.length - 1]);
+  } else noEntendido.push(...sinSeparador);
+
+  // Un nombre repetido se queda con su último valor; la primera letra va en mayúscula.
+  const porNombre = new Map<string, [string, string]>();
+  for (const [k, v] of leidas) {
+    const nombre = k.charAt(0).toUpperCase() + k.slice(1);
+    const clave = normalClave(nombre);
+    porNombre.set(clave, [porNombre.get(clave)?.[0] ?? nombre, v]);
+  }
+  const todas = [...porNombre.values()];
+  return { filas: todas.slice(0, MAX_DATOS_FICHA), noEntendido, sobrantes: Math.max(0, todas.length - MAX_DATOS_FICHA) };
+}
+
+// Versión simple (solo los datos), por compatibilidad.
+export function leerFicha(txt: string): [string, string][] {
+  return leerFichaDetalle(txt).filas;
 }
