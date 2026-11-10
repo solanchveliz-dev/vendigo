@@ -473,12 +473,13 @@ func (m *Modulo) recuperar(w http.ResponseWriter, r *http.Request) error {
 	cel := limpiarCelular(in.Celular)
 	var existe bool
 	m.app.DB.QueryRowContext(r.Context(), `SELECT EXISTS(SELECT 1 FROM usuarios WHERE celular=$1 AND celular_verificado)`, cel).Scan(&existe)
+	// La respuesta es igual tenga o no cuenta el celular: así nadie puede averiguar qué celulares están registrados.
+	mensaje := map[string]any{"mensaje": "Si el celular tiene cuenta, te enviamos un código de 6 dígitos.", "celular": cel}
 	if !existe {
-		// No se revela si el celular tiene cuenta.
-		httpx.OK(w, map[string]any{"mensaje": "Si el celular tiene cuenta, te enviamos un código."})
+		httpx.OK(w, mensaje)
 		return nil
 	}
-	return m.enviarOTP(w, r, cel, "recuperar")
+	return m.enviarOTP(w, r, cel, "recuperar", mensaje)
 }
 
 type restablecerReq struct {

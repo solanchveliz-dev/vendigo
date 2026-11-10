@@ -529,6 +529,17 @@ func evento(ctx context.Context, tx *sql.Tx, pid, estado, detalle string) error 
 	return err
 }
 
+// eventoConSMS registra el paso en el seguimiento y además se lo avisa por SMS al comprador (momentos clave).
+func eventoConSMS(ctx context.Context, tx *sql.Tx, pid, estado, detalle string) error {
+	if err := evento(ctx, tx, pid, estado, detalle); err != nil {
+		return err
+	}
+	var codigo string
+	tx.QueryRowContext(ctx, `SELECT codigo FROM pedidos WHERE id::text=$1`, pid).Scan(&codigo)
+	billetera.SMSComprador(ctx, tx, pid, "pedido "+codigo+". "+detalle)
+	return nil
+}
+
 func (m *Modulo) aceptar(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	d, err := m.cambiar(r, []string{"por_aceptar"}, func(tx *sql.Tx, tid, pid, codigo, entrega string) error {
@@ -540,7 +551,7 @@ func (m *Modulo) aceptar(w http.ResponseWriter, r *http.Request) error {
 		if _, err := tx.ExecContext(ctx, `UPDATE pedidos SET estado='preparando', aceptado_en=now() WHERE id=$1`, pid); err != nil {
 			return err
 		}
-		return evento(ctx, tx, pid, "preparando", "La tienda aceptó tu pedido")
+		return eventoConSMS(ctx, tx, pid, "preparando", "La tienda aceptó tu pedido.")
 	})
 	if err != nil {
 		return err
@@ -578,7 +589,7 @@ func (m *Modulo) rechazar(w http.ResponseWriter, r *http.Request) error {
 		} else {
 			texto += " No se realizó ningún cobro."
 		}
-		return evento(ctx, tx, pid, "rechazado", texto)
+		return eventoConSMS(ctx, tx, pid, "rechazado", texto)
 	})
 	if err != nil {
 		return err
@@ -681,7 +692,7 @@ func (m *Modulo) enviar(w http.ResponseWriter, r *http.Request) error {
 		if _, err := tx.ExecContext(ctx, `UPDATE pedidos SET estado='enviado', enviado_en=now() WHERE id=$1`, pid); err != nil {
 			return err
 		}
-		return evento(ctx, tx, pid, "enviado", detalle)
+		return eventoConSMS(ctx, tx, pid, "enviado", detalle)
 	})
 	if err != nil {
 		return err
@@ -714,7 +725,7 @@ func (m *Modulo) listoRecojo(w http.ResponseWriter, r *http.Request) error {
 		if _, err := tx.ExecContext(ctx, `UPDATE pedidos SET estado='listo_recojo' WHERE id=$1`, pid); err != nil {
 			return err
 		}
-		return evento(ctx, tx, pid, "listo_recojo", "Tu pedido está listo. Muestra tu código de recojo en la tienda.")
+		return eventoConSMS(ctx, tx, pid, "listo_recojo", "Tu pedido está listo. Muestra tu código de recojo en la tienda.")
 	})
 	if err != nil {
 		return err
@@ -811,7 +822,7 @@ func (m *Modulo) devolverReclamo(w http.ResponseWriter, r *http.Request) error {
 		}
 		u, _ := httpx.UsuarioDe(ctx)
 		m.app.Auditar(ctx, tx, u.ID, "devolver_reclamo", "pedido", pid, nil)
-		return evento(ctx, tx, pid, "cancelado", "La tienda aceptó tu reclamo y debe devolverte tu dinero. Verás aquí cuando informe la devolución.")
+		return eventoConSMS(ctx, tx, pid, "cancelado", "La tienda aceptó tu reclamo y debe devolverte tu dinero. Verás aquí cuando informe la devolución.")
 	})
 	if err != nil {
 		return err
@@ -868,7 +879,7 @@ func (m *Modulo) responderReclamo(w http.ResponseWriter, r *http.Request) error 
 		}
 		u, _ := httpx.UsuarioDe(ctx)
 		m.app.Auditar(ctx, tx, u.ID, "responder_reclamo", "pedido", pid, nil)
-		return evento(ctx, tx, pid, "reclamo", "La tienda respondió tu reclamo. VendiGo revisará las pruebas.")
+		return eventoConSMS(ctx, tx, pid, "reclamo", "La tienda respondió tu reclamo. VendiGo revisará las pruebas.")
 	})
 	if err != nil {
 		return err
@@ -1031,10 +1042,11 @@ func ResolverReclamo(ctx context.Context, app *core.App, tx *sql.Tx, reclamoID, 
 				aviso += " Tu tienda seguirá suspendida hasta que informes la devolución."
 			}
 		}
-		if err := evento(ctx, tx, pid, "cancelado", texto); err != nil {
+		if err := eventoConSMS(ctx, tx, pid, "cancelado", texto); err != nil {
 			return "", err
 		}
 		billetera.Notificar(ctx, tx, tid, "Reclamo resuelto a favor del comprador", aviso, "/vendedor/pedidos/"+pid)
+		billetera.SMSTienda(ctx, tx, tid, "VendiGo resolvió el reclamo del pedido "+codigo+" a favor del cliente. Revisa qué hacer:", "/vendedor/pedidos/"+pid)
 	case "vendedor":
 		if _, err := tx.ExecContext(ctx, `UPDATE reclamos SET estado='a_favor_vendedor', nota_admin=$2, resuelto_en=now() WHERE id::text=$1`, reclamoID, nota); err != nil {
 			return "", err
@@ -1047,11 +1059,13 @@ func ResolverReclamo(ctx context.Context, app *core.App, tx *sql.Tx, reclamoID, 
 		} else if err := evento(ctx, tx, pid, estado, "VendiGo revisó el reclamo y las pruebas de la tienda. El pedido queda como entregado."); err != nil {
 			return "", err
 		}
+		billetera.SMSComprador(ctx, tx, pid, "pedido "+codigo+". VendiGo revisó tu reclamo y las pruebas de la tienda: el pedido queda como entregado.")
 		aviso := "Pedido " + codigo + ": el pedido queda como entregado."
 		if motivo == "no_llego" {
 			aviso += " Tu tienda ya puede recibir pedidos de nuevo."
 		}
 		billetera.Notificar(ctx, tx, tid, "Reclamo resuelto a tu favor", aviso, "/vendedor/cobros/reclamo/"+pid)
+		billetera.SMSTienda(ctx, tx, tid, aviso, "/vendedor/cobros/reclamo/"+pid)
 	default:
 		return "", httpx.Invalido("Elige a favor de quién se resuelve.")
 	}

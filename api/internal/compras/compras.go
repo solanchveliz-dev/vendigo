@@ -220,6 +220,7 @@ func (m *Modulo) comprobante(w http.ResponseWriter, r *http.Request) error {
 		if err := pagos.Cambiar(ctx, tx, pid, pagos.Cambio{Estado: "comprobante_enviado", Detalle: "El comprador envió su comprobante de pago.", Referencia: in.Referencia, ComprobanteKey: in.Key}); err != nil {
 			return err
 		}
+		billetera.SMSTienda(ctx, tx, tid, "El cliente del pedido "+codigo+" envió su comprobante. Revisa tu Yape/Plin y confírmalo:", "/vendedor/pedidos/"+pid)
 		billetera.Notificar(ctx, tx, tid, "Revisa el pago del pedido "+codigo, "El cliente envió su comprobante. Revisa tu Yape/Plin y confirma si te llegó.", "/vendedor/pedidos/"+pid)
 		return nil
 	})

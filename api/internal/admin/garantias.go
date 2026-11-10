@@ -184,6 +184,8 @@ func (m *Modulo) pagarGarantia(w http.ResponseWriter, r *http.Request) error {
 		billetera.Notificar(ctx, tx, tid, "Tu tienda está suspendida",
 			avisoSuspension(codigo, monto, total, casosTienda(ctx, tx, tid)),
 			"/vendedor/pedidos/"+pid)
+		billetera.SMSTienda(ctx, tx, tid, "Tu tienda fue suspendida: VendiGo le devolvió el dinero al cliente del pedido "+codigo+". Revisa los detalles:", "/vendedor")
+		billetera.SMSComprador(ctx, tx, pid, fmt.Sprintf("VendiGo te devolvió S/ %.2f del pedido %s con su fondo de emergencia.", float64(monto)/100, codigo))
 		m.app.Auditar(ctx, tx, adminID(ctx), "pagar_garantia", "pedido", pid, map[string]any{"monto": monto, "referencia": in.Referencia})
 		return nil
 	})

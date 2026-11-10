@@ -15,10 +15,12 @@ import (
 
 	"github.com/solanchveliz-dev/vendigo/api/internal/archivos"
 	"github.com/solanchveliz-dev/vendigo/api/internal/avisos"
+	"github.com/solanchveliz-dev/vendigo/api/internal/billetera"
 	"github.com/solanchveliz-dev/vendigo/api/internal/config"
 	"github.com/solanchveliz-dev/vendigo/api/internal/core"
 	"github.com/solanchveliz-dev/vendigo/api/internal/db"
 	"github.com/solanchveliz-dev/vendigo/api/internal/httpx"
+	"github.com/solanchveliz-dev/vendigo/api/internal/pedidos"
 	"github.com/solanchveliz-dev/vendigo/api/internal/seguridad"
 )
 
@@ -60,6 +62,23 @@ func main() {
 		}
 	}
 	app := &core.App{Cfg: cfg, DB: conexion, Cifrador: cif, Archivos: almacen, Avisos: notificador}
+
+	// En local (APP_ENV=dev) la API hace también las tareas del worker, para no tener que levantarlo aparte:
+	// confirmación automática de envíos de 7 días y bandeja de SMS. En el servidor las hace el worker.
+	if cfg.EsDev() {
+		go func() {
+			t := time.NewTicker(30 * time.Second)
+			defer t.Stop()
+			for range t.C {
+				if _, err := pedidos.Barrer(ctx, app); err != nil {
+					slog.Error("barrido", "err", err)
+				}
+				if _, err := billetera.EnviarSMSPendientes(ctx, app); err != nil {
+					slog.Error("sms", "err", err)
+				}
+			}
+		}()
+	}
 
 	srv := &http.Server{
 		Addr:              ":" + cfg.Puerto,

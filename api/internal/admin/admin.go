@@ -465,6 +465,7 @@ func (m *Modulo) aprobar(w http.ResponseWriter, r *http.Request) error {
 			billetera.Notificar(ctx, tx, tid, "Verificamos tu RUC", "Tu tienda ya muestra la insignia «Negocio con RUC verificado».", "/vendedor/verificacion")
 		} else {
 			billetera.Notificar(ctx, tx, tid, "Verificamos tu identidad", "El equipo de VendiGo aprobó tus datos. Tu tienda ya es visible para los compradores.", "/vendedor")
+			billetera.SMSTienda(ctx, tx, tid, "Verificamos tu identidad. Tu tienda ya es visible para los compradores:", "/vendedor")
 		}
 		m.app.Auditar(ctx, tx, adminID(ctx), "aprobar_identidad", "verificacion", id, nil)
 		return nil
@@ -494,6 +495,7 @@ func (m *Modulo) rechazar(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 		billetera.Notificar(ctx, tx, tid, "No pudimos verificar tu identidad", motivo+" Vuelve a enviar tus fotos.", "/vendedor/verificacion")
+		billetera.SMSTienda(ctx, tx, tid, "No pudimos verificar tus datos. Revisa el motivo y vuelve a enviarlos:", "/vendedor/verificacion")
 		m.app.Auditar(ctx, tx, adminID(ctx), "rechazar_identidad", "verificacion", id, map[string]string{"motivo": motivo})
 		return nil
 	})

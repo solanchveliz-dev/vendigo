@@ -74,6 +74,7 @@ func main() {
 	app := &core.App{Cfg: cfg, DB: conexion, Cifrador: cif, Archivos: s3, Avisos: core.NotificadorConsola{}}
 
 	adminDemo(ctx, conexion)
+	defer verificacionDemo(ctx, conexion, s3, cif)
 	var existe bool
 	conexion.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM usuarios WHERE celular='999888777')`).Scan(&existe)
 	if existe {
@@ -329,4 +330,36 @@ func agenciasDemo(ctx context.Context, conexion *sql.DB) {
 	for _, s := range sedes {
 		conexion.ExecContext(ctx, `INSERT INTO agencias_sedes (agencia, ciudad, nombre, direccion) VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING`, s[0], s[1], s[2], s[3])
 	}
+}
+
+// verificacionDemo deja la tienda de prueba con su DNI enviado y "por revisar" (con fotos de prueba), para que en la
+// demo el admin la apruebe y la tienda aparezca para los compradores. No toca tiendas que ya tienen verificación.
+func verificacionDemo(ctx context.Context, conexion *sql.DB, s3 *archivos.S3, cif *seguridad.Cifrador) {
+	var tid string
+	var tiene bool
+	if conexion.QueryRowContext(ctx, `SELECT t.id, EXISTS(SELECT 1 FROM verificaciones v WHERE v.tienda_id=t.id AND v.clase='identidad')
+		FROM tiendas t WHERE slug='luna-y-sol'`).Scan(&tid, &tiene) != nil || tiene {
+		return
+	}
+	keys := map[string]string{}
+	for i, parte := range []string{"frente", "reverso", "selfie"} {
+		key := fmt.Sprintf("dni/%s/demo-%s.png", tid, parte)
+		if s3 != nil {
+			s3.Subir(ctx, false, key, "image/png", imagen(color.RGBA{uint8(120 + 40*i), 150, 170, 255}))
+		}
+		keys[parte] = key
+	}
+	numero := "45678912"
+	cifrado := numero
+	if cif != nil {
+		if c, err := cif.Cifrar(numero); err == nil {
+			cifrado = c
+		}
+	}
+	if _, err := conexion.ExecContext(ctx, `INSERT INTO verificaciones (tienda_id, tipo_documento, numero_cifrado, ultimos4, nombre_completo, frente_key, reverso_key, selfie_key, clase)
+		VALUES ($1, 'dni', $2, $3, 'Camila Rojas', $4, $5, $6, 'identidad')`, tid, cifrado, numero[len(numero)-4:], keys["frente"], keys["reverso"], keys["selfie"]); err != nil {
+		slog.Error("verificación de prueba", "err", err)
+		return
+	}
+	fmt.Println("La tienda de prueba Luna & Sol tiene su DNI \"por revisar\": apruébalo en el panel admin (Vendedores) para que aparezca.")
 }

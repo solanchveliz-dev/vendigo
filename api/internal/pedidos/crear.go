@@ -273,6 +273,9 @@ func Crear(ctx context.Context, app *core.App, tx *sql.Tx, in PedidoNuevo) (stri
 		return "", "", err
 	}
 	billetera.Notificar(ctx, tx, in.TiendaID, "Nuevo pedido "+codigo, fmt.Sprintf("%s hizo un pedido de S/ %.2f. Acéptalo para empezar a prepararlo.", in.Nombre, float64(total)/100), "/vendedor/pedidos/"+pid)
+	if !in.Prueba {
+		billetera.SMSTienda(ctx, tx, in.TiendaID, fmt.Sprintf("Nuevo pedido %s de S/ %.2f. Acéptalo aquí:", codigo, float64(total)/100), "/vendedor/pedidos/"+pid)
+	}
 	return pid, codigo, nil
 }
 
@@ -337,5 +340,10 @@ func AbrirReclamo(ctx context.Context, tx *sql.Tx, pid, motivo, descripcion stri
 			"hasta que VendiGo revise el caso. Envía tus pruebas: boleta o guía de envío, conversación con el cliente, etc."
 	}
 	billetera.Notificar(ctx, tx, tid, "Reclamo en el pedido "+codigo, aviso, "/vendedor/cobros/reclamo/"+pid)
+	if motivo == "no_llego" {
+		billetera.SMSTienda(ctx, tx, tid, "Reclamo en el pedido "+codigo+": el cliente dice que no le llegó. Tu tienda está suspendida hasta revisar el caso. Envía tus pruebas:", "/vendedor/cobros/reclamo/"+pid)
+	} else {
+		billetera.SMSTienda(ctx, tx, tid, "Reclamo en el pedido "+codigo+". Responde con tus pruebas:", "/vendedor/cobros/reclamo/"+pid)
+	}
 	return nil
 }

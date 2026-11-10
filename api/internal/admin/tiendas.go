@@ -165,6 +165,7 @@ func (m *Modulo) suspenderTienda(w http.ResponseWriter, r *http.Request) error {
 			return httpx.Conflicto("no_aplica", "La tienda ya está suspendida.")
 		}
 		billetera.Notificar(ctx, tx, id, "Suspendimos tu tienda", "Tus clientes no la ven por ahora. Motivo: "+motivo+" Escríbenos a "+m.correoSoporte(ctx)+".", "/vendedor/tienda")
+		billetera.SMSTienda(ctx, tx, id, "Suspendimos tu tienda. Revisa el motivo:", "/vendedor/tienda")
 		m.app.Auditar(ctx, tx, adminID(ctx), "suspender_tienda", "tienda", id, map[string]string{"motivo": motivo})
 		return nil
 	})

@@ -61,11 +61,9 @@ Requisitos: Docker Desktop, Go 1.24 o superior y Node.js 20 o superior.
    go run ./cmd/seed
    ```
 
-4. Worker de tareas programadas (da por recibidos los envíos por agencia a los 7 días sin reclamo). En AWS lo dispara EventBridge; en local déjalo corriendo en otra terminal:
-
-   ```
-   go run ./cmd/worker
-   ```
+4. Tareas programadas: en local (`APP_ENV=dev`) la API ya las hace sola cada 30 segundos (confirmación automática de
+   envíos de 7 días y bandeja de SMS). En el servidor las hace el worker (`go run ./cmd/worker`, o su contenedor).
+   Los SMS se muestran en la consola de la API mientras `OTP_CANAL=log`; con `OTP_CANAL=sms` se envían con Amazon SNS.
 
 5. Web:
 

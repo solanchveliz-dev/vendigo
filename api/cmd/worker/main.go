@@ -1,4 +1,5 @@
-// Worker de tareas programadas. En AWS lo dispara Amazon EventBridge; en local corre en bucle.
+// Worker de tareas programadas: da por recibidos los envíos por agencia de más de 7 días y envía la bandeja de
+// SMS (Amazon SNS). En el servidor corre en bucle; en local la API ya hace estas tareas sola (APP_ENV=dev).
 package main
 
 import (
@@ -10,6 +11,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/solanchveliz-dev/vendigo/api/internal/avisos"
+	"github.com/solanchveliz-dev/vendigo/api/internal/billetera"
 	"github.com/solanchveliz-dev/vendigo/api/internal/config"
 	"github.com/solanchveliz-dev/vendigo/api/internal/core"
 	"github.com/solanchveliz-dev/vendigo/api/internal/db"
@@ -32,16 +35,16 @@ func main() {
 		os.Exit(1)
 	}
 	defer conexion.Close()
-	app := &core.App{Cfg: cfg, DB: conexion}
-
-	pasada := func() {
-		c, err := pedidos.Barrer(ctx, app)
-		if err != nil {
-			slog.Error("barrido", "err", err)
-			return
+	var notificador core.Notificador = core.NotificadorConsola{}
+	if cfg.OTPCanal == "sms" {
+		if notificador, err = avisos.NuevoSNS(ctx, cfg.S3Region); err != nil {
+			slog.Error("sms", "err", err)
+			os.Exit(1)
 		}
-		slog.Info("barrido", "confirmados", c)
 	}
+	app := &core.App{Cfg: cfg, DB: conexion, Avisos: notificador}
+
+	pasada := func() { Tareas(ctx, app) }
 	pasada()
 	if *unaVez {
 		return
@@ -55,5 +58,19 @@ func main() {
 		case <-t.C:
 			pasada()
 		}
+	}
+}
+
+// Tareas: una pasada del worker.
+func Tareas(ctx context.Context, app *core.App) {
+	if c, err := pedidos.Barrer(ctx, app); err != nil {
+		slog.Error("barrido", "err", err)
+	} else if c > 0 {
+		slog.Info("barrido", "confirmados", c)
+	}
+	if n, err := billetera.EnviarSMSPendientes(ctx, app); err != nil {
+		slog.Error("sms", "err", err)
+	} else if n > 0 {
+		slog.Info("sms enviados", "cantidad", n)
 	}
 }

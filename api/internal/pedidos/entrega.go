@@ -161,7 +161,7 @@ func (m *Modulo) informarPago(w http.ResponseWriter, r *http.Request) error {
 		if err := pagos.Cambiar(ctx, tx, pid, c); err != nil {
 			return err
 		}
-		return evento(ctx, tx, pid, estado, texto)
+		return eventoConSMS(ctx, tx, pid, estado, texto)
 	})
 	if err != nil {
 		return err
@@ -207,7 +207,7 @@ func (m *Modulo) informarDevolucion(w http.ResponseWriter, r *http.Request) erro
 		tx.QueryRowContext(ctx, `SELECT estado FROM pedidos WHERE id::text=$1`, pid).Scan(&estado)
 		u, _ := httpx.UsuarioDe(ctx)
 		m.app.Auditar(ctx, tx, u.ID, "informar_devolucion", "pedido", pid, map[string]int{"monto": monto})
-		return evento(ctx, tx, pid, estado, fmt.Sprintf("La tienda informó que te devolvió S/ %.2f. Si no te llegó, abre un reclamo o usa el Libro de Reclamaciones.", float64(monto)/100))
+		return eventoConSMS(ctx, tx, pid, estado, fmt.Sprintf("La tienda informó que te devolvió S/ %.2f. Si no te llegó, abre un reclamo o usa el Libro de Reclamaciones.", float64(monto)/100))
 	})
 	if err != nil {
 		return err
