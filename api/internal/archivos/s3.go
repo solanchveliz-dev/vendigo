@@ -108,7 +108,7 @@ func (s *S3) Subir(ctx context.Context, publico bool, key, contentType string, d
 	return err
 }
 
-// Leer descarga un archivo (lo usa la IA para analizar fotos y boletas).
+// Leer descarga un archivo (lo usa la IA para analizar las fotos de productos).
 func (s *S3) Leer(ctx context.Context, publico bool, key string) ([]byte, string, error) {
 	out, err := s.cliente.GetObject(ctx, &s3.GetObjectInput{Bucket: aws.String(s.bucket(publico)), Key: aws.String(key)})
 	if err != nil {

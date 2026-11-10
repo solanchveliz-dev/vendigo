@@ -601,6 +601,9 @@ func (m *Modulo) catalogos(w http.ResponseWriter, r *http.Request) error {
 var tiposArchivo = map[string]bool{"producto": true, "logo": true, "portada": true, "historia": true, "pago_qr": true, "devolucion": false, "boleta": false, "dni": false, "reclamo": false}
 var formatos = map[string]string{"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}
 
+// La boleta de envío también puede ser el PDF que entrega la agencia (solo evidencia: no se analiza con IA).
+var formatosBoleta = map[string]string{"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "application/pdf": "pdf"}
+
 const tamanoMaximo = 5 << 20
 
 type subidaReq struct {
@@ -623,12 +626,16 @@ func (m *Modulo) pedirSubida(w http.ResponseWriter, r *http.Request) error {
 	if !ok {
 		return httpx.Invalido("Tipo de archivo no válido.")
 	}
-	ext, ok := formatos[in.ContentType]
+	permitidos, aviso := formatos, "Sube una imagen JPG, PNG o WEBP."
+	if in.Tipo == "boleta" {
+		permitidos, aviso = formatosBoleta, "Sube una foto (JPG, PNG o WEBP) o el PDF de la boleta."
+	}
+	ext, ok := permitidos[in.ContentType]
 	if !ok {
-		return httpx.Invalido("Sube una imagen JPG, PNG o WEBP.")
+		return httpx.Invalido(aviso)
 	}
 	if in.Tamano <= 0 || in.Tamano > tamanoMaximo {
-		return httpx.Invalido("La imagen debe pesar menos de 5 MB.")
+		return httpx.Invalido("El archivo debe pesar menos de 5 MB.")
 	}
 	key := fmt.Sprintf("%s/%s/%s.%s", in.Tipo, id, uuid.NewString(), ext)
 	url, err := m.app.Archivos.URLSubida(ctx, publico, key, in.ContentType, in.Tamano)

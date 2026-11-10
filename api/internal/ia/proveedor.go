@@ -72,12 +72,8 @@ type Simulado struct{}
 
 func (Simulado) Preguntar(_ context.Context, instruccion string, imagen []byte, _ string) (string, error) {
 	switch {
-	case strings.Contains(instruccion, "BOLETA"):
-		return `{"agencia":"Shalom","numero_orden":"00482913","clave_recojo":"5731"}`, nil
 	case strings.Contains(instruccion, "PRODUCTO"):
 		return `{"nombre":"Aretes de plata con piedra natural","descripcion":"Aretes livianos hechos a mano en plata, con una piedra natural al centro. Ideales para uso diario o para regalar.","categoria":"Aretes","caracteristicas":["Plata 950","Hechos a mano","Cierre de presión"]}`, nil
-	case strings.Contains(instruccion, "POST"):
-		return "[INSTAGRAM]\n✨ ¡Nuevo en la tienda! Hecho a mano y en stock limitado.\n📦 Envíos a todo el Perú.\n🔒 Pídelo desde nuestro link y paga seguro con VendiGo.\n[TIKTOK]\nPOV: encontraste justo lo que buscabas 😍 Link en mi perfil 👉 #emprendimientoperuano #hechoenperu\n[WHATSAPP]\nHola 👋 Ya llegó lo nuevo a la tienda. Pide aquí y paga seguro 🔒", nil
 	}
 	return "", fmt.Errorf("instrucción no reconocida")
 }

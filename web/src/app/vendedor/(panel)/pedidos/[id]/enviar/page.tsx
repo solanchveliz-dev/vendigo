@@ -3,12 +3,12 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { use, useEffect, useState } from "react";
-import { CalendarDays, Camera, Check, ChevronRight, FileText, Info, Loader2, Wallet } from "lucide-react";
+import { CalendarDays, Camera, Check, ChevronRight, FileText, Info, Link2, Loader2, Wallet } from "lucide-react";
 import { api, ErrorApi, useApi } from "@/lib/api";
 import { soles } from "@/lib/formato";
 import { subirImagen } from "@/lib/subir";
 import type { PedidoDetalle, Tienda } from "@/lib/tipos";
-import { Boton, Cargando, Entrada, Selector, cn, useAvisar } from "@/components/ui";
+import { Boton, Cargando, Entrada, Selector, useAvisar } from "@/components/ui";
 import { usePanel } from "@/components/panel/contexto";
 
 const OTRO = "otro";
@@ -21,21 +21,24 @@ export default function EnviarPedido({ params }: { params: Promise<{ id: string 
   const { recargarResumen } = usePanel();
   const { datos: p } = useApi<PedidoDetalle>(`/vendedor/pedidos/${id}`);
   const { datos: t } = useApi<Tienda>("/vendedor/tienda");
-  const ia = useApi<{ quedan: number }>("/vendedor/ia");
 
   const [agencia, setAgencia] = useState("");
   const [codigo, setCodigo] = useState("");
   const [clave, setClave] = useState("");
+  const [otraAgencia, setOtraAgencia] = useState("");
+  const [rastreo, setRastreo] = useState("");
   const [boleta, setBoleta] = useState<{ key: string; url: string; nombre: string } | null>(null);
   const [subiendo, setSubiendo] = useState(false);
-  const [leyendo, setLeyendo] = useState(false);
   const [moto, setMoto] = useState("");
   const [nuevo, setNuevo] = useState({ nombre: "", celular: "", guardar: true });
   const [error, setError] = useState("");
   const [guardando, setGuardando] = useState(false);
 
   useEffect(() => {
-    if (p && !agencia) setAgencia(p.agencia || t?.entrega.agencias[0] || "Shalom");
+    if (p && !agencia) {
+      const inicial = p.agencia || t?.entrega.agencias.find((x) => x !== "Otra") || "Shalom";
+      setAgencia(inicial === "Otra" ? OTRO : inicial);
+    }
     if (p && !moto) setMoto(p.motorizados_guardados.length ? "0" : OTRO);
   }, [p, t, agencia, moto]);
 
@@ -63,10 +66,11 @@ export default function EnviarPedido({ params }: { params: Promise<{ id: string 
     );
   }
 
-  async function subir(file: File | undefined, conIA: boolean) {
+  // La boleta (foto o PDF) se guarda solo como evidencia: no se analiza con IA ni gasta créditos.
+  async function subir(file: File | undefined) {
     if (!file) return;
-    if (!/^image\//.test(file.type)) {
-      setError("Sube una foto (JPG o PNG) de la boleta.");
+    if (!/^image\//.test(file.type) && file.type !== "application/pdf") {
+      setError("Sube una foto (JPG o PNG) o el PDF de la boleta.");
       return;
     }
     setError("");
@@ -74,27 +78,10 @@ export default function EnviarPedido({ params }: { params: Promise<{ id: string 
     try {
       const f = await subirImagen(file, "boleta");
       setBoleta({ ...f, nombre: file.name });
-      if (conIA) await leer(f.key);
     } catch (e) {
       avisar((e as Error).message, "error");
     } finally {
       setSubiendo(false);
-    }
-  }
-
-  async function leer(key: string) {
-    setLeyendo(true);
-    try {
-      const r = await api.post<{ datos: { agencia?: string; numero_orden: string; clave_recojo: string } }>("/vendedor/ia/leer-boleta", { boleta_key: key });
-      if (r.datos.numero_orden) setCodigo(r.datos.numero_orden);
-      if (r.datos.clave_recojo) setClave(r.datos.clave_recojo);
-      if (r.datos.agencia && opciones.includes(r.datos.agencia)) setAgencia(r.datos.agencia);
-      ia.recargar();
-      avisar("La IA llenó el código y la clave. Revisa que coincidan con la boleta.");
-    } catch (e) {
-      avisar((e as ErrorApi).message, "error");
-    } finally {
-      setLeyendo(false);
     }
   }
 
@@ -104,12 +91,21 @@ export default function EnviarPedido({ params }: { params: Promise<{ id: string 
     let ruta = "enviar";
     let mensaje = "";
     if (pedido.entrega === "agencia") {
-      if (!codigo.trim() && !boleta) {
-        setError("Escribe el código o sube la foto de la boleta de envío (es tu prueba si hay reclamo).");
+      const empresa = agencia === OTRO ? otraAgencia.trim() : agencia;
+      if (!empresa) {
+        setError("Escribe el nombre de la empresa de transporte.");
         return;
       }
-      cuerpo = { agencia, numero_orden: codigo.trim(), clave_recojo: clave.trim(), boleta_key: boleta?.key ?? "" };
-      mensaje = `Listo: enviado por ${agencia}. Avisamos a ${nombre}.`;
+      if (!codigo.trim() && !boleta) {
+        setError("Escribe el número de guía o adjunta la boleta de envío (es tu prueba si hay reclamo).");
+        return;
+      }
+      if (rastreo.trim() && !/^https:\/\/\S+$/.test(rastreo.trim())) {
+        setError("El enlace de rastreo debe empezar con https:// (cópialo de la web o app de la agencia).");
+        return;
+      }
+      cuerpo = { agencia: empresa, numero_orden: codigo.trim(), clave_recojo: clave.trim(), enlace_rastreo: rastreo.trim(), boleta_key: boleta?.key ?? "" };
+      mensaje = `Listo: enviado por ${empresa}. Avisamos a ${nombre}.`;
     } else if (pedido.entrega === "motorizado") {
       const elegido = moto === OTRO ? { ...nuevo, celular: nuevo.celular.replace(/\D/g, "") } : { ...pedido.motorizados_guardados[Number(moto)], guardar: false };
       if (!elegido.nombre?.trim() || !/^9\d{8}$/.test(elegido.celular ?? "")) {
@@ -134,7 +130,8 @@ export default function EnviarPedido({ params }: { params: Promise<{ id: string 
     }
   }
 
-  const opciones = Array.from(new Set([...(t.entrega.agencias.length ? t.entrega.agencias : ["Shalom"]), ...(p.agencia ? [p.agencia] : [])]));
+  // "Otra" del catálogo se reemplaza por "Otra empresa", que permite escribir el nombre.
+  const opciones = Array.from(new Set([...(t.entrega.agencias.length ? t.entrega.agencias : ["Shalom"]), ...(p.agencia ? [p.agencia] : [])])).filter((a) => a !== "Otra");
   const resumen = (
     <div className="flex items-center gap-2.5 text-sm text-gris">
       {p.items_detalle.slice(0, 4).map((it, i) => (
@@ -187,36 +184,37 @@ export default function EnviarPedido({ params }: { params: Promise<{ id: string 
 
         <section className="space-y-5 rounded-[22px] bg-white p-6 shadow-suave ring-1 ring-linea/60">
           {resumen}
-          <label className={cn("flex cursor-pointer items-center gap-3 rounded-2xl border border-dashed border-coral/60 bg-coral-claro/70 px-4 py-3.5", (subiendo || leyendo) && "opacity-70")}>
-            <span className="min-w-0 flex-1">
-              <b className="flex items-center gap-2 text-sm text-tinta">{leyendo || subiendo ? <Loader2 className="size-4 animate-spin" /> : <Camera className="size-4" />} Leer boleta con IA</b>
-              <span className="text-xs text-gris">Toma foto y se llenan el código y la clave · 2 créditos{ia.datos ? ` (te quedan ${ia.datos.quedan})` : ""}</span>
-            </span>
-            <input type="file" accept="image/*" capture="environment" className="hidden" disabled={subiendo || leyendo} onChange={(e) => subir(e.target.files?.[0], true)} />
-          </label>
-
-          <div>
-            <label className="mb-1.5 block text-sm font-semibold text-tinta" htmlFor="ds-ag">Agencia</label>
-            <Selector id="ds-ag" value={agencia} onChange={(e) => setAgencia(e.target.value)}>
-              {opciones.map((a) => <option key={a}>{a}</option>)}
-            </Selector>
+          <div className="grid gap-5 sm:grid-cols-2">
+            <div>
+              <label className="mb-1.5 block text-sm font-semibold text-tinta" htmlFor="ds-ag">Empresa de transporte</label>
+              <Selector id="ds-ag" value={agencia} onChange={(e) => { setAgencia(e.target.value); setError(""); }}>
+                {opciones.map((a) => <option key={a}>{a}</option>)}
+                <option value={OTRO}>Otra empresa</option>
+              </Selector>
+            </div>
+            {agencia === OTRO && (
+              <div>
+                <label className="mb-1.5 block text-sm font-semibold text-tinta" htmlFor="ds-otra">¿Cuál?</label>
+                <Entrada id="ds-otra" value={otraAgencia} maxLength={60} onChange={(e) => { setOtraAgencia(e.target.value); setError(""); }} placeholder="Ej. Transportes Línea" />
+              </div>
+            )}
           </div>
 
           <div className="flex gap-3 rounded-2xl bg-aviso-claro px-4 py-3 text-sm text-tinta">
             <Info className="mt-0.5 size-4 shrink-0 text-aviso" />
-            <span><b className="text-aviso">Tu cliente necesita el código para recoger su paquete.</b> Escribe el código o sube la foto de la boleta de envío (es tu prueba si hay reclamo): con uno basta.</span>
+            <span><b className="text-aviso">Tu cliente necesita el número de guía para recoger su paquete.</b> Escríbelo tal como aparece en la boleta. Adjuntar la boleta es opcional, pero es tu mejor prueba si hay un reclamo.</span>
           </div>
 
           <div className="grid gap-5 sm:grid-cols-2">
             <div>
-              <label className="mb-1.5 block text-sm font-semibold text-tinta" htmlFor="ds-track">Código de envío</label>
-              <Entrada id="ds-track" value={codigo} maxLength={40} onChange={(e) => { setCodigo(e.target.value); setError(""); }} placeholder="Ej. SH123456789" />
+              <label className="mb-1.5 block text-sm font-semibold text-tinta" htmlFor="ds-track">Número de guía o seguimiento</label>
+              <Entrada id="ds-track" value={codigo} maxLength={40} onChange={(e) => { setCodigo(e.target.value); setError(""); }} placeholder="Ej. 00482913" />
             </div>
             <div>
-              <span className="mb-1.5 block text-sm font-semibold text-tinta">Foto del comprobante</span>
+              <span className="mb-1.5 block text-sm font-semibold text-tinta">Boleta de envío <span className="font-normal text-gris">(opcional)</span></span>
               <label className="flex h-[46px] cursor-pointer items-center gap-2 rounded-full bg-white px-5 text-sm font-bold text-tinta ring-1 ring-linea hover:bg-crema">
-                {subiendo ? <Loader2 className="size-4 animate-spin" /> : <Camera className="size-4" />} {boleta ? "Cambiar foto" : "Tomar o subir foto"}
-                <input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => subir(e.target.files?.[0], false)} />
+                {subiendo ? <Loader2 className="size-4 animate-spin" /> : <Camera className="size-4" />} {boleta ? "Cambiar archivo" : "Foto o PDF"}
+                <input type="file" accept="image/*,application/pdf" className="hidden" disabled={subiendo} onChange={(e) => subir(e.target.files?.[0])} />
               </label>
               {boleta && (
                 <a href={boleta.url} target="_blank" rel="noreferrer" className="mt-1.5 flex items-center gap-1.5 text-sm text-pino underline">
@@ -226,10 +224,17 @@ export default function EnviarPedido({ params }: { params: Promise<{ id: string 
             </div>
           </div>
 
-          <div className="max-w-xs">
-            <label className="mb-1.5 block text-sm font-semibold text-tinta" htmlFor="ds-key">Clave de recojo <span className="font-normal text-gris">(opcional)</span></label>
-            <Entrada id="ds-key" value={clave} maxLength={20} onChange={(e) => setClave(e.target.value)} placeholder="Si la agencia te pide una clave" />
-            <p className="mt-1 text-xs text-gris">Solo la verá tu cliente.</p>
+          <div className="grid gap-5 sm:grid-cols-2">
+            <div>
+              <label className="mb-1.5 block text-sm font-semibold text-tinta" htmlFor="ds-key">Clave de recojo <span className="font-normal text-gris">(si la agencia te la dio)</span></label>
+              <Entrada id="ds-key" value={clave} maxLength={20} onChange={(e) => setClave(e.target.value)} placeholder="Ej. 4821" />
+              <p className="mt-1 text-xs text-gris">Solo la verá tu cliente en su enlace privado.</p>
+            </div>
+            <div>
+              <label className="mb-1.5 flex items-center gap-1.5 text-sm font-semibold text-tinta" htmlFor="ds-rastreo"><Link2 className="size-4" /> Enlace de rastreo <span className="font-normal text-gris">(opcional)</span></label>
+              <Entrada id="ds-rastreo" type="url" inputMode="url" value={rastreo} maxLength={300} onChange={(e) => { setRastreo(e.target.value); setError(""); }} placeholder="https://…" />
+              <p className="mt-1 text-xs text-gris">Cópialo de la web o app de la agencia, si te dan uno.</p>
+            </div>
           </div>
 
           <p className="flex items-center gap-1.5 text-sm text-gris">

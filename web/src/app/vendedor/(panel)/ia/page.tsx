@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { BarChart3, Camera, FileText, Info, MessageSquareQuote, Sparkles } from "lucide-react";
+import { BarChart3, Camera, Info, MessageSquareQuote, Sparkles } from "lucide-react";
 import { api, useApi } from "@/lib/api";
 import type { Creditos, Plan } from "@/lib/tipos";
 import type { PagoVendiGo } from "@/lib/pagos-plan";
@@ -11,7 +11,6 @@ import { PagarAVendiGo } from "@/components/panel/pagar-vendigo";
 
 const herramientas = [
   { id: "publicar_con_foto", icono: Camera, titulo: "Publicar con foto", texto: "Sube la foto y la IA propone nombre, descripción y categoría.", href: "/vendedor/productos/nuevo", boton: "Publicar un producto" },
-  { id: "leer_boleta", icono: FileText, titulo: "Leer boleta de envío", texto: "Al registrar un envío, la IA lee el número de orden y la clave de la boleta.", href: "/vendedor/pedidos?grupo=por_enviar", boton: "Ver pedidos por enviar" },
   { id: "analista_ventas", icono: BarChart3, titulo: "Analista de ventas", texto: "Revisa qué se vendió más y qué menos, estima las próximas semanas y te dice qué reponer, qué impulsar y qué revisar.", href: "/vendedor/analitica", boton: "Analizar mis ventas" },
   { id: "resumen_opiniones", icono: MessageSquareQuote, titulo: "Resumen de opiniones", texto: "Resume lo que dicen tus clientes de cada producto. Gratis.", href: "", boton: "" },
 ];

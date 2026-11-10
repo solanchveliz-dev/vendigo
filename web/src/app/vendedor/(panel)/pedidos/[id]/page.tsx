@@ -170,8 +170,13 @@ export default function DetallePedido({ params }: { params: Promise<{ id: string
                 ) : (
                   <>
                     <Dato k="Enviado por" v={p.envio.agencia} />
-                    <Dato k="Código de envío" v={p.envio.numero_orden} />
+                    <Dato k="Número de guía" v={p.envio.numero_orden} />
                     <Dato k="Clave de recojo" v={p.envio.clave_recojo} />
+                    {p.envio.enlace_rastreo && (
+                      <a href={p.envio.enlace_rastreo} target="_blank" rel="noreferrer" className="mt-1 inline-block text-sm font-semibold text-pino underline">
+                        Abrir rastreo de la agencia
+                      </a>
+                    )}
                   </>
                 )}
                 <Dato k="Nota" v={p.envio.nota} />

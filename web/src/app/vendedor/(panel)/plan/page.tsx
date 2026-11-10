@@ -161,7 +161,7 @@ export default function TuSuscripcion() {
           <div className="mt-3 h-2 overflow-hidden rounded-full bg-white">
             <div className="h-full rounded-full bg-pino" style={{ width: `${totalIA && ia.datos ? (ia.datos.quedan / totalIA) * 100 : 0}%` }} />
           </div>
-          <p className="mt-3 text-xs text-gris">Publicar con foto 3 · Leer boleta 2 · Analista de ventas 2 · Post para redes 1</p>
+          <p className="mt-3 text-xs text-gris">Publicar con foto 3 · Analista de ventas 2</p>
           <Link href="/vendedor/ia" className="mt-2 inline-flex items-center gap-1 text-sm font-semibold text-pino">Herramientas IA <ArrowRight className="size-3.5" /></Link>
         </section>
       </div>

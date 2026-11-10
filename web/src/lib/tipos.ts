@@ -142,6 +142,7 @@ export type PedidoDetalle = PedidoResumen & {
     agencia: string;
     numero_orden: string;
     clave_recojo: string;
+    enlace_rastreo: string;
     boleta_url: string;
     nota: string;
     registrado_en: string;

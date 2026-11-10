@@ -297,12 +297,8 @@ export default function Seguimiento({ params }: { params: Promise<{ token: strin
 
             <Seccion titulo="Cómo va tu pedido">
               <LineaTiempo pedido={p} />
-              {p.envio && (p.envio.numero_orden || p.envio.clave_recojo) && (
-                <div className="mt-4 rounded-2xl bg-crema/70 p-4 text-sm">
-                  <p className="font-bold text-tinta">Datos para recoger en {p.envio.agencia || p.agencia}</p>
-                  {p.envio.numero_orden && <p>N.° de orden: <b>{p.envio.numero_orden}</b></p>}
-                  {p.envio.clave_recojo && <p>Clave: <b>{p.envio.clave_recojo}</b></p>}
-                </div>
+              {p.envio && p.entrega === "agencia" && (p.envio.numero_orden || p.envio.clave_recojo || p.envio.enlace_rastreo) && (
+                <DatosRecojo agencia={p.envio.agencia || p.agencia} guia={p.envio.numero_orden} clave={p.envio.clave_recojo} rastreo={p.envio.enlace_rastreo} />
               )}
               {puede("confirmar_recibido") && (
                 <Boton className="mt-4" cargando={ocupado === "recibido"} onClick={() => hacer("recibido", () => api.post(`/seguimiento/${token}/recibido`))}>
@@ -398,6 +394,31 @@ export default function Seguimiento({ params }: { params: Promise<{ token: strin
           </div>
         </div>
       </Modal>
+    </div>
+  );
+}
+
+// Datos para recoger en la agencia. La clave queda oculta hasta que la compradora la pide, por si alguien
+// mira su pantalla; solo se ve en este enlace privado.
+function DatosRecojo({ agencia, guia, clave, rastreo }: { agencia: string; guia: string; clave: string; rastreo: string }) {
+  const [verClave, setVerClave] = useState(false);
+  return (
+    <div className="mt-4 space-y-1.5 rounded-2xl bg-crema/70 p-4 text-sm">
+      <p className="font-bold text-tinta">Datos para recoger en {agencia}</p>
+      {guia && <p>N.° de guía: <b>{guia}</b></p>}
+      {clave && (
+        <p className="flex items-center gap-2">
+          Clave de recojo: {verClave ? <b>{clave}</b> : <b>••••</b>}
+          <button type="button" className="text-xs font-semibold text-pino underline" onClick={() => setVerClave((v) => !v)}>{verClave ? "Ocultar" : "Ver clave"}</button>
+        </p>
+      )}
+      {rastreo ? (
+        <a href={rastreo} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 font-semibold text-pino underline">
+          <ExternalLink className="size-4" /> Ver el rastreo en {agencia}
+        </a>
+      ) : (
+        guia && <p className="text-gris">Puedes consultar el estado en la web o app de {agencia} con tu número de guía.</p>
+      )}
     </div>
   );
 }

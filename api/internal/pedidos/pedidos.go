@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -169,12 +170,14 @@ type Item struct {
 }
 
 type Envio struct {
-	Agencia     string    `json:"agencia"`
-	NumeroOrden string    `json:"numero_orden"`
-	ClaveRecojo string    `json:"clave_recojo"`
-	BoletaURL   string    `json:"boleta_url"`
-	Nota        string    `json:"nota"`
-	Registrado  time.Time `json:"registrado_en"`
+	Agencia     string `json:"agencia"`
+	NumeroOrden string `json:"numero_orden"`
+	ClaveRecojo string `json:"clave_recojo"`
+	// Enlace de rastreo que la tienda copia de la agencia (opcional). VendiGo no arma enlaces por su cuenta.
+	EnlaceRastreo string    `json:"enlace_rastreo"`
+	BoletaURL     string    `json:"boleta_url"`
+	Nota          string    `json:"nota"`
+	Registrado    time.Time `json:"registrado_en"`
 	// Solo para delivery con motorizado.
 	MotorizadoNombre  string `json:"motorizado_nombre"`
 	MotorizadoCelular string `json:"motorizado_celular"`
@@ -326,9 +329,9 @@ func (m *Modulo) cargar(ctx context.Context, tid, pid string) (*Detalle, error) 
 
 	var e Envio
 	var boleta sql.NullString
-	err = m.app.DB.QueryRowContext(ctx, `SELECT agencia, numero_orden, clave_recojo, boleta_key, nota, registrado_en, motorizado_nombre, motorizado_celular
+	err = m.app.DB.QueryRowContext(ctx, `SELECT agencia, numero_orden, clave_recojo, enlace_rastreo, boleta_key, nota, registrado_en, motorizado_nombre, motorizado_celular
 		FROM envios WHERE pedido_id=$1`, d.ID).
-		Scan(&e.Agencia, &e.NumeroOrden, &e.ClaveRecojo, &boleta, &e.Nota, &e.Registrado, &e.MotorizadoNombre, &e.MotorizadoCelular)
+		Scan(&e.Agencia, &e.NumeroOrden, &e.ClaveRecojo, &e.EnlaceRastreo, &boleta, &e.Nota, &e.Registrado, &e.MotorizadoNombre, &e.MotorizadoCelular)
 	if err == nil {
 		if boleta.Valid {
 			e.BoletaURL, _ = m.app.Archivos.URLLectura(ctx, boleta.String)
@@ -612,8 +615,10 @@ type envioReq struct {
 	Agencia     string `json:"agencia"`
 	NumeroOrden string `json:"numero_orden"`
 	ClaveRecojo string `json:"clave_recojo"`
-	BoletaKey   string `json:"boleta_key"`
-	Nota        string `json:"nota"`
+	// Enlace de rastreo copiado de la web o app de la agencia (opcional).
+	EnlaceRastreo string `json:"enlace_rastreo"`
+	BoletaKey     string `json:"boleta_key"`
+	Nota          string `json:"nota"`
 	// Motorizado: quién lo lleva y si se guarda en "mis motorizados".
 	MotorizadoNombre  string `json:"motorizado_nombre"`
 	MotorizadoCelular string `json:"motorizado_celular"`
@@ -639,7 +644,17 @@ func (m *Modulo) enviar(w http.ResponseWriter, r *http.Request) error {
 				return httpx.Invalido("Escribe el código o sube la foto de la boleta de envío (es tu prueba si hay reclamo).")
 			}
 			if len(in.NumeroOrden) > 40 {
-				return httpx.Invalido("El código de envío es muy largo.")
+				return httpx.Invalido("El número de guía es muy largo.")
+			}
+			in.ClaveRecojo = strings.TrimSpace(in.ClaveRecojo)
+			if len(in.ClaveRecojo) > 20 {
+				return httpx.Invalido("La clave de recojo es muy larga.")
+			}
+			in.EnlaceRastreo = strings.TrimSpace(in.EnlaceRastreo)
+			if in.EnlaceRastreo != "" {
+				if u, err := url.Parse(in.EnlaceRastreo); err != nil || u.Scheme != "https" || u.Host == "" || len(in.EnlaceRastreo) > 300 {
+					return httpx.Invalido("El enlace de rastreo debe empezar con https:// (cópialo de la web o app de la agencia).")
+				}
 			}
 			if in.BoletaKey != "" && !strings.HasPrefix(in.BoletaKey, "boleta/"+tid+"/") {
 				return httpx.Invalido("La boleta no pertenece a tu tienda.")
@@ -647,6 +662,9 @@ func (m *Modulo) enviar(w http.ResponseWriter, r *http.Request) error {
 			in.Agencia = strings.TrimSpace(in.Agencia)
 			if in.Agencia == "" {
 				tx.QueryRowContext(ctx, `SELECT agencia FROM pedidos WHERE id=$1`, pid).Scan(&in.Agencia)
+			}
+			if len([]rune(in.Agencia)) > 60 {
+				return httpx.Invalido("El nombre de la empresa de transporte es muy largo.")
 			}
 			if in.NumeroOrden != "" {
 				detalle = fmt.Sprintf("Enviado por %s. Código %s", in.Agencia, in.NumeroOrden)
@@ -672,7 +690,7 @@ func (m *Modulo) enviar(w http.ResponseWriter, r *http.Request) error {
 					return err
 				}
 			}
-			in.Agencia, in.NumeroOrden, in.ClaveRecojo, in.BoletaKey = "Motorizado", "", "", ""
+			in.Agencia, in.NumeroOrden, in.ClaveRecojo, in.BoletaKey, in.EnlaceRastreo = "Motorizado", "", "", "", ""
 			detalle = fmt.Sprintf("Tu pedido va en camino con %s (%s). Pagas al recibir.", in.MotorizadoNombre, in.MotorizadoCelular)
 		default:
 			return httpx.Conflicto("estado_invalido", "Los pedidos de recojo no se envían.")
@@ -681,12 +699,12 @@ func (m *Modulo) enviar(w http.ResponseWriter, r *http.Request) error {
 		if in.BoletaKey != "" {
 			boleta = in.BoletaKey
 		}
-		if _, err := tx.ExecContext(ctx, `INSERT INTO envios (pedido_id, agencia, numero_orden, clave_recojo, boleta_key, nota, motorizado_nombre, motorizado_celular)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+		if _, err := tx.ExecContext(ctx, `INSERT INTO envios (pedido_id, agencia, numero_orden, clave_recojo, boleta_key, nota, motorizado_nombre, motorizado_celular, enlace_rastreo)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
 			ON CONFLICT (pedido_id) DO UPDATE SET agencia=$2, numero_orden=$3, clave_recojo=$4, boleta_key=$5, nota=$6,
-			motorizado_nombre=$7, motorizado_celular=$8, registrado_en=now()`,
+			motorizado_nombre=$7, motorizado_celular=$8, enlace_rastreo=$9, registrado_en=now()`,
 			pid, in.Agencia, in.NumeroOrden, strings.TrimSpace(in.ClaveRecojo), boleta, strings.TrimSpace(in.Nota),
-			in.MotorizadoNombre, in.MotorizadoCelular); err != nil {
+			in.MotorizadoNombre, in.MotorizadoCelular, in.EnlaceRastreo); err != nil {
 			return err
 		}
 		if _, err := tx.ExecContext(ctx, `UPDATE pedidos SET estado='enviado', enviado_en=now() WHERE id=$1`, pid); err != nil {

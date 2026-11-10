@@ -1,6 +1,5 @@
 "use client";
 
-import { PostRedes } from "./post-redes";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -376,10 +375,8 @@ export function PublicarProducto({ producto }: { producto?: Producto }) {
         <Cabecera titulo="Nuevo producto" texto="Toca en vez de escribir: elige qué vendes y marca lo que tienes." migas="Nuevo" />
       )}
 
-      {/* Aviso de IA: al crear, llenar con foto; al editar, post para redes */}
-      {producto ? (
-        <PostRedes productoId={producto.id} creditos={creditos} alUsar={ia.recargar} />
-      ) : (
+      {/* Aviso de IA: al crear un producto, la IA llena los datos a partir de la foto */}
+      {!producto && (
       <label className="mb-5 flex cursor-pointer items-center gap-4 rounded-2xl border border-dashed border-coral/60 bg-coral-claro/70 px-4 py-3.5">
         <span className="grid size-10 shrink-0 place-items-center rounded-full bg-white text-coral"><Camera className="size-5" /></span>
         <span className="min-w-0 flex-1">

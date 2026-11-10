@@ -67,3 +67,29 @@ internal/
 ```
 go test ./...
 ```
+
+## Probar SMS (Amazon SNS) e IA (Amazon Bedrock) reales en local
+
+Por defecto todo es gratis y simulado (`OTP_CANAL=log`, `IA_PROVEEDOR=simulado`). Para probar con tu cuenta de AWS:
+
+1. **Usuario de IAM solo para pruebas** (IAM → Users → Create user, sin acceso a la consola). Adjúntale una política
+   con solo dos permisos: `sns:Publish` sobre `*` y `bedrock:InvokeModel` sobre
+   `arn:aws:bedrock:us-east-1::foundation-model/amazon.nova-lite-v1:0`. Crea una *access key* (tipo "Local code").
+2. **Llaves en `api/.env`** (nunca en GitHub; `.env` ya está en `.gitignore`):
+   ```
+   AWS_ACCESS_KEY_ID=AKIA...
+   AWS_SECRET_ACCESS_KEY=...
+   AWS_REGION=us-east-1
+   OTP_CANAL=sms
+   IA_PROVEEDOR=bedrock
+   ```
+   Las llaves `S3_ACCESS_KEY` / `S3_SECRET_KEY` siguen siendo las de MinIO: no se mezclan.
+3. **SMS:** la cuenta nueva está en el *sandbox* de SMS. En la consola (región us-east-1) agrega y verifica tus
+   celulares de prueba (`+51 9XXXXXXXX`) en "Sandbox destination phone numbers". El límite de gasto inicial es
+   de US$ 1 al mes: alcanza para probar, no para producción.
+4. **IA:** en Bedrock → Model catalog abre **Amazon Nova Lite** (`amazon.nova-lite-v1:0`) y, si la consola lo
+   pide, habilita el acceso. Prueba "Publicar con foto" (al crear un producto) o el "Analista de ventas" desde el panel del vendedor.
+5. Reinicia la API. Si algo falla, el error aparece en la consola de la API (`AccessDenied` = falta un permiso;
+   un SMS que no llega en sandbox = el número no está verificado).
+
+Para volver al modo gratis basta con regresar `OTP_CANAL=log` e `IA_PROVEEDOR=simulado`.

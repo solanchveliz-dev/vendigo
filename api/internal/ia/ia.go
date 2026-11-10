@@ -18,7 +18,7 @@ import (
 )
 
 // La IA no responde mensajes: automatiza tareas del vendedor. Cada herramienta gasta créditos del plan.
-var Costos = map[string]int{"publicar_con_foto": 3, "leer_boleta": 2, "crear_post": 1, "analista_ventas": 2, "resumen_opiniones": 0}
+var Costos = map[string]int{"publicar_con_foto": 3, "analista_ventas": 2, "resumen_opiniones": 0}
 
 // El paquete extra (100 créditos por S/ 5) se define en planes: es un pago a VendiGo, solo con Culqi.
 const paqueteCreditos = planes.PaqueteCreditosIA
@@ -36,8 +36,6 @@ func (m *Modulo) RutasVendedor(r chi.Router) {
 	r.Group(func(r chi.Router) {
 		r.Use(httpx.Limite(30, time.Minute))
 		r.Method("POST", "/ia/publicar-con-foto", httpx.Handler(m.publicarConFoto))
-		r.Method("POST", "/ia/leer-boleta", httpx.Handler(m.leerBoleta))
-		r.Method("POST", "/ia/crear-post", httpx.Handler(m.crearPost))
 		r.Method("POST", "/ia/analista", httpx.Handler(m.analista))
 	})
 }
@@ -174,145 +172,6 @@ func (m *Modulo) publicarConFoto(w http.ResponseWriter, r *http.Request) error {
 	}
 	httpx.OK(w, map[string]any{"sugerencia": res, "creditos": c, "aviso": "Revisa los datos antes de publicar."})
 	return nil
-}
-
-// ---------- leer boleta ----------
-
-type DatosBoleta struct {
-	Agencia     string `json:"agencia"`
-	NumeroOrden string `json:"numero_orden"`
-	ClaveRecojo string `json:"clave_recojo"`
-}
-
-const instruccionBoleta = `Esta es la foto de una BOLETA de envío de una agencia peruana (Shalom, Olva, Marvisur u otra).
-Responde SOLO con un JSON: {"agencia":"...","numero_orden":"...","clave_recojo":"..."}
-Si un dato no se ve con claridad, déjalo vacío (""). No inventes números.`
-
-func (m *Modulo) leerBoleta(w http.ResponseWriter, r *http.Request) error {
-	ctx := r.Context()
-	tid, err := tiendas.ID(ctx, m.app)
-	if err != nil {
-		return err
-	}
-	var in struct {
-		BoletaKey string `json:"boleta_key"`
-	}
-	if err := httpx.Leer(r, &in); err != nil {
-		return err
-	}
-	res, c, err := m.usar(ctx, tid, "leer_boleta", func() (any, error) {
-		img, ct, err := m.imagen(ctx, tid, in.BoletaKey, "boleta", false)
-		if err != nil {
-			return nil, err
-		}
-		txt, err := m.proveedor.Preguntar(ctx, instruccionBoleta, img, ct)
-		if err != nil {
-			return nil, err
-		}
-		var d DatosBoleta
-		if err := extraerJSON(txt, &d); err != nil {
-			return nil, err
-		}
-		return d, nil
-	})
-	if err != nil {
-		return err
-	}
-	httpx.OK(w, map[string]any{"datos": res, "creditos": c, "aviso": "Confirma que el número de orden coincida con la boleta."})
-	return nil
-}
-
-// ---------- post para redes ----------
-
-func (m *Modulo) crearPost(w http.ResponseWriter, r *http.Request) error {
-	ctx := r.Context()
-	tid, err := tiendas.ID(ctx, m.app)
-	if err != nil {
-		return err
-	}
-	var in struct {
-		ProductoID string `json:"producto_id"`
-		Red        string `json:"red"`
-	}
-	if err := httpx.Leer(r, &in); err != nil {
-		return err
-	}
-	var nombre, desc, tienda, slug string
-	var precio int
-	var pct sql.NullInt64
-	err = m.app.DB.QueryRowContext(ctx, `SELECT p.nombre, p.descripcion, p.precio_centimos, t.nombre, t.slug,
-		(SELECT descuento_pct FROM ofertas o WHERE o.producto_id=p.id AND o.termina_en > now())
-		FROM productos p JOIN tiendas t ON t.id=p.tienda_id WHERE p.id::text=$1 AND p.tienda_id=$2 AND NOT p.eliminado`,
-		in.ProductoID, tid).Scan(&nombre, &desc, &precio, &tienda, &slug, &pct)
-	if core.SinFilas(err) {
-		return httpx.ErrNoEncontrado
-	}
-	if err != nil {
-		return err
-	}
-	oferta := ""
-	if pct.Valid {
-		oferta = fmt.Sprintf(" Tiene %d %% de descuento por tiempo limitado.", pct.Int64)
-	}
-	enlace := m.app.Cfg.WebURL + "/t/" + slug
-	instr := fmt.Sprintf(`Escribe tres versiones de un POST para redes de la tienda "%s" sobre el producto "%s" (S/ %.2f). %s%s
-Tono cercano y peruano, 2 o 3 emojis, invita a comprar desde el link de la tienda con pago seguro. No inventes datos.
-Usa exactamente este formato, sin comillas:
-[INSTAGRAM]
-(máximo 4 líneas)
-[TIKTOK]
-(una o dos líneas estilo TikTok con 2 hashtags)
-[WHATSAPP]
-(mensaje corto para el estado de WhatsApp)`, tienda, nombre, float64(precio)/100, desc, oferta)
-	res, c, err := m.usar(ctx, tid, "crear_post", func() (any, error) {
-		txt, err := m.proveedor.Preguntar(ctx, instr, nil, "")
-		if err != nil {
-			return nil, err
-		}
-		return separarPosts(txt, enlace), nil
-	})
-	if err != nil {
-		return err
-	}
-	textos, _ := res.(map[string]string)
-	red := in.Red
-	if textos[red] == "" {
-		red = "instagram"
-	}
-	httpx.OK(w, map[string]any{"texto": textos[red], "textos": textos, "creditos": c})
-	return nil
-}
-
-// separarPosts divide la respuesta en las versiones por red y agrega el link de la tienda.
-func separarPosts(txt, enlace string) map[string]string {
-	redes := []string{"instagram", "tiktok", "whatsapp"}
-	out := map[string]string{}
-	for i, r := range redes {
-		marca := "[" + strings.ToUpper(r) + "]"
-		a := strings.Index(txt, marca)
-		if a < 0 {
-			continue
-		}
-		parte := txt[a+len(marca):]
-		if i+1 < len(redes) {
-			if b := strings.Index(parte, "["+strings.ToUpper(redes[i+1])+"]"); b >= 0 {
-				parte = parte[:b]
-			}
-		}
-		out[r] = strings.TrimSpace(parte)
-	}
-	base := strings.TrimSpace(txt)
-	if out["instagram"] != "" {
-		base = out["instagram"]
-	}
-	for _, r := range redes {
-		if out[r] == "" {
-			out[r] = base
-		}
-		out[r] += "\n\n🛍️ " + enlace
-	}
-	out["facebook"] = out["instagram"]
-	return out
 }
 
 // comprarCreditos crea el pago de +100 créditos para cobrarlo con Culqi. NO entrega los créditos:

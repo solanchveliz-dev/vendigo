@@ -151,7 +151,7 @@ export default function ResponderReclamo({ params }: { params: Promise<{ pedidoI
           </div>
           {p.envio?.boleta_url && (
             <a href={p.envio.boleta_url} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 text-sm text-tinta">
-              <Check className="size-4" /> Ver foto de la boleta
+              <Check className="size-4" /> Ver boleta de envío
             </a>
           )}
 
