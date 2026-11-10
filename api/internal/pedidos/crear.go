@@ -37,7 +37,7 @@ type PedidoNuevo struct {
 	Referencia  string
 	Agencia     string
 	AgenciaSede string
-	MetodoPago  string // yape_directo, plin_directo o efectivo (pago directo a la tienda)
+	MetodoPago  string // yape_directo o plin_directo (pago directo a la tienda; sin efectivo)
 	MomentoPago string // antes o al_recibir
 	Prueba      bool   // datos de prueba (solo modo desarrollo y seed)
 	Nota        string
@@ -55,12 +55,12 @@ func Crear(ctx context.Context, app *core.App, tx *sql.Tx, in PedidoNuevo) (stri
 	if len(in.Items) == 0 {
 		return "", "", httpx.Invalido("El pedido no tiene productos.")
 	}
-	var recojo, agencia, moto, pausada, efectivo bool
-	var costoMoto int
-	var yape, plin string
+	var recojo, agencia, moto, pausada bool
+	var costoMoto, adelRecojo, adelMoto int
+	var yape, plin, pagoRecojo, pagoMoto string
 	if err := tx.QueryRowContext(ctx, `SELECT entrega_recojo, entrega_agencia, entrega_motorizado, costo_motorizado_centimos, pausada,
-		yape_numero, plin_numero, acepta_efectivo FROM tiendas WHERE id=$1 AND activa`,
-		in.TiendaID).Scan(&recojo, &agencia, &moto, &costoMoto, &pausada, &yape, &plin, &efectivo); err != nil {
+		yape_numero, plin_numero, recojo_pago, motorizado_pago, adelanto_pct, motorizado_adelanto_pct FROM tiendas WHERE id=$1 AND activa`,
+		in.TiendaID).Scan(&recojo, &agencia, &moto, &costoMoto, &pausada, &yape, &plin, &pagoRecojo, &pagoMoto, &adelRecojo, &adelMoto); err != nil {
 		if core.SinFilas(err) {
 			return "", "", httpx.ErrNoEncontrado
 		}
@@ -100,22 +100,23 @@ func Crear(ctx context.Context, app *core.App, tx *sql.Tx, in PedidoNuevo) (stri
 		if plin == "" && !in.Prueba {
 			return "", "", httpx.Invalido("Esta tienda no recibe Plin.")
 		}
-	case "efectivo":
-		if !efectivo && !in.Prueba {
-			return "", "", httpx.Invalido("Esta tienda no recibe efectivo.")
-		}
-		if in.Entrega == "agencia" {
-			return "", "", httpx.Invalido("Con envío por agencia el pago es antes de enviar (Yape o Plin).")
-		}
-		in.MomentoPago = "al_recibir"
 	default:
 		return "", "", httpx.Invalido("Elige cómo vas a pagar.")
 	}
-	if in.Entrega == "agencia" {
-		in.MomentoPago = "antes"
-	}
-	if in.MomentoPago != "al_recibir" {
-		in.MomentoPago = "antes"
+	// Cuándo se paga lo decide la tienda por forma de entrega (el comprador no lo elige).
+	// Agencia: siempre completo antes de enviar.
+	pct := 0
+	in.MomentoPago = "antes"
+	opcion := map[string]string{"recojo": pagoRecojo, "motorizado": pagoMoto}[in.Entrega]
+	switch opcion {
+	case "al_recibir":
+		in.MomentoPago = "al_recibir"
+	case "adelanto":
+		in.MomentoPago = "adelanto"
+		pct = map[string]int{"recojo": adelRecojo, "motorizado": adelMoto}[in.Entrega]
+		if pct <= 0 {
+			in.MomentoPago = "antes"
+		}
 	}
 
 	type linea struct {
@@ -181,7 +182,18 @@ func Crear(ctx context.Context, app *core.App, tx *sql.Tx, in PedidoNuevo) (stri
 		subtotal += l.precio * l.cant
 		lineas = append(lineas, l)
 	}
-	total := subtotal + envio
+	// El envío del motorizado se le paga a él directamente: no suma al total que cobra la tienda.
+	total := subtotal
+	if in.Entrega != "motorizado" {
+		total += envio
+	}
+	adelanto := 0
+	if in.MomentoPago == "adelanto" {
+		adelanto = (total*pct + 99) / 100
+		if adelanto <= 0 || adelanto >= total {
+			in.MomentoPago, adelanto = "antes", 0
+		}
+	}
 
 	var dni any
 	if strings.TrimSpace(in.DNI) != "" {
@@ -225,12 +237,15 @@ func Crear(ctx context.Context, app *core.App, tx *sql.Tx, in PedidoNuevo) (stri
 			return "", "", err
 		}
 	}
-	if err := pagos.Registrar(ctx, tx, pid, in.MetodoPago, in.MomentoPago, total, in.Prueba); err != nil {
+	if err := pagos.Registrar(ctx, tx, pid, in.MetodoPago, in.MomentoPago, total, adelanto, in.Prueba); err != nil {
 		return "", "", err
 	}
 	detalle := "Pedido recibido. Paga directo a la tienda y envía tu comprobante desde tu seguimiento."
-	if in.MomentoPago == "al_recibir" {
-		detalle = "Pedido recibido. Pagas directo a la tienda cuando recibas tu pedido."
+	switch in.MomentoPago {
+	case "al_recibir":
+		detalle = "Pedido recibido. Pagas directo a la tienda con Yape o Plin cuando recibas tu pedido."
+	case "adelanto":
+		detalle = fmt.Sprintf("Pedido recibido. Paga el adelanto de S/ %.2f a la tienda y envía tu comprobante; el resto lo pagas al recibir.", float64(adelanto)/100)
 	}
 	if in.Prueba {
 		detalle = "Pedido de prueba (no hubo pago real)."

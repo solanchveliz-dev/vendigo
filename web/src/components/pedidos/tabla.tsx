@@ -11,7 +11,7 @@ export const iconoEntrega = { recojo: Store, agencia: Package, motorizado: Bike 
 
 // Estado del pago que el cliente le hace directo a la tienda.
 export function textoPago(p: PedidoResumen) {
-  const tono = ({ informado_tienda: "ok", confirmado: "ok", paga_al_recibir: "neutro", de_prueba: "neutro", pendiente: "aviso", comprobante_enviado: "aviso", no_recibido: "error", rechazado: "error" } as const)[p.pago_estado as "pendiente"] ?? "neutro";
+  const tono = ({ informado_tienda: "ok", confirmado: "ok", paga_al_recibir: "neutro", adelanto_informado: "ok", de_prueba: "neutro", pendiente: "aviso", comprobante_enviado: "aviso", no_recibido: "error", rechazado: "error" } as const)[p.pago_estado as "pendiente"] ?? "neutro";
   return { texto: p.pago_texto || p.pago_estado, tono };
 }
 

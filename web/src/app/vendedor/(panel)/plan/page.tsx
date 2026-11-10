@@ -196,7 +196,7 @@ export default function TuSuscripcion() {
           </p>
           <div className="text-sm">
             <p className="pb-2">Tus ventas y tu plan van por separado:</p>
-            <div className="flex justify-between border-t border-linea py-2"><span>Tus clientes te pagan</span><b>Directo a ti (Yape, Plin o efectivo)</b></div>
+            <div className="flex justify-between border-t border-linea py-2"><span>Tus clientes te pagan</span><b>Directo a ti (Yape o Plin)</b></div>
             <div className="flex justify-between border-t border-linea py-2"><span>Comisión de VendiGo por venta</span><b>0 %</b></div>
             <div className="flex justify-between border-t border-linea py-2"><span>Tu plan</span><b>Lo yapeas a VendiGo</b></div>
             <p className="pt-1 text-xs text-gris">VendiGo no recibe ni guarda el dinero de tus ventas.</p>

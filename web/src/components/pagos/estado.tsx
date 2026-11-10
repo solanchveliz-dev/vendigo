@@ -6,6 +6,7 @@ const tonos: Record<string, string> = {
   pendiente: "bg-aviso-claro text-aviso",
   comprobante_enviado: "bg-aviso-claro text-aviso",
   paga_al_recibir: "bg-arena text-tinta",
+  adelanto_informado: "bg-pino-claro text-pino",
   informado_tienda: "bg-ok-claro text-ok",
   confirmado: "bg-ok-claro text-ok",
   no_recibido: "bg-error-claro text-error",
@@ -34,7 +35,7 @@ export const DEVOLUCION: Record<Devolucion["estado"], string> = {
 export const METODOS: Record<string, string> = {
   yape_directo: "Yape a la tienda",
   plin_directo: "Plin a la tienda",
-  efectivo: "Efectivo al recibir",
+  efectivo: "Efectivo (pedido antiguo)",
   yape: "Yape",
   tarjeta: "Tarjeta",
   pagoefectivo: "PagoEfectivo",

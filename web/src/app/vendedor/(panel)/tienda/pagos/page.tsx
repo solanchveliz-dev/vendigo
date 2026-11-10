@@ -6,9 +6,9 @@ import { ChevronRight, ImagePlus, Info, ShieldCheck, Trash2 } from "lucide-react
 import { api, ErrorApi, useApi } from "@/lib/api";
 import { subirImagen } from "@/lib/subir";
 import type { Tienda } from "@/lib/tipos";
-import { Aviso, Boton, Campo, Cargando, Entrada, Interruptor, useAvisar } from "@/components/ui";
+import { Aviso, Boton, Campo, Cargando, Entrada, useAvisar } from "@/components/ui";
 
-type Datos = { yape: string; plin: string; titular: string; qrKey: string | null; qrUrl: string; efectivo: boolean };
+type Datos = { yape: string; plin: string; titular: string; qrKey: string | null; qrUrl: string };
 const celular = (v: string) => v === "" || /^9\d{8}$/.test(v);
 
 // Datos para que el cliente le pague directo a la tienda. VendiGo no recibe ese dinero.
@@ -22,7 +22,7 @@ export default function ComoTePagan() {
   const [guardando, setGuardando] = useState(false);
 
   useEffect(() => {
-    if (t && !d) setD({ yape: t.yape_numero ?? "", plin: t.plin_numero ?? "", titular: t.pago_titular ?? "", qrKey: t.pago_qr_key, qrUrl: t.pago_qr_url ?? "", efectivo: !!t.acepta_efectivo });
+    if (t && !d) setD({ yape: t.yape_numero ?? "", plin: t.plin_numero ?? "", titular: t.pago_titular ?? "", qrKey: t.pago_qr_key, qrUrl: t.pago_qr_url ?? "" });
   }, [t, d]);
   if (!t || !d) return <Cargando />;
   const cambiar = (x: Partial<Datos>) => setD({ ...d, ...x });
@@ -45,8 +45,8 @@ export default function ComoTePagan() {
     setError("");
     if (!celular(d!.yape)) return setError("El número de Yape debe tener 9 dígitos y empezar con 9.");
     if (!celular(d!.plin)) return setError("El número de Plin debe tener 9 dígitos y empezar con 9.");
-    if (!d!.yape && !d!.plin && !d!.efectivo) return setError("Activa al menos una forma de pago: Yape, Plin o efectivo.");
-    if ((d!.yape || d!.plin) && d!.titular.trim().length < 3) return setError("Escribe el nombre que aparece en tu Yape o Plin.");
+    if (!d!.yape && !d!.plin) return setError("Agrega tu número de Yape o de Plin para que tus clientes te paguen.");
+    if (d!.titular.trim().length < 3) return setError("Escribe el nombre que aparece en tu Yape o Plin.");
     setGuardando(true);
     try {
       const nueva = await api.put<Tienda>("/vendedor/tienda/pagos", {
@@ -54,7 +54,6 @@ export default function ComoTePagan() {
         plin_numero: d!.plin,
         pago_titular: d!.titular.trim(),
         pago_qr_key: d!.qrKey ?? "",
-        acepta_efectivo: d!.efectivo,
       });
       setDatos(nueva);
       avisar("Datos de pago guardados");
@@ -75,7 +74,7 @@ export default function ComoTePagan() {
       <div className="mb-6">
         <div className="mb-2 h-1 w-8 rounded-full bg-coral" />
         <h1 className="text-[28px] font-extrabold leading-tight text-pino">¿Cómo te pagan tus clientes?</h1>
-        <p className="mt-1 text-sm text-gris">El cliente te paga directo a ti. VendiGo no recibe ni guarda tu dinero, y no cobra comisión por venta.</p>
+        <p className="mt-1 text-sm text-gris">El cliente te paga directo a ti. por Yape o Plin (no se acepta efectivo). VendiGo no recibe ni guarda tu dinero, y no cobra comisión por venta.</p>
       </div>
 
       {error && <Aviso tono="error" className="mb-4">{error}</Aviso>}
@@ -115,9 +114,6 @@ export default function ComoTePagan() {
           </div>
         </section>
 
-        <section className="rounded-[22px] bg-white p-5 shadow-suave ring-1 ring-linea/60">
-          <Interruptor activo={d.efectivo} onChange={(v) => cambiar({ efectivo: v })} etiqueta="Acepto efectivo al entregar" detalle="Solo para recojo en tienda o motorizado. El cliente paga cuando recibe." />
-        </section>
 
         <div className="flex gap-3 rounded-2xl bg-pino-claro px-4 py-3 text-sm text-pino">
           <ShieldCheck className="mt-0.5 size-5 shrink-0" />
@@ -125,7 +121,7 @@ export default function ComoTePagan() {
         </div>
         <div className="flex gap-3 rounded-2xl bg-crema/70 px-4 py-3 text-sm text-tinta">
           <Info className="mt-0.5 size-5 shrink-0 text-pino" />
-          <span>Cuando te llegue un pago, entra al pedido y toca <b>Revisar el pago</b>. Si el cliente paga antes, recién ahí podrás enviarlo o entregarlo.</span>
+          <span>Cuando te llegue un pago, entra al pedido y toca <b>Revisar el pago</b>. Si pagan completo o adelanto, recién ahí podrás enviarlo. Si pagan al recibir, confirmas el pago antes de entregar. Cuándo pagan lo eliges en <Link href="/vendedor/tienda/entrega" className="font-semibold underline">Entrega</Link>.</span>
         </div>
 
         <Boton tamano="lg" onClick={guardar} cargando={guardando}>Guardar</Boton>

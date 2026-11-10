@@ -11,6 +11,7 @@ type Paso = { titulo: string; cliente: string; quien: "cliente" | "tienda"; como
 // Los 4 pasos de cada pedido según cómo se entrega (los mismos que ve el cliente en su app).
 export function pasosPedido(p: PedidoDetalle): { pasos: Paso[]; actual: number; cancelado: boolean } {
   const pagaAlRecibir = p.pago?.momento === "al_recibir";
+  const adel = p.pago?.momento === "adelanto" ? p.pago.adelanto_centimos : 0;
   const fechaPago = p.pago?.informado_en ?? (p.pago?.estado === "de_prueba" ? p.creado_en : null);
   const nombre = p.comprador.split(" ")[0];
   const pasos: Paso[] =
@@ -23,13 +24,13 @@ export function pasosPedido(p: PedidoDetalle): { pasos: Paso[]; actual: number; 
         ]
       : p.entrega === "motorizado"
         ? [
-            { titulo: pagaAlRecibir ? "Pedido hecho" : "Pago a la tienda", cliente: pagaAlRecibir ? "Pagas directo a la tienda cuando lo recibas." : "Pagas directo a la tienda con Yape o Plin y la tienda lo confirma.", quien: "cliente", como: pagaAlRecibir ? "Pide y paga al recibir" : "Te paga a tu Yape/Plin; tú confirmas que te llegó", fecha: pagaAlRecibir ? p.creado_en : fechaPago },
+            { titulo: pagaAlRecibir ? "Pedido hecho" : adel ? "Adelanto a la tienda" : "Pago a la tienda", cliente: pagaAlRecibir ? "Pagas a la tienda por Yape o Plin cuando lo recibas. El envío se lo pagas al motorizado." : adel ? `Pagas ${soles(adel)} de adelanto por Yape o Plin y el resto al recibir.` : "Pagas directo a la tienda con Yape o Plin y la tienda lo confirma.", quien: "cliente", como: pagaAlRecibir ? "Pide y paga al recibir" : "Te paga a tu Yape/Plin; tú confirmas que te llegó", fecha: pagaAlRecibir ? p.creado_en : fechaPago },
             { titulo: "Pedido aceptado", cliente: "La tienda está preparando tu pedido.", quien: "tienda", como: "Un toque: “Aceptar pedido”", fecha: p.aceptado_en },
             { titulo: "En camino", cliente: p.envio?.motorizado_nombre ? `Lo lleva ${p.envio.motorizado_nombre} (${p.envio.motorizado_celular}).` : "Ves quién lo lleva y su celular.", quien: "tienda", como: "“Ya salió” + quién lo lleva", fecha: p.enviado_en },
-            { titulo: "Entregado", cliente: pagaAlRecibir ? "Pagas al recibir y das tu código de entrega. Si no llega, no pagas." : "Das tu código de entrega al recibirlo.", quien: "tienda", como: pagaAlRecibir ? "Pide el código y cobra al entregar" : "Pide el código de entrega al cliente", fecha: p.entregado_en },
+            { titulo: "Entregado", cliente: pagaAlRecibir || adel ? "Pagas por Yape o Plin al recibir y das tu código de entrega." : "Das tu código de entrega al recibirlo.", quien: "tienda", como: pagaAlRecibir ? "Pide el código y cobra al entregar" : "Pide el código de entrega al cliente", fecha: p.entregado_en },
           ]
         : [
-            { titulo: pagaAlRecibir ? "Pedido reservado" : "Pago a la tienda", cliente: pagaAlRecibir ? "Tu pedido queda reservado; pagas al recoger." : "Pagas directo a la tienda con Yape o Plin y la tienda lo confirma.", quien: "cliente", como: pagaAlRecibir ? "Reserva y paga al recoger" : "Te paga a tu Yape/Plin; tú confirmas que te llegó", fecha: pagaAlRecibir ? p.creado_en : fechaPago },
+            { titulo: pagaAlRecibir ? "Pedido reservado" : adel ? "Adelanto a la tienda" : "Pago a la tienda", cliente: pagaAlRecibir ? "Tu pedido queda reservado; pagas por Yape o Plin al recoger." : adel ? `Pagas ${soles(adel)} de adelanto por Yape o Plin y el resto al recoger.` : "Pagas directo a la tienda con Yape o Plin y la tienda lo confirma.", quien: "cliente", como: pagaAlRecibir ? "Reserva y paga al recoger" : "Te paga a tu Yape/Plin; tú confirmas que te llegó", fecha: pagaAlRecibir ? p.creado_en : fechaPago },
             { titulo: "Pedido aceptado", cliente: "La tienda está preparando tu pedido.", quien: "tienda", como: "Un toque: “Aceptar pedido”", fecha: p.aceptado_en },
             { titulo: "Listo para recoger", cliente: "Te avisamos cuando puedas pasar por la tienda.", quien: "tienda", como: "“Ya está listo”", fecha: p.estado === "listo_recojo" || p.estado === "entregado" ? p.eventos.find((e) => e.estado === "listo_recojo")?.fecha ?? null : null },
             { titulo: "Entregado", cliente: `Muestras tu código de 4 dígitos al recoger.`, quien: "tienda", como: `Pide el código a ${nombre} y toca “Entregar”`, fecha: p.entregado_en },
@@ -99,6 +100,9 @@ export function AvisoAccion({
   alResponder: () => void;
 }) {
   const nombre = p.comprador.split(" ")[0];
+  const pagaAlRecibir = p.pago?.momento === "al_recibir";
+  const adel = p.pago?.momento === "adelanto" ? p.pago.adelanto_centimos : 0;
+  const aPagarAntes = adel || p.total_centimos;
   const enviar = `/vendedor/pedidos/${p.id}/enviar`;
   let icono: React.ReactNode = <Truck className="size-5" />;
   let titulo = "";
@@ -109,7 +113,7 @@ export function AvisoAccion({
   if (p.acciones.includes("informar_devolucion")) {
     icono = <Flag className="size-5" />;
     titulo = "Devuelve el dinero al cliente";
-    texto = <>Devuélvele a {nombre} su pago por el mismo medio (Yape, Plin o efectivo) y toca “Informar devolución” en la tarjeta de Devolución.</>;
+    texto = <>Devuélvele a {nombre} su pago por el mismo medio (Yape o Plin) y toca “Informar devolución” en la tarjeta de Devolución.</>;
     tono = "bg-error/10 ring-error/30";
   } else if (p.acciones.includes("responder_reclamo")) {
     icono = <Flag className="size-5" />;
@@ -121,14 +125,19 @@ export function AvisoAccion({
     icono = <Lock className="size-5" />;
     titulo = p.pago?.estado === "comprobante_enviado" ? "Revisa el pago" : "Esperando el pago";
     texto = p.pago?.estado === "comprobante_enviado"
-      ? <>{nombre} envió su comprobante de <b>{soles(p.total_centimos)}</b>. Revisa tu Yape/Plin y toca “Revisar el pago” en la tarjeta Pago.</>
-      : <>{nombre} debe pagarte <b>{soles(p.total_centimos)}</b> por Yape o Plin. Envía el pedido recién cuando confirmes que te llegó.</>;
+      ? <>{nombre} envió su comprobante de <b>{soles(aPagarAntes)}</b>{adel ? " (adelanto)" : ""}. Revisa tu Yape/Plin y toca “Revisar el pago” en la tarjeta Pago.</>
+      : <>{nombre} debe pagarte <b>{soles(aPagarAntes)}</b>{adel ? " de adelanto" : ""} por Yape o Plin. Envía el pedido recién cuando confirmes que te llegó.</>;
   } else if (p.estado === "por_aceptar") {
     icono = <Lock className="size-5" />;
     titulo = "Acepta el pedido";
     texto = (
       <>
-        {nombre} {p.pago?.momento === "al_recibir" ? "te pagará" : "debe pagarte"} <b>{soles(p.total_centimos)}</b>{p.pago?.momento === "al_recibir" ? " al recibir." : " directo a tu Yape/Plin antes del envío."} Acepta si tienes el producto.
+        {pagaAlRecibir
+          ? <>{nombre} te pagará <b>{soles(p.total_centimos)}</b> por Yape o Plin al recibir.</>
+          : adel
+            ? <>{nombre} debe pagarte <b>{soles(adel)}</b> de adelanto antes del envío y el resto al recibir.</>
+            : <>{nombre} debe pagarte <b>{soles(p.total_centimos)}</b> directo a tu Yape/Plin antes del envío.</>}{" "}
+        Acepta si tienes el producto.
       </>
     );
     botones = (
@@ -161,7 +170,7 @@ export function AvisoAccion({
   } else if (p.estado === "enviado" && p.entrega === "motorizado") {
     icono = <Bike className="size-5" />;
     titulo = "Entrega con el código";
-    texto = <>Al entregar, pídele a {nombre} su código de 4 dígitos{p.pago?.estado === "paga_al_recibir" ? " y cobra el pago" : ""}.</>;
+    texto = <>Al entregar, pídele a {nombre} su código de 4 dígitos{p.pago?.estado === "paga_al_recibir" || p.pago?.estado === "adelanto_informado" ? " y confirma que te llegó el pago por Yape o Plin" : ""}.</>;
     botones = <Boton onClick={alEntregar}>Entregar al cliente</Boton>;
   } else if (p.estado === "enviado") {
     icono = <Check className="size-5" />;

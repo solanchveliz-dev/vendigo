@@ -73,46 +73,44 @@ func (m *Modulo) DeUsuario(ctx context.Context, usuarioID string) *string {
 }
 
 type Tienda struct {
-	ID             string  `json:"id"`
-	Nombre         string  `json:"nombre"`
-	Slug           string  `json:"slug"`
-	Rubro          string  `json:"rubro"`
-	Descripcion    string  `json:"descripcion"`
-	Ciudad         string  `json:"ciudad"`
-	Distrito       string  `json:"distrito"`
-	LogoKey        *string `json:"logo_key"`
-	LogoURL        string  `json:"logo_url"`
-	PortadaKey     *string `json:"portada_key"`
-	PortadaURL     string  `json:"portada_url"`
-	Instagram      string  `json:"instagram"`
-	Facebook       string  `json:"facebook"`
-	Tiktok         string  `json:"tiktok"`
-	Whatsapp       string  `json:"whatsapp"`
-	Correo         string  `json:"correo"`
-	Horario        string  `json:"horario"`
-	Politicas      string  `json:"politicas"`
-	Entrega        Entrega `json:"entrega"`
-	Reputacion     string  `json:"reputacion"`
-	DiasLiberacion int     `json:"dias_liberacion"`
-	Enlace         string  `json:"enlace"`
-	Pausada        bool    `json:"pausada"`
-	TemaColor      string  `json:"tema_color"`
-	TemaFuente     string  `json:"tema_fuente"`
-	Prefijo        string  `json:"prefijo_pedido"`
-	DestacadoID    *string `json:"destacado_id"`
-	Aviso          string  `json:"aviso"`
-	Historia       string  `json:"historia"`
-	HistoriaKey    *string `json:"historia_foto_key"`
-	HistoriaURL    string  `json:"historia_foto_url"`
-	VendeDesde     *int    `json:"vende_desde"`
+	ID          string  `json:"id"`
+	Nombre      string  `json:"nombre"`
+	Slug        string  `json:"slug"`
+	Rubro       string  `json:"rubro"`
+	Descripcion string  `json:"descripcion"`
+	Ciudad      string  `json:"ciudad"`
+	Distrito    string  `json:"distrito"`
+	LogoKey     *string `json:"logo_key"`
+	LogoURL     string  `json:"logo_url"`
+	PortadaKey  *string `json:"portada_key"`
+	PortadaURL  string  `json:"portada_url"`
+	Instagram   string  `json:"instagram"`
+	Facebook    string  `json:"facebook"`
+	Tiktok      string  `json:"tiktok"`
+	Whatsapp    string  `json:"whatsapp"`
+	Correo      string  `json:"correo"`
+	Horario     string  `json:"horario"`
+	Politicas   string  `json:"politicas"`
+	Entrega     Entrega `json:"entrega"`
+	Reputacion  string  `json:"reputacion"`
+	Enlace      string  `json:"enlace"`
+	Pausada     bool    `json:"pausada"`
+	TemaColor   string  `json:"tema_color"`
+	TemaFuente  string  `json:"tema_fuente"`
+	Prefijo     string  `json:"prefijo_pedido"`
+	DestacadoID *string `json:"destacado_id"`
+	Aviso       string  `json:"aviso"`
+	Historia    string  `json:"historia"`
+	HistoriaKey *string `json:"historia_foto_key"`
+	HistoriaURL string  `json:"historia_foto_url"`
+	VendeDesde  *int    `json:"vende_desde"`
 	// Pago directo a la tienda (VendiGo no recibe el dinero)
-	YapeNumero     string   `json:"yape_numero"`
-	PlinNumero     string   `json:"plin_numero"`
-	PagoTitular    string   `json:"pago_titular"`
-	PagoQRKey      *string  `json:"pago_qr_key"`
-	PagoQRURL      string   `json:"pago_qr_url"`
-	AceptaEfectivo bool     `json:"acepta_efectivo"`
-	MetodosPago    []string `json:"metodos_pago"`
+	YapeNumero  string   `json:"yape_numero"`
+	PlinNumero  string   `json:"plin_numero"`
+	PagoTitular string   `json:"pago_titular"`
+	PagoQRKey   *string  `json:"pago_qr_key"`
+	PagoQRURL   string   `json:"pago_qr_url"`
+	MetodosPago []string `json:"metodos_pago"`
 }
 
 type Entrega struct {
@@ -126,22 +124,13 @@ type Entrega struct {
 	ZonasMotorizado string   `json:"zonas_motorizado"`
 	Instrucciones   string   `json:"instrucciones_recojo"`
 	DiasRecojo      []int64  `json:"dias_recojo"`
-	AdelantoPct     int      `json:"adelanto_pct"`
+	AdelantoPct     int      `json:"adelanto_pct"` // adelanto del recojo
+	RecojoPago      string   `json:"recojo_pago"`  // completo, adelanto o al_recibir
+	MotorizadoPago  string   `json:"motorizado_pago"`
+	MotoAdelantoPct int      `json:"motorizado_adelanto_pct"`
 	CostoAgencia    int      `json:"costo_agencia_centimos"`
 	Otra            bool     `json:"otra"`
 	DescripcionOtra string   `json:"descripcion_otra"`
-}
-
-// DiasLiberacion: tienda nueva 5 días, buena reputación 2 días, excelente sin espera extra.
-// En todos los casos el dinero no se libera antes del abono de la pasarela (billetera.AbonoPasarela).
-func DiasLiberacion(reputacion string) int {
-	switch reputacion {
-	case "excelente":
-		return 0
-	case "buena":
-		return 2
-	}
-	return 5
 }
 
 const columnas = `id, nombre, slug, rubro, descripcion, ciudad, distrito, logo_key, portada_key, instagram, facebook, tiktok, whatsapp,
@@ -149,7 +138,7 @@ const columnas = `id, nombre, slug, rubro, descripcion, ciudad, distrito, logo_k
 	correo, horario, politicas,
 	instrucciones_recojo, dias_recojo, adelanto_pct, costo_agencia_centimos, entrega_otra, descripcion_otra, pausada, tema_color, tema_fuente, prefijo_pedido,
 	destacado_id, aviso, historia, historia_foto_key, vende_desde,
-	yape_numero, plin_numero, pago_titular, pago_qr_key, acepta_efectivo`
+	yape_numero, plin_numero, pago_titular, pago_qr_key, recojo_pago, motorizado_pago, motorizado_adelanto_pct`
 
 func (m *Modulo) leer(ctx context.Context, where string, arg any) (Tienda, error) {
 	var t Tienda
@@ -161,7 +150,7 @@ func (m *Modulo) leer(ctx context.Context, where string, arg any) (Tienda, error
 		&t.Correo, &t.Horario, &t.Politicas,
 		&e.Instrucciones, pq.Array(&e.DiasRecojo), &e.AdelantoPct, &e.CostoAgencia, &e.Otra, &e.DescripcionOtra, &t.Pausada, &t.TemaColor, &t.TemaFuente, &t.Prefijo,
 		&t.DestacadoID, &t.Aviso, &t.Historia, &t.HistoriaKey, &t.VendeDesde,
-		&t.YapeNumero, &t.PlinNumero, &t.PagoTitular, &t.PagoQRKey, &t.AceptaEfectivo)
+		&t.YapeNumero, &t.PlinNumero, &t.PagoTitular, &t.PagoQRKey, &e.RecojoPago, &e.MotorizadoPago, &e.MotoAdelantoPct)
 	if core.SinFilas(err) {
 		return t, httpx.ErrNoEncontrado
 	}
@@ -184,13 +173,9 @@ func (m *Modulo) leer(ctx context.Context, where string, arg any) (Tienda, error
 	if t.PlinNumero != "" {
 		t.MetodosPago = append(t.MetodosPago, "plin_directo")
 	}
-	if t.AceptaEfectivo {
-		t.MetodosPago = append(t.MetodosPago, "efectivo")
-	}
 	if t.HistoriaKey != nil {
 		t.HistoriaURL = m.app.Archivos.URLPublica(*t.HistoriaKey)
 	}
-	t.DiasLiberacion = DiasLiberacion(t.Reputacion)
 	t.Enlace = m.app.Cfg.WebURL + "/t/" + t.Slug
 	return t, nil
 }
@@ -424,8 +409,30 @@ func (m *Modulo) actualizarEntrega(w http.ResponseWriter, r *http.Request) error
 	if in.Otra && in.DescripcionOtra == "" {
 		return httpx.Invalido("Describe cómo entregas en la otra modalidad.")
 	}
-	if !slices.Contains([]int{0, 20, 30, 50}, in.AdelantoPct) {
-		return httpx.Invalido("El adelanto puede ser 20 %, 30 % o 50 %.")
+	// Cómo se paga en recojo y motorizado: lo decide la tienda (siempre Yape o Plin, nunca efectivo).
+	opciones := []string{"completo", "adelanto", "al_recibir"}
+	if in.RecojoPago == "" {
+		in.RecojoPago = "completo"
+	}
+	if in.MotorizadoPago == "" {
+		in.MotorizadoPago = "completo"
+	}
+	if !slices.Contains(opciones, in.RecojoPago) || !slices.Contains(opciones, in.MotorizadoPago) {
+		return httpx.Invalido("Elige cómo te pagan: completo, adelanto o al recibir.")
+	}
+	if in.RecojoPago != "adelanto" {
+		in.AdelantoPct = 0
+	}
+	if in.MotorizadoPago != "adelanto" {
+		in.MotoAdelantoPct = 0
+	}
+	for _, pct := range []int{in.AdelantoPct, in.MotoAdelantoPct} {
+		if !slices.Contains([]int{0, 20, 30, 50}, pct) {
+			return httpx.Invalido("El adelanto puede ser 20 %, 30 % o 50 %.")
+		}
+	}
+	if (in.RecojoPago == "adelanto" && in.AdelantoPct == 0) || (in.MotorizadoPago == "adelanto" && in.MotoAdelantoPct == 0) {
+		return httpx.Invalido("Elige el porcentaje del adelanto: 20 %, 30 % o 50 %.")
 	}
 	dias := []int64{}
 	for _, d := range in.DiasRecojo {
@@ -468,10 +475,12 @@ func (m *Modulo) actualizarEntrega(w http.ResponseWriter, r *http.Request) error
 	}
 	_, err = m.app.DB.ExecContext(ctx, `UPDATE tiendas SET entrega_recojo=$2, direccion_recojo=$3, horario_recojo=CASE WHEN horario<>'' THEN horario ELSE $4 END, entrega_agencia=$5,
 		agencias=$6, entrega_motorizado=$7, costo_motorizado_centimos=$8, zonas_motorizado=$9,
-		instrucciones_recojo=$10, dias_recojo=$11, adelanto_pct=$12, costo_agencia_centimos=$13, entrega_otra=$14, descripcion_otra=$15, actualizado_en=now() WHERE id=$1`,
+		instrucciones_recojo=$10, dias_recojo=$11, adelanto_pct=$12, costo_agencia_centimos=$13, entrega_otra=$14, descripcion_otra=$15,
+		recojo_pago=$16, motorizado_pago=$17, motorizado_adelanto_pct=$18, actualizado_en=now() WHERE id=$1`,
 		id, in.Recojo, in.DireccionRecojo, strings.TrimSpace(in.HorarioRecojo), in.Agencia, pq.Array(in.Agencias), in.Motorizado,
 		in.CostoMotorizado, strings.TrimSpace(in.ZonasMotorizado),
-		in.Instrucciones, pq.Array(dias), in.AdelantoPct, in.CostoAgencia, in.Otra, in.DescripcionOtra)
+		in.Instrucciones, pq.Array(dias), in.AdelantoPct, in.CostoAgencia, in.Otra, in.DescripcionOtra,
+		in.RecojoPago, in.MotorizadoPago, in.MotoAdelantoPct)
 	if err != nil {
 		return err
 	}

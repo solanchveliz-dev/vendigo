@@ -16,7 +16,7 @@ type Pago = {
   tienda: string;
   comprador: string;
   metodo: string;
-  momento: "antes" | "al_recibir";
+  momento: "antes" | "adelanto" | "al_recibir";
   estado: string;
   estado_texto: string;
   origen: "tienda" | "proveedor" | "prueba";
@@ -32,10 +32,12 @@ const ESTADOS: Record<string, string> = {
   pendiente: "Pendiente de pago",
   comprobante_enviado: "Comprobante enviado",
   paga_al_recibir: "Paga al recibir",
+  adelanto_informado: "Adelanto recibido",
   informado_tienda: "Pago informado por la tienda",
   no_recibido: "La tienda no lo recibió",
   de_prueba: "Pedido de prueba",
 };
+const MOMENTO = { antes: "Completo antes", adelanto: "Adelanto + resto al recibir", al_recibir: "Al recibir" };
 const POR_PAGINA = 20;
 
 export default function Pagos() {
@@ -57,13 +59,13 @@ export default function Pagos() {
 
   useExportar("pagos", () => [
     ["Pedido", "Fecha", "Tienda", "Comprador", "Método", "Cuándo", "Estado", "Origen", "Referencia", "Monto", "Devolución"],
-    ...lista.map((p) => [p.codigo, fechaHora(p.creado_en), p.tienda, p.comprador, METODOS[p.metodo] ?? p.metodo, p.momento === "antes" ? "Antes del envío" : "Al recibir", p.estado_texto, ORIGEN[p.origen], p.referencia, (p.monto_centimos / 100).toFixed(2), p.devolucion ? DEVOLUCION[p.devolucion as keyof typeof DEVOLUCION] ?? p.devolucion : ""]),
+    ...lista.map((p) => [p.codigo, fechaHora(p.creado_en), p.tienda, p.comprador, METODOS[p.metodo] ?? p.metodo, MOMENTO[p.momento], p.estado_texto, ORIGEN[p.origen], p.referencia, (p.monto_centimos / 100).toFixed(2), p.devolucion ? DEVOLUCION[p.devolucion as keyof typeof DEVOLUCION] ?? p.devolucion : ""]),
   ]);
 
   const k = datos?.resumen;
   return (
     <>
-      <Titulo titulo="Pagos registrados" detalle="El comprador le paga directo a la tienda (Yape, Plin o efectivo). VendiGo no recibe ni guarda ese dinero: aquí solo ves el seguimiento que informan comprador y tienda." />
+      <Titulo titulo="Pagos registrados" detalle="El comprador le paga directo a la tienda (Yape o Plin). VendiGo no recibe ni guarda ese dinero: aquí solo ves el seguimiento que informan comprador y tienda." />
       {!datos || !k ? (
         <Cargando />
       ) : (
@@ -86,7 +88,7 @@ export default function Pagos() {
               </select>
               <select value={metodo} onChange={(e) => { setMetodo(e.target.value); setPagina(1); }} className="h-11 rounded-xl border border-linea bg-white px-4 text-sm outline-none" aria-label="Método">
                 <option value="">Método: todos</option>
-                {["yape_directo", "plin_directo", "efectivo"].map((k) => <option key={k} value={k}>{METODOS[k]}</option>)}
+                {["yape_directo", "plin_directo"].map((k) => <option key={k} value={k}>{METODOS[k]}</option>)}
               </select>
               <span className="ml-auto text-sm text-gris">{lista.length} registros</span>
             </div>
@@ -119,7 +121,7 @@ export default function Pagos() {
                         <td className="px-5 py-3.5 text-tinta">{p.comprador}</td>
                         <td className="px-5 py-3.5 text-tinta">
                           {METODOS[p.metodo] ?? p.metodo}
-                          <span className="block text-xs text-gris">{p.momento === "antes" ? "Antes del envío" : "Al recibir"}</span>
+                          <span className="block text-xs text-gris">{MOMENTO[p.momento]}</span>
                         </td>
                         <td className="px-5 py-3.5">
                           <EtiquetaPago estado={p.estado} texto={p.estado_texto} />

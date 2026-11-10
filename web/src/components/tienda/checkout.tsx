@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { Banknote, Bike, ChevronRight, Minus, Package, Plus, ShieldCheck, Smartphone, Store, Trash2 } from "lucide-react";
+import { Bike, ChevronRight, Minus, Package, Plus, ShieldCheck, Smartphone, Store, Trash2 } from "lucide-react";
 import { api, ErrorApi } from "@/lib/api";
 import { soles } from "@/lib/formato";
 import { guardarCarrito, leerCarrito, type ItemCarrito } from "@/lib/carrito";
@@ -11,7 +11,7 @@ import type { Tienda } from "@/lib/tipos";
 import { Aviso, Boton, Campo, Entrada, Selector, cn } from "@/components/ui";
 
 type FormaEntrega = "recojo" | "motorizado" | "agencia";
-type Metodo = "yape_directo" | "plin_directo" | "efectivo";
+type Metodo = "yape_directo" | "plin_directo";
 
 const ENTREGAS: Record<FormaEntrega, { t: string; icono: React.ReactNode }> = {
   recojo: { t: "Recojo en tienda", icono: <Store className="size-5" /> },
@@ -21,7 +21,6 @@ const ENTREGAS: Record<FormaEntrega, { t: string; icono: React.ReactNode }> = {
 const METODO: Record<Metodo, { t: string; icono: React.ReactNode }> = {
   yape_directo: { t: "Yape", icono: <Smartphone className="size-5" /> },
   plin_directo: { t: "Plin", icono: <Smartphone className="size-5" /> },
-  efectivo: { t: "Efectivo", icono: <Banknote className="size-5" /> },
 };
 
 function Opcion({ activo, onClick, icono, titulo, detalle }: { activo: boolean; onClick: () => void; icono: React.ReactNode; titulo: string; detalle?: string }) {
@@ -45,10 +44,9 @@ export function Checkout({ tienda: t }: { tienda: Tienda }) {
   const router = useRouter();
   const [items, setItems] = useState<ItemCarrito[] | null>(null);
   const entregas = (["recojo", "motorizado", "agencia"] as FormaEntrega[]).filter((e) => t.entrega[e]);
-  const metodos = (t.metodos_pago ?? []) as Metodo[];
+  const metodos = (t.metodos_pago ?? []).filter((m): m is Metodo => m === "yape_directo" || m === "plin_directo");
   const [entrega, setEntrega] = useState<FormaEntrega | "">(entregas.length === 1 ? entregas[0] : "");
   const [metodo, setMetodo] = useState<Metodo | "">("");
-  const [momento, setMomento] = useState<"antes" | "al_recibir">("antes");
   const [f, setF] = useState({ nombre: "", celular: "", dni: "", direccion: "", distrito: "", ciudad: "", referencia: "", agencia: "", sede: "", nota: "" });
   const [codigo, setCodigo] = useState("");
   const [enviado, setEnviado] = useState(false);
@@ -58,15 +56,16 @@ export function Checkout({ tienda: t }: { tienda: Tienda }) {
 
   useEffect(() => setItems(leerCarrito(t.slug)), [t.slug]);
 
-  // Reglas de la tienda: con agencia se paga antes (Yape o Plin); el efectivo es al recibir.
-  const metodosValidos = metodos.filter((m) => !(m === "efectivo" && entrega === "agencia"));
-  useEffect(() => {
-    if (metodo && !metodosValidos.includes(metodo)) setMetodo("");
-  }, [entrega]); // eslint-disable-line react-hooks/exhaustive-deps
-  const momentoFinal = metodo === "efectivo" ? "al_recibir" : entrega === "agencia" ? "antes" : momento;
+  // Cuándo se paga lo decide la tienda por forma de entrega (agencia: siempre completo antes).
+  const regla = entrega === "recojo" ? t.entrega.recojo_pago : entrega === "motorizado" ? t.entrega.motorizado_pago : "completo";
+  const pct = entrega === "recojo" ? t.entrega.adelanto_pct : entrega === "motorizado" ? t.entrega.motorizado_adelanto_pct : 0;
 
   const subtotal = useMemo(() => (items ?? []).reduce((a, i) => a + i.precio_centimos * i.cantidad, 0), [items]);
-  const envio = entrega === "motorizado" ? t.entrega.costo_motorizado_centimos : entrega === "agencia" ? t.entrega.costo_agencia_centimos : 0;
+  // El envío del motorizado se le paga a él aparte; no suma al total que se le paga a la tienda.
+  const envio = entrega === "agencia" ? t.entrega.costo_agencia_centimos : 0;
+  const moto = entrega === "motorizado" ? t.entrega.costo_motorizado_centimos : 0;
+  const total = subtotal + envio;
+  const adelanto = regla === "adelanto" && pct ? Math.ceil((total * pct) / 100) : 0;
 
   if (items === null) return <p className="py-10 text-sm text-gris">Cargando tu pedido…</p>;
 
@@ -125,7 +124,6 @@ export function Checkout({ tienda: t }: { tienda: Tienda }) {
         agencia: entrega === "agencia" ? f.agencia : "",
         agencia_sede: entrega === "agencia" ? f.sede.trim() : "",
         metodo_pago: metodo,
-        momento_pago: momentoFinal,
         nota: f.nota.trim(),
       });
       guardarCarrito(t.slug, []);
@@ -193,7 +191,7 @@ export function Checkout({ tienda: t }: { tienda: Tienda }) {
                   onClick={() => setEntrega(e)}
                   icono={ENTREGAS[e].icono}
                   titulo={ENTREGAS[e].t}
-                  detalle={e === "motorizado" ? (t.entrega.costo_motorizado_centimos ? soles(t.entrega.costo_motorizado_centimos) : "Costo a coordinar") : e === "agencia" ? (t.entrega.costo_agencia_centimos ? soles(t.entrega.costo_agencia_centimos) : "Pagas el envío en la agencia") : "Sin costo"}
+                  detalle={e === "motorizado" ? (t.entrega.costo_motorizado_centimos ? `${soles(t.entrega.costo_motorizado_centimos)} al motorizado` : "Costo a coordinar") : e === "agencia" ? (t.entrega.costo_agencia_centimos ? soles(t.entrega.costo_agencia_centimos) : "Pagas el envío en la agencia") : "Sin costo"}
                 />
               ))}
             </div>
@@ -236,27 +234,22 @@ export function Checkout({ tienda: t }: { tienda: Tienda }) {
               <p className="text-sm text-gris">Esta tienda todavía no configuró cómo recibir pagos. Escríbele antes de pedir.</p>
             ) : (
               <div className="grid gap-3 sm:grid-cols-3">
-                {metodosValidos.map((m) => (
-                  <Opcion key={m} activo={metodo === m} onClick={() => setMetodo(m)} icono={METODO[m].icono} titulo={METODO[m].t} detalle={m === "efectivo" ? "Pagas al recibir" : "Directo a la tienda"} />
+                {metodos.map((m) => (
+                  <Opcion key={m} activo={metodo === m} onClick={() => setMetodo(m)} icono={METODO[m].icono} titulo={METODO[m].t} detalle="Directo a la tienda" />
                 ))}
               </div>
             )}
-            {metodo && metodo !== "efectivo" && entrega && entrega !== "agencia" && (
-              <div className="flex flex-wrap gap-2 text-sm">
-                {(["antes", "al_recibir"] as const).map((m) => (
-                  <button key={m} type="button" onClick={() => setMomento(m)} className={cn("h-9 rounded-full px-4 font-semibold ring-1", momento === m ? "bg-pino text-white ring-pino" : "bg-white text-tinta ring-linea")}>
-                    {m === "antes" ? "Pago ahora" : "Pago al recibir"}
-                  </button>
-                ))}
-              </div>
-            )}
-            {metodo && (
-              <p className="text-xs text-gris">
-                {momentoFinal === "antes"
-                  ? "Después de confirmar verás el número de la tienda para pagar. La tienda prepara tu pedido cuando confirma tu pago."
-                  : "Pagas cuando recibes tu pedido. Al entregarlo te pedirán tu código de 4 dígitos."}
+            {entrega && (
+              <p className="rounded-2xl bg-crema/70 px-4 py-3 text-sm text-tinta">
+                {regla === "al_recibir"
+                  ? <>Pagas <b>{soles(total)}</b> por Yape o Plin cuando recibes tu pedido. Te pedirán tu código de entrega de 4 dígitos.</>
+                  : regla === "adelanto" && adelanto
+                    ? <>Pagas <b>{soles(adelanto)}</b> de adelanto ({pct}%) después de confirmar y <b>{soles(total - adelanto)}</b> al recibir, siempre por Yape o Plin.</>
+                    : <>Pagas <b>{soles(total)}</b> por Yape o Plin después de confirmar. La tienda prepara tu pedido cuando confirma tu pago.</>}
+                {moto > 0 && <> El envío ({soles(moto)}) se lo pagas al motorizado aparte.</>}
               </p>
             )}
+            <p className="text-xs text-gris">No se acepta efectivo: todo se paga por Yape o Plin directo a la tienda.</p>
           </section>
         </div>
 
@@ -264,8 +257,9 @@ export function Checkout({ tienda: t }: { tienda: Tienda }) {
           <h2 className="text-lg font-extrabold text-tinta">Resumen</h2>
           <div className="space-y-1.5 text-sm">
             <div className="flex justify-between"><span className="text-gris">Productos</span><span>{soles(subtotal)}</span></div>
-            <div className="flex justify-between"><span className="text-gris">Envío</span><span>{entrega ? (envio ? soles(envio) : "—") : "Elige la entrega"}</span></div>
-            <div className="flex justify-between border-t border-linea pt-2 font-display text-lg font-extrabold"><span>Total</span><span>{soles(subtotal + envio)}</span></div>
+            <div className="flex justify-between"><span className="text-gris">Envío</span><span>{!entrega ? "Elige la entrega" : moto ? `${soles(moto)} al motorizado` : envio ? soles(envio) : "—"}</span></div>
+            <div className="flex justify-between border-t border-linea pt-2 font-display text-lg font-extrabold"><span>Total a la tienda</span><span>{soles(total)}</span></div>
+            {adelanto > 0 && <div className="flex justify-between text-xs text-gris"><span>Adelanto ahora · resto al recibir</span><span>{soles(adelanto)} · {soles(total - adelanto)}</span></div>}
             <p className="text-xs text-gris">La tienda confirma el total final al registrar tu pedido.</p>
           </div>
 

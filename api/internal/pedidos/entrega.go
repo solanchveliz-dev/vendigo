@@ -96,8 +96,16 @@ func (m *Modulo) entregar(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return err
 		}
-		if estadoPago == "paga_al_recibir" && in.PagoRecibido {
-			if err := pagos.Cambiar(ctx, tx, pid, pagos.Cambio{Estado: "informado_tienda", Detalle: "La tienda informó que recibió el pago al entregar.", Usuario: u.ID, Referencia: strings.TrimSpace(in.Referencia)}); err != nil {
+		// Si falta cobrar (todo o el resto del adelanto), la tienda debe confirmar que le llegó el Yape/Plin.
+		if estadoPago == "paga_al_recibir" || estadoPago == "adelanto_informado" {
+			if !in.PagoRecibido {
+				return httpx.Invalido("Antes de entregar, confirma que te llegó el pago por Yape o Plin.")
+			}
+			detalle := "La tienda informó que recibió el pago al entregar."
+			if estadoPago == "adelanto_informado" {
+				detalle = "La tienda informó que recibió el resto del pago al entregar."
+			}
+			if err := pagos.Cambiar(ctx, tx, pid, pagos.Cambio{Estado: "informado_tienda", Detalle: detalle, Usuario: u.ID, Referencia: strings.TrimSpace(in.Referencia)}); err != nil {
 				return err
 			}
 		}
@@ -110,7 +118,7 @@ func (m *Modulo) entregar(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-// informarPago: la tienda revisa su Yape/Plin o su efectivo e informa si le llegó el pago.
+// informarPago: la tienda revisa su Yape/Plin e informa si le llegó el pago (o el adelanto).
 func (m *Modulo) informarPago(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	tid, err := tiendas.ID(ctx, m.app)
@@ -139,6 +147,12 @@ func (m *Modulo) informarPago(w http.ResponseWriter, r *http.Request) error {
 		}
 		c := pagos.Cambio{Estado: "informado_tienda", Detalle: "La tienda informó que recibió el pago.", Usuario: u.ID, Referencia: strings.TrimSpace(in.Referencia)}
 		texto := "La tienda confirmó que recibió tu pago."
+		var momento, actual string
+		tx.QueryRowContext(ctx, `SELECT momento, estado FROM pagos WHERE pedido_id::text=$1`, pid).Scan(&momento, &actual)
+		if momento == "adelanto" && actual != "adelanto_informado" {
+			c.Detalle, c.Estado = "La tienda informó que recibió el adelanto.", "adelanto_informado"
+			texto = "La tienda confirmó que recibió tu adelanto. El resto lo pagas al recibir."
+		}
 		if !in.Recibido {
 			c.Estado, c.Detalle = "no_recibido", "La tienda informó que no le llegó el pago."
 			texto = "La tienda no encontró tu pago. Revisa el número de Yape/Plin y vuelve a enviar tu comprobante, o abre un reclamo."

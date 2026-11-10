@@ -48,7 +48,7 @@ export default async function ProductoPublico({ params, searchParams }: Params &
   const lugar = t.distrito || t.ciudad;
 
   const confianza = [
-    { icono: <ShieldCheck className="size-5" />, titulo: "Pagas a la tienda", texto: "Yape, Plin o efectivo, sin intermediarios" },
+    { icono: <ShieldCheck className="size-5" />, titulo: "Pagas a la tienda", texto: "Yape o Plin, sin intermediarios" },
     { icono: <Check className="size-5" />, titulo: "Ves cada paso", texto: "Te avisamos cómo va tu pedido" },
     t.politicas
       ? { icono: <RefreshCw className="size-5" />, titulo: "Cambios", texto: t.politicas.length > 40 ? t.politicas.slice(0, 40) + "…" : t.politicas }
@@ -150,11 +150,11 @@ export default async function ProductoPublico({ params, searchParams }: Params &
 
             <section className="mt-5 rounded-2xl bg-white p-5 ring-1 ring-linea/60">
               <p className="flex items-center gap-2 font-bold text-tinta">
-                <ShieldCheck className="size-5 text-pino" /> Tu compra en VendiGo está protegida
+                <ShieldCheck className="size-5 text-pino" /> Tu pedido en VendiGo tiene seguimiento
               </p>
               <ul className="mt-3 space-y-2.5 text-[15px] text-tinta/80">
                 {[
-                  "Pagas en la app (Yape, tarjeta o PagoEfectivo): queda protegido hasta que recibas tu pedido.",
+                  "Le pagas directo a la tienda por Yape o Plin; VendiGo no toca tu dinero.",
                   "Ves cada paso: preparación, código de agencia o motorizado.",
                   "Si algo sale mal, lo reportas en 1 clic y VendiGo media con la tienda.",
                 ].map((x) => (

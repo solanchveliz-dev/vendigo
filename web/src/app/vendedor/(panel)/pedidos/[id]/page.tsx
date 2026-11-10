@@ -250,8 +250,8 @@ export default function DetallePedido({ params }: { params: Promise<{ id: string
       <ModalEntregar
         abierto={modal === "recojo"}
         cerrar={() => setModal("")}
-        pagaAlRecibir={p.pago?.estado === "paga_al_recibir"}
-        monto={p.total_centimos}
+        pagaAlRecibir={p.pago?.estado === "paga_al_recibir" || p.pago?.estado === "adelanto_informado"}
+        monto={p.pago?.estado === "adelanto_informado" ? p.total_centimos - (p.pago?.adelanto_centimos ?? 0) : p.total_centimos}
         enviar={(codigo, pago_recibido) => accion("entregar", { codigo, pago_recibido }, "Pedido entregado.")}
       />
       <ModalReclamo
@@ -307,10 +307,10 @@ function ModalEntregar({ abierto, cerrar, enviar, pagaAlRecibir, monto }: { abie
         {pagaAlRecibir && (
           <label className="flex items-start gap-3 rounded-xl bg-arena/60 p-3 text-sm">
             <input type="checkbox" checked={pago} onChange={(e) => setPago(e.target.checked)} className="mt-0.5 size-4 accent-[var(--color-pino)]" />
-            <span>Ya recibí el pago de <b>{soles(monto)}</b> (Yape, Plin o efectivo).</span>
+            <span>Ya me llegó el pago de <b>{soles(monto)}</b> por Yape o Plin.</span>
           </label>
         )}
-        <Boton bloque variante="acento" disabled={codigo.length !== 4} onClick={() => enviar(codigo, pago)}>
+        <Boton bloque variante="acento" disabled={codigo.length !== 4 || (pagaAlRecibir && !pago)} onClick={() => enviar(codigo, pago)}>
           Confirmar entrega
         </Boton>
       </div>

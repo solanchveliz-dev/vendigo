@@ -1,5 +1,5 @@
 // Package pagos registra el estado del pago de cada pedido. VendiGo NO recibe ni retiene el dinero:
-// el comprador le paga directo a la tienda (Yape/Plin o efectivo) y VendiGo solo guarda lo que informan
+// el comprador le paga directo a la tienda (Yape o Plin) y VendiGo solo guarda lo que informan
 // el comprador y la tienda. "Confirmado" y "Reembolsado" quedan reservados para un proveedor de pagos real.
 package pagos
 
@@ -13,13 +13,14 @@ import (
 )
 
 // Métodos de pago directo a la tienda.
-var MetodosDirectos = map[string]string{"yape_directo": "Yape a la tienda", "plin_directo": "Plin a la tienda", "efectivo": "Efectivo al recibir"}
+var MetodosDirectos = map[string]string{"yape_directo": "Yape a la tienda", "plin_directo": "Plin a la tienda", "efectivo": "Efectivo (pedidos antiguos)"}
 
 // Textos de cada estado (los mismos en la web).
 var Textos = map[string]string{
 	"pendiente":           "Pendiente de pago",
 	"comprobante_enviado": "Comprobante enviado",
 	"paga_al_recibir":     "Paga al recibir",
+	"adelanto_informado":  "Adelanto recibido",
 	"informado_tienda":    "Pago informado por la tienda",
 	"no_recibido":         "La tienda no recibió el pago",
 	"confirmado":          "Pago confirmado",
@@ -31,24 +32,28 @@ var Textos = map[string]string{
 // PermiteAvanzar indica si la tienda ya puede enviar o entregar el pedido.
 func PermiteAvanzar(estado string) bool {
 	switch estado {
-	case "informado_tienda", "paga_al_recibir", "confirmado", "de_prueba":
+	case "informado_tienda", "paga_al_recibir", "adelanto_informado", "confirmado", "de_prueba":
 		return true
 	}
 	return false
 }
 
 // Registrar crea el pago de un pedido nuevo.
-func Registrar(ctx context.Context, tx *sql.Tx, pedidoID, metodo, momento string, monto int, prueba bool) error {
+// adelanto es lo que se paga antes de enviar cuando momento es "adelanto" (0 en los demás casos).
+func Registrar(ctx context.Context, tx *sql.Tx, pedidoID, metodo, momento string, monto, adelanto int, prueba bool) error {
 	origen, estado := "tienda", "pendiente"
 	if momento == "al_recibir" {
 		estado = "paga_al_recibir"
+	}
+	if momento != "adelanto" {
+		adelanto = 0
 	}
 	if prueba {
 		origen, estado = "prueba", "de_prueba"
 	}
 	var id string
-	if err := tx.QueryRowContext(ctx, `INSERT INTO pagos (pedido_id, origen, metodo, momento, estado, monto_centimos)
-		VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`, pedidoID, origen, metodo, momento, estado, monto).Scan(&id); err != nil {
+	if err := tx.QueryRowContext(ctx, `INSERT INTO pagos (pedido_id, origen, metodo, momento, estado, monto_centimos, adelanto_centimos)
+		VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`, pedidoID, origen, metodo, momento, estado, monto, adelanto).Scan(&id); err != nil {
 		return err
 	}
 	detalle := map[string]string{
@@ -56,6 +61,9 @@ func Registrar(ctx context.Context, tx *sql.Tx, pedidoID, metodo, momento string
 		"paga_al_recibir": "El comprador pagará directo a la tienda al recibir el pedido.",
 		"de_prueba":       "Pedido creado con datos de prueba (no hubo pago real).",
 	}[estado]
+	if momento == "adelanto" && !prueba {
+		detalle = fmt.Sprintf("Pedido registrado. El comprador debe pagar un adelanto de S/ %.2f a la tienda y el resto al recibir.", float64(adelanto)/100)
+	}
 	return evento(ctx, tx, id, estado, detalle, nil)
 }
 
@@ -67,7 +75,8 @@ func evento(ctx context.Context, q core.Ejecutor, pagoID, estado, detalle string
 // Transiciones que pueden hacer el comprador y la tienda (las de proveedor van por su integración).
 var transiciones = map[string]map[string]bool{
 	"comprobante_enviado": {"pendiente": true, "no_recibido": true, "comprobante_enviado": true},
-	"informado_tienda":    {"pendiente": true, "comprobante_enviado": true, "paga_al_recibir": true, "no_recibido": true},
+	"informado_tienda":    {"pendiente": true, "comprobante_enviado": true, "paga_al_recibir": true, "no_recibido": true, "adelanto_informado": true},
+	"adelanto_informado":  {"pendiente": true, "comprobante_enviado": true, "no_recibido": true},
 	"no_recibido":         {"pendiente": true, "comprobante_enviado": true, "paga_al_recibir": true},
 }
 
@@ -94,7 +103,7 @@ func Cambiar(ctx context.Context, tx *sql.Tx, pedidoID string, c Cambio) error {
 		return httpx.Conflicto("pago_estado", fmt.Sprintf("El pago está como “%s”: no se puede pasar a “%s”.", Textos[actual], Textos[c.Estado]))
 	}
 	var informado any
-	if c.Estado == "informado_tienda" || c.Estado == "no_recibido" {
+	if c.Estado == "informado_tienda" || c.Estado == "no_recibido" || c.Estado == "adelanto_informado" {
 		informado = c.Usuario
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE pagos SET estado=$2,
@@ -118,14 +127,19 @@ func Estado(ctx context.Context, q core.Ejecutor, pedidoID string) (string, erro
 // Solo aplica si el comprador pudo haber pagado; devuelve false si no hubo nada que devolver.
 func AbrirDevolucion(ctx context.Context, tx *sql.Tx, pedidoID, origen string) (bool, error) {
 	var estado string
-	var monto int
-	if err := tx.QueryRowContext(ctx, `SELECT estado, monto_centimos FROM pagos WHERE pedido_id=$1`, pedidoID).Scan(&estado, &monto); err != nil {
+	var monto, adelanto int
+	if err := tx.QueryRowContext(ctx, `SELECT estado, monto_centimos, adelanto_centimos FROM pagos WHERE pedido_id=$1`, pedidoID).Scan(&estado, &monto, &adelanto); err != nil {
 		return false, err
 	}
 	dev := ""
 	switch estado {
 	case "informado_tienda", "comprobante_enviado", "confirmado":
 		dev = "pendiente_tienda"
+		if adelanto > 0 && estado == "comprobante_enviado" {
+			monto = adelanto // con adelanto, el comprobante es solo del adelanto
+		}
+	case "adelanto_informado":
+		dev, monto = "pendiente_tienda", adelanto
 	case "de_prueba":
 		dev = "de_prueba"
 	default:

@@ -40,7 +40,13 @@ export function TarjetaPago({ pedido: p, ...a }: { pedido: PedidoDetalle } & Acc
         </div>
         <Fila k="Monto" v={soles(pago.monto_centimos)} />
         <Fila k="Cómo paga" v={METODOS[pago.metodo] ?? pago.metodo_texto} />
-        <Fila k="Cuándo" v={pago.momento === "antes" ? "Antes del envío" : "Al recibir"} />
+        <Fila k="Cuándo" v={pago.momento === "antes" ? "Completo antes del envío" : pago.momento === "adelanto" ? "Adelanto antes y resto al recibir" : "Todo al recibir"} />
+        {pago.momento === "adelanto" && (
+          <>
+            <Fila k="Adelanto" v={soles(pago.adelanto_centimos)} />
+            <Fila k="Resto al recibir" v={soles(pago.monto_centimos - pago.adelanto_centimos)} />
+          </>
+        )}
         <Fila k="Registro" v={ORIGEN[pago.origen]} />
         {pago.referencia && <Fila k="N.° de operación" v={pago.referencia} />}
         {pago.comprobante_url && (
@@ -88,7 +94,7 @@ export function TarjetaPago({ pedido: p, ...a }: { pedido: PedidoDetalle } & Acc
           ))}
           {devPendiente && a.informarDevolucion && (
             <>
-              <p className="mt-2 text-sm text-tinta/80">Devuélvele el dinero al cliente por el mismo medio (Yape, Plin o efectivo) e infórmalo con tu captura.</p>
+              <p className="mt-2 text-sm text-tinta/80">Devuélvele el dinero al cliente por el mismo medio (Yape o Plin) e infórmalo con tu captura.</p>
               <Boton bloque variante="acento" className="mt-3" onClick={() => setModal("devolucion")}>
                 Informar devolución
               </Boton>
@@ -116,7 +122,7 @@ function ModalPago({ abierto, cerrar, pedido: p, enviar }: { abierto: boolean; c
     setEnviando("");
   }
   return (
-    <Modal abierto={abierto} onCerrar={cerrar} titulo={`¿Te llegó el pago de ${soles(p.pago?.monto_centimos ?? 0)}?`}>
+    <Modal abierto={abierto} onCerrar={cerrar} titulo={`¿Te llegó ${p.pago?.momento === "adelanto" ? "el adelanto" : "el pago"} de ${soles((p.pago?.momento === "adelanto" ? p.pago?.adelanto_centimos : p.pago?.monto_centimos) ?? 0)}?`}>
       <div className="space-y-4">
         <p className="text-sm text-gris">
           Revisa tu {METODOS[p.pago?.metodo ?? ""] ?? "app"} y busca el pago de <b>{p.comprador}</b>. Solo confirma si ya lo ves en tu cuenta.

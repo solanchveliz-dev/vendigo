@@ -79,7 +79,6 @@ type compraReq struct {
 	Agencia     string              `json:"agencia"`
 	AgenciaSede string              `json:"agencia_sede"`
 	MetodoPago  string              `json:"metodo_pago"`
-	MomentoPago string              `json:"momento_pago"`
 	Nota        string              `json:"nota"`
 }
 
@@ -118,7 +117,7 @@ func (m *Modulo) comprar(w http.ResponseWriter, r *http.Request) error {
 			TiendaID: tid, Nombre: in.Nombre, Celular: in.Celular, DNI: strings.TrimSpace(in.DNI), Entrega: in.Entrega,
 			Direccion: strings.TrimSpace(in.Direccion), Distrito: strings.TrimSpace(in.Distrito), Ciudad: strings.TrimSpace(in.Ciudad),
 			Referencia: strings.TrimSpace(in.Referencia), Agencia: strings.TrimSpace(in.Agencia), AgenciaSede: strings.TrimSpace(in.AgenciaSede),
-			MetodoPago: in.MetodoPago, MomentoPago: in.MomentoPago, Nota: strings.TrimSpace(in.Nota), Items: in.Items,
+			MetodoPago: in.MetodoPago, Nota: strings.TrimSpace(in.Nota), Items: in.Items,
 		})
 		if err != nil {
 			return err

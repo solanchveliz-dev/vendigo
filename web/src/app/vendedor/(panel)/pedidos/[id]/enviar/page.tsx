@@ -148,7 +148,7 @@ export default function EnviarPedido({ params }: { params: Promise<{ id: string 
       <Check className="mt-0.5 size-4 shrink-0" />
       <span>
         Después de esto <b>no tienes que hacer nada más</b>.{" "}
-        {p.entrega === "motorizado" ? `Al entregar, pídele a ${nombre} su código de 4 dígitos${p.pago?.estado === "paga_al_recibir" ? " y cobra el pago" : ""}.` : `${nombre} confirmará cuando lo reciba; si no, se confirma solo en 7 días.`}
+        {p.entrega === "motorizado" ? `Al entregar, pídele a ${nombre} su código de 4 dígitos${p.pago?.estado === "paga_al_recibir" || p.pago?.estado === "adelanto_informado" ? " y confirma que te llegó el pago por Yape o Plin" : ""}.` : `${nombre} confirmará cuando lo reciba; si no, se confirma solo en 7 días.`}
       </span>
     </div>
   );
@@ -284,10 +284,10 @@ export default function EnviarPedido({ params }: { params: Promise<{ id: string 
               </label>
             </div>
           )}
-          {p.pago?.estado === "paga_al_recibir" && (
+          {(p.pago?.estado === "paga_al_recibir" || p.pago?.estado === "adelanto_informado") && (
             <div className="flex gap-3 rounded-2xl bg-aviso-claro px-4 py-3 text-sm text-tinta">
               <Wallet className="mt-0.5 size-4 shrink-0 text-aviso" />
-              <span>{nombre} paga <b>{soles(p.total_centimos)}</b> al recibir ({p.pago.metodo_texto}). Tu motorizado cobra y pide el código de entrega.</span>
+              <span>{nombre} paga <b>{soles(p.pago.estado === "adelanto_informado" ? p.total_centimos - p.pago.adelanto_centimos : p.total_centimos)}</b> al recibir por {p.pago.metodo_texto}. Entrega el pedido solo cuando te llegue y te dé su código. El envío se lo paga al motorizado aparte.</span>
             </div>
           )}
           {errorBox}

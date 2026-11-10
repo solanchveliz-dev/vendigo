@@ -11,7 +11,10 @@ export type Entrega = {
   zonas_motorizado: string;
   instrucciones_recojo: string;
   dias_recojo: number[];
-  adelanto_pct: number;
+  adelanto_pct: number; // adelanto del recojo
+  recojo_pago: "completo" | "adelanto" | "al_recibir";
+  motorizado_pago: "completo" | "adelanto" | "al_recibir";
+  motorizado_adelanto_pct: number;
   costo_agencia_centimos: number;
   otra: boolean;
   descripcion_otra: string;
@@ -38,7 +41,6 @@ export type Tienda = {
   politicas: string;
   entrega: Entrega;
   reputacion: "nueva" | "buena" | "excelente";
-  dias_liberacion: number;
   enlace: string;
   pausada: boolean;
   yape_numero: string;
@@ -46,7 +48,6 @@ export type Tienda = {
   pago_titular: string;
   pago_qr_key: string | null;
   pago_qr_url: string;
-  acepta_efectivo: boolean;
   metodos_pago: string[];
   tema_color: string;
   tema_fuente: string;
@@ -150,13 +151,14 @@ export type PedidoDetalle = PedidoResumen & {
 
 // El comprador le paga directo a la tienda; VendiGo solo registra el estado.
 export type PagoInfo = {
-  estado: "pendiente" | "comprobante_enviado" | "paga_al_recibir" | "informado_tienda" | "no_recibido" | "confirmado" | "rechazado" | "reembolsado" | "de_prueba";
+  estado: "pendiente" | "comprobante_enviado" | "paga_al_recibir" | "adelanto_informado" | "informado_tienda" | "no_recibido" | "confirmado" | "rechazado" | "reembolsado" | "de_prueba";
   texto: string;
   origen: "tienda" | "proveedor" | "prueba";
   metodo: string;
   metodo_texto: string;
-  momento: "antes" | "al_recibir";
+  momento: "antes" | "adelanto" | "al_recibir";
   monto_centimos: number;
+  adelanto_centimos: number;
   referencia: string;
   comprobante_url: string;
   informado_en: string | null;

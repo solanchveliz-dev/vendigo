@@ -253,6 +253,7 @@ type PagoInfo struct {
 	MetodoTexto    string       `json:"metodo_texto"`
 	Momento        string       `json:"momento"`
 	Monto          int          `json:"monto_centimos"`
+	Adelanto       int          `json:"adelanto_centimos"` // lo que se paga antes cuando momento es "adelanto"
 	Referencia     string       `json:"referencia"`
 	ComprobanteURL string       `json:"comprobante_url"`
 	InformadoEn    *time.Time   `json:"informado_en"`
@@ -440,8 +441,8 @@ func (m *Modulo) cargarPago(ctx context.Context, d *Detalle) error {
 	var p PagoInfo
 	var comp sql.NullString
 	var comision sql.NullInt64
-	err := m.app.DB.QueryRowContext(ctx, `SELECT id, estado, origen, metodo, momento, monto_centimos, referencia, comprobante_key, comision_reportada_centimos, informado_en
-		FROM pagos WHERE pedido_id=$1`, d.ID).Scan(new(string), &p.Estado, &p.Origen, &p.Metodo, &p.Momento, &p.Monto, &p.Referencia, &comp, &comision, &p.InformadoEn)
+	err := m.app.DB.QueryRowContext(ctx, `SELECT id, estado, origen, metodo, momento, monto_centimos, adelanto_centimos, referencia, comprobante_key, comision_reportada_centimos, informado_en
+		FROM pagos WHERE pedido_id=$1`, d.ID).Scan(new(string), &p.Estado, &p.Origen, &p.Metodo, &p.Momento, &p.Monto, &p.Adelanto, &p.Referencia, &comp, &comision, &p.InformadoEn)
 	if core.SinFilas(err) {
 		return nil
 	}

@@ -241,7 +241,7 @@ func historialDemo(ctx context.Context, conexion *sql.DB) {
 			entrega := entregas[n%len(entregas)]
 			metodo, momento := []string{"yape_directo", "plin_directo", "yape_directo"}[n%3], "antes"
 			if entrega == "motorizado" {
-				metodo, momento = "efectivo", "al_recibir"
+				momento = "al_recibir"
 			}
 			total := p.precio * unidades
 			var pid string

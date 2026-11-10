@@ -201,14 +201,14 @@ export default async function TiendaPublica({ params, searchParams }: { params: 
                 )}
               </ul>
               <div className="mt-5 flex flex-wrap gap-2">
-                {["Yape", "Tarjeta", "PagoEfectivo"].map((m) => (
+                {(t.metodos_pago ?? []).map((k) => ({ yape_directo: "Yape", plin_directo: "Plin" } as Record<string, string>)[k] ?? k).map((m) => (
                   <span key={m} className="rounded-full bg-arena px-3 py-1.5 text-sm font-semibold text-tinta">
                     {m}
                   </span>
                 ))}
               </div>
               <p className="mt-4 flex items-center gap-2 text-sm text-gris">
-                <ShieldCheck className="size-4 shrink-0 text-pino" /> Pagas dentro de VendiGo y tu dinero queda protegido hasta que recibas tu pedido.
+                <ShieldCheck className="size-4 shrink-0 text-pino" /> Le pagas directo a la tienda por Yape o Plin y sigues tu pedido en VendiGo. Si algo sale mal, VendiGo media.
               </p>
               {(t.horario || t.entrega.horario_recojo) && (
                 <p className="mt-2 flex items-center gap-2 text-sm text-gris">

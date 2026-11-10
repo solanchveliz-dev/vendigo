@@ -100,7 +100,12 @@ export default function Seguimiento({ params }: { params: Promise<{ token: strin
     if (fotos.current) fotos.current.value = "";
   }
 
-  const pagarAhora = pago && ["pendiente", "no_recibido", "comprobante_enviado"].includes(pago.estado) && pago.momento === "antes" && !cerrado;
+  const pagarAhora = pago && ["pendiente", "no_recibido", "comprobante_enviado"].includes(pago.estado) && pago.momento !== "al_recibir" && !cerrado;
+  const esAdelanto = pago?.momento === "adelanto";
+  const montoAhora = pago ? (esAdelanto ? pago.adelanto_centimos : pago.monto_centimos) : 0;
+  // Lo que falta pagar al recibir (todo, o el resto del adelanto).
+  const pagarAlRecibir = pago && !cerrado && p.estado !== "entregado" && (pago.estado === "paga_al_recibir" || pago.estado === "adelanto_informado");
+  const montoAlRecibir = pago ? (pago.estado === "adelanto_informado" ? pago.monto_centimos - pago.adelanto_centimos : pago.monto_centimos) : 0;
   const devoluciones = (p.devoluciones ?? []).filter((d) => d.estado !== "de_prueba");
 
   return (
@@ -136,12 +141,14 @@ export default function Seguimiento({ params }: { params: Promise<{ token: strin
         <div className="grid items-start gap-5 lg:grid-cols-[1fr_360px]">
           <div className="space-y-5">
             {pagarAhora && pago && (
-              <Seccion titulo={pago.estado === "comprobante_enviado" ? "Pago enviado" : "Paga a la tienda"}>
+              <Seccion titulo={pago.estado === "comprobante_enviado" ? "Pago enviado" : esAdelanto ? "Paga el adelanto" : "Paga a la tienda"}>
                 {pago.estado === "no_recibido" && <Aviso tono="error" className="mb-3">La tienda dice que todavía no le llega tu pago. Revisa el número y vuelve a enviar tu comprobante.</Aviso>}
                 {pago.estado === "comprobante_enviado" ? (
                   <p className="text-sm text-gris">Enviaste tu comprobante. La tienda lo revisa en su app y, cuando lo confirme, prepara tu pedido. Si te equivocaste, puedes enviarlo otra vez.</p>
                 ) : (
-                  <p className="text-sm text-gris">Paga <b className="text-tinta">{soles(pago.monto_centimos)}</b> directo a {t.nombre}. VendiGo no recibe este dinero.</p>
+                  <p className="text-sm text-gris">
+                    Paga <b className="text-tinta">{soles(montoAhora)}</b>{esAdelanto && <> de adelanto (el resto, {soles(pago.monto_centimos - montoAhora)}, al recibir)</>} directo a {t.nombre} por Yape o Plin. VendiGo no recibe este dinero.
+                  </p>
                 )}
                 <div className="mt-3 grid gap-3 sm:grid-cols-2">
                   {pago.metodo === "yape_directo" && t.yape_numero && (
@@ -192,6 +199,18 @@ export default function Seguimiento({ params }: { params: Promise<{ token: strin
               </Seccion>
             )}
 
+            {pagarAlRecibir && pago && (
+              <Seccion titulo={pago.estado === "adelanto_informado" ? "Adelanto recibido" : "Pagas al recibir"}>
+                <p className="text-sm text-gris">
+                  {pago.estado === "adelanto_informado" && <>La tienda confirmó tu adelanto. </>}
+                  Al recibir tu pedido, paga <b className="text-tinta">{soles(montoAlRecibir)}</b> por {pago.metodo === "plin_directo" ? "Plin" : "Yape"} al{" "}
+                  <b className="text-tinta">{pago.metodo === "plin_directo" ? t.plin_numero : t.yape_numero}</b>
+                  {t.pago_titular && <> ({t.pago_titular})</>}. La tienda confirma que le llegó y recién ahí das tu código. No se acepta efectivo.
+                </p>
+                {p.entrega === "motorizado" && p.envio_centimos > 0 && <p className="mt-2 text-xs text-gris">El envío ({soles(p.envio_centimos)}) se lo pagas al motorizado aparte.</p>}
+              </Seccion>
+            )}
+
             {p.codigo_entrega && !cerrado && p.estado !== "entregado" && (
               <section className="flex items-center gap-4 rounded-[22px] bg-pino-claro p-5 ring-1 ring-pino/20">
                 <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-pino text-white"><KeyRound className="size-6" /></span>
@@ -200,7 +219,7 @@ export default function Seguimiento({ params }: { params: Promise<{ token: strin
                   <p className="font-display text-3xl font-extrabold tracking-[0.3em] text-pino">{p.codigo_entrega}</p>
                   <p className="text-xs text-pino/80">
                     {p.entrega === "recojo" ? "Muéstralo al recoger." : "Dáselo al motorizado solo cuando tengas tu pedido en la mano."}
-                    {pago?.momento === "al_recibir" && " Ahí mismo pagas a la tienda."}
+                    {pagarAlRecibir && " Primero paga por Yape o Plin; cuando la tienda lo confirme, das tu código."}
                   </p>
                 </div>
               </section>
@@ -253,12 +272,13 @@ export default function Seguimiento({ params }: { params: Promise<{ token: strin
                 </div>
               ))}
               <div className="mt-2 space-y-1 border-t border-linea pt-2 text-sm">
-                <div className="flex justify-between"><span className="text-gris">Envío</span><span>{p.envio_centimos ? soles(p.envio_centimos) : "—"}</span></div>
-                <div className="flex justify-between font-display text-lg font-extrabold"><span>Total</span><span>{soles(p.total_centimos)}</span></div>
+                <div className="flex justify-between"><span className="text-gris">Envío</span><span>{p.envio_centimos ? (p.entrega === "motorizado" ? `${soles(p.envio_centimos)} al motorizado` : soles(p.envio_centimos)) : "—"}</span></div>
+                <div className="flex justify-between font-display text-lg font-extrabold"><span>Total a la tienda</span><span>{soles(p.total_centimos)}</span></div>
+                {pago?.momento === "adelanto" && <div className="flex justify-between text-xs text-gris"><span>Adelanto · resto al recibir</span><span>{soles(pago.adelanto_centimos)} · {soles(pago.monto_centimos - pago.adelanto_centimos)}</span></div>}
               </div>
               {pago && (
                 <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-gris">
-                  <EtiquetaPago estado={pago.estado} texto={pago.texto} /> {pago.metodo_texto} · {pago.momento === "antes" ? "antes del envío" : "al recibir"}
+                  <EtiquetaPago estado={pago.estado} texto={pago.texto} /> {pago.metodo_texto} · {pago.momento === "antes" ? "completo antes del envío" : pago.momento === "adelanto" ? "adelanto y resto al recibir" : "al recibir"}
                 </div>
               )}
             </Seccion>
