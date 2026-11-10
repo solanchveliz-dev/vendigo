@@ -21,7 +21,7 @@ import (
 
 func main() {
 	unaVez := flag.Bool("una-vez", false, "ejecuta una sola pasada y termina (modo EventBridge)")
-	cada := flag.Duration("cada", time.Minute, "cada cuánto revisar")
+	cada := flag.Duration("cada", 30*time.Second, "cada cuánto revisar (los plazos del Modo live son de minutos)")
 	flag.Parse()
 
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))

@@ -13,6 +13,26 @@ export type ItemCarrito = {
 };
 
 const clave = (slug: string) => `vendigo:pedido:${slug}`;
+// La separación del Modo live va aparte del carrito normal: un solo producto y no se mezcla con lo que ya tenías.
+const claveLive = (slug: string) => `vendigo:live:${slug}`;
+
+export function leerSeparacion(slug: string): ItemCarrito[] {
+  try {
+    const v = JSON.parse(sessionStorage.getItem(claveLive(slug)) ?? "[]");
+    return Array.isArray(v) ? v : [];
+  } catch {
+    return [];
+  }
+}
+
+export function guardarSeparacion(slug: string, items: ItemCarrito[]) {
+  try {
+    if (items.length) sessionStorage.setItem(claveLive(slug), JSON.stringify(items));
+    else sessionStorage.removeItem(claveLive(slug));
+  } catch {
+    // Sin almacenamiento: la separación sigue en la página actual.
+  }
+}
 
 export function leerCarrito(slug: string): ItemCarrito[] {
   try {

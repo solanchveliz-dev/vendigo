@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -16,6 +17,7 @@ import (
 	"github.com/solanchveliz-dev/vendigo/api/internal/billetera"
 	"github.com/solanchveliz-dev/vendigo/api/internal/core"
 	"github.com/solanchveliz-dev/vendigo/api/internal/httpx"
+	"github.com/solanchveliz-dev/vendigo/api/internal/live"
 	"github.com/solanchveliz-dev/vendigo/api/internal/pagos"
 	"github.com/solanchveliz-dev/vendigo/api/internal/pedidos"
 )
@@ -96,6 +98,8 @@ type compraReq struct {
 	AgenciaSede string              `json:"agencia_sede"`
 	MetodoPago  string              `json:"metodo_pago"`
 	Nota        string              `json:"nota"`
+	// Live: la compra viene del Modo live (separar). Plazo de pago en minutos y siempre se paga antes.
+	Live bool `json:"live"`
 }
 
 func (m *Modulo) comprar(w http.ResponseWriter, r *http.Request) error {
@@ -127,10 +131,29 @@ func (m *Modulo) comprar(w http.ResponseWriter, r *http.Request) error {
 	if m.esSuTienda(r, in.Slug, in.Celular) {
 		return errPropiaTienda
 	}
+	if in.Live {
+		// En un live los plazos son de minutos: antes de separar se liberan las separaciones ya vencidas, para que
+		// el stock esté al día sin esperar la siguiente vuelta del worker.
+		if _, err := pedidos.VencerPedidosSinPago(ctx, m.app); err != nil {
+			return err
+		}
+	}
 	var pid, codigo, token string
+	var plazo time.Duration // solo en el Modo live
 	err := m.app.EnTransaccion(ctx, func(tx *sql.Tx) error {
 		if err := m.ValidarOTP(ctx, tx, in.Celular, "compra", in.Codigo); err != nil {
 			return err
+		}
+		if in.Live {
+			ids := make([]string, len(in.Items))
+			for i, it := range in.Items {
+				ids[i] = it.ProductoID
+			}
+			p, err := live.Validar(ctx, tx, tid, in.Celular, ids)
+			if err != nil {
+				return err
+			}
+			plazo = p
 		}
 		var err error
 		pid, codigo, err = pedidos.Crear(ctx, m.app, tx, pedidos.PedidoNuevo{
@@ -138,9 +161,15 @@ func (m *Modulo) comprar(w http.ResponseWriter, r *http.Request) error {
 			Direccion: strings.TrimSpace(in.Direccion), Distrito: strings.TrimSpace(in.Distrito), Ciudad: strings.TrimSpace(in.Ciudad),
 			Referencia: strings.TrimSpace(in.Referencia), Agencia: strings.TrimSpace(in.Agencia), AgenciaSede: strings.TrimSpace(in.AgenciaSede),
 			MetodoPago: in.MetodoPago, Nota: strings.TrimSpace(in.Nota), Items: in.Items,
+			PlazoPago: plazo, PagoAntes: in.Live,
 		})
 		if err != nil {
 			return err
+		}
+		if in.Live {
+			if _, err := tx.ExecContext(ctx, `UPDATE pedidos SET del_live=true WHERE id=$1`, pid); err != nil {
+				return err
+			}
 		}
 		return tx.QueryRowContext(ctx, `SELECT token_seguimiento FROM pedidos WHERE id=$1`, pid).Scan(&token)
 	})
@@ -149,7 +178,11 @@ func (m *Modulo) comprar(w http.ResponseWriter, r *http.Request) error {
 	}
 	enlace := m.app.Cfg.WebURL + "/seguimiento/" + token
 	// El SMS es informativo: si falla, el pedido igual queda registrado y el enlace se muestra en pantalla.
-	_ = m.app.Avisos.EnviarTexto(ctx, in.Celular, fmt.Sprintf("VendiGo: tu pedido %s quedó registrado. Síguelo y paga a la tienda aquí: %s", codigo, enlace))
+	texto := fmt.Sprintf("VendiGo: tu pedido %s quedó registrado. Síguelo y paga a la tienda aquí: %s", codigo, enlace)
+	if plazo > 0 {
+		texto = fmt.Sprintf("VendiGo: separaste tu pedido %s. Tienes %d minutos para pagar y subir tu captura; si no, se libera: %s", codigo, int(plazo.Minutes()), enlace)
+	}
+	_ = m.app.Avisos.EnviarTexto(ctx, in.Celular, texto)
 	httpx.JSON(w, http.StatusCreated, map[string]string{"codigo": codigo, "token": token, "enlace": enlace})
 	return nil
 }

@@ -42,6 +42,9 @@ type PedidoNuevo struct {
 	Prueba      bool   // datos de prueba (solo modo desarrollo y seed)
 	// PlazoPago: tiempo para pagar y subir la captura. 0 = el de la venta normal (PlazoPagoNormal).
 	PlazoPago time.Duration
+	// PagoAntes: el pago va antes de entregar aunque la tienda acepte "pagar al recibir" (Modo live: una
+	// separación sin pago no puede retener el stock sin plazo).
+	PagoAntes bool
 	Nota      string
 	Items     []ItemNuevo
 }
@@ -145,6 +148,9 @@ func Crear(ctx context.Context, app *core.App, tx *sql.Tx, in PedidoNuevo) (stri
 		if pct <= 0 {
 			in.MomentoPago = "antes"
 		}
+	}
+	if in.PagoAntes && in.MomentoPago == "al_recibir" {
+		in.MomentoPago = "antes"
 	}
 
 	type linea struct {

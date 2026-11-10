@@ -41,9 +41,13 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
   };
 }
 
-export default async function ProductoPublico({ params, searchParams }: Params & { searchParams: Promise<{ vista?: string }> }) {
+export default async function ProductoPublico({ params, searchParams }: Params & { searchParams: Promise<{ vista?: string; live?: string; min?: string }> }) {
   const { slug, id } = await params;
-  const vista = (await searchParams).vista === "1";
+  const sp = await searchParams;
+  const vista = sp.vista === "1";
+  // Llegó desde el Modo live: el botón principal es "Separar".
+  const live = sp.live === "1";
+  const minutosLive = Math.min(15, Math.max(0, Number(sp.min) || 0));
   const d = await cargar(slug, id).catch(() => null);
   if (!d) notFound();
   const { tienda: t, producto: p, preguntas } = d;
@@ -114,7 +118,7 @@ export default async function ProductoPublico({ params, searchParams }: Params &
               )}
             </p>
 
-            <CompraProducto producto={p} slug={t.slug} pausada={t.pausada} vista={vista} />
+            <CompraProducto producto={p} slug={t.slug} pausada={t.pausada} vista={vista} live={live} minutosLive={minutosLive} />
 
             <div className="mt-6 grid gap-3 sm:grid-cols-3">
               {confianza.map((c) => (

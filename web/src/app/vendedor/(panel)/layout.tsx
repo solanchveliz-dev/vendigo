@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { BarChart3, Bell, ClipboardList, Crown, Home, LogOut, MessageCircleQuestion, Package, ShieldCheck, Sparkles, Store, Wallet, Smartphone, Search, Share2, Plus, Users, Settings } from "lucide-react";
+import { BarChart3, Bell, ClipboardList, Crown, Home, LogOut, MessageCircleQuestion, Package, Radio, ShieldCheck, Sparkles, Store, Wallet, Smartphone, Search, Share2, Plus, Users, Settings } from "lucide-react";
 import { api, sesion, useApi } from "@/lib/api";
 import type { Usuario } from "@/lib/tipos";
 import { cn, Cargando } from "@/components/ui";
@@ -16,6 +16,7 @@ const menu = [
   { href: "/vendedor", texto: "Inicio", icono: Home },
   { href: "/vendedor/pedidos", texto: "Pedidos", icono: ClipboardList, cuenta: "pedidos" },
   { href: "/vendedor/productos", texto: "Productos", icono: Package },
+  { href: "/vendedor/live", texto: "Modo live", icono: Radio },
   { href: "/vendedor/clientes", texto: "Clientes", icono: Users },
   { href: "/vendedor/consultas", texto: "Consultas", icono: MessageCircleQuestion, cuenta: "consultas" },
   { href: "/vendedor/cobros", texto: "Mis ventas", icono: Wallet, cuenta: "reclamos" },

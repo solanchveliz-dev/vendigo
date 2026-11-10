@@ -265,7 +265,10 @@ export default function Seguimiento({ params }: { params: Promise<{ token: strin
                     Paga <b className="text-tinta">{soles(montoAhora)}</b>{esAdelanto && <> de adelanto (el resto, {soles(pago.monto_centimos - montoAhora)}, al recibir)</>} directo a {t.nombre}. VendiGo no recibe este dinero.
                   </p>
                 )}
-                {pago.estado === "pendiente" && p.pago_vence_en && p.estado !== "cancelado" && p.estado !== "rechazado" && (
+                {pago.estado === "pendiente" && p.del_live && p.estado !== "cancelado" && p.estado !== "rechazado" && (
+                  <ContadorPago segundos={p.segundos_para_pagar} alTerminar={recargar} />
+                )}
+                {pago.estado === "pendiente" && p.pago_vence_en && !p.del_live && p.estado !== "cancelado" && p.estado !== "rechazado" && (
                   <p className="mt-2 rounded-xl bg-aviso-claro px-3 py-2 text-sm text-tinta">
                     Tienes hasta el <b>{fecha(p.pago_vence_en, true)}</b> para pagar y subir tu captura. Si no, el pedido se cancela solo y el producto vuelve a la tienda.
                   </p>
@@ -458,6 +461,35 @@ function DatosRecojo({ agencia, guia, clave, rastreo }: { agencia: string; guia:
       ) : (
         guia && <p className="text-gris">Puedes consultar el estado en la web o app de {agencia} con tu número de guía.</p>
       )}
+    </div>
+  );
+}
+
+// Contador de una separación del Modo live. Los segundos vienen del servidor (que es quien decide el vencimiento);
+// el navegador solo los muestra. Al llegar a cero vuelve a preguntar al servidor cómo quedó el pedido.
+function ContadorPago({ segundos, alTerminar }: { segundos: number; alTerminar: () => void }) {
+  const [quedan, setQuedan] = useState(segundos);
+  useEffect(() => setQuedan(segundos), [segundos]);
+  useEffect(() => {
+    const t = setInterval(() => setQuedan((s) => Math.max(0, s - 1)), 1000);
+    // Cada 15 s y al volver a la pestaña se sincroniza con el servidor (por si se perdió internet o se cerró la página).
+    const r = setInterval(alTerminar, 15000);
+    const volver = () => document.visibilityState === "visible" && alTerminar();
+    document.addEventListener("visibilitychange", volver);
+    return () => {
+      clearInterval(t);
+      clearInterval(r);
+      document.removeEventListener("visibilitychange", volver);
+    };
+  }, [alTerminar]);
+  useEffect(() => {
+    if (quedan === 0) alTerminar();
+  }, [quedan, alTerminar]);
+  return (
+    <div className="mt-3 rounded-2xl bg-coral-claro/70 px-4 py-3 text-center ring-1 ring-coral/30">
+      <p className="text-xs font-semibold text-tinta">Separado para ti. Paga y sube tu captura antes de que termine:</p>
+      <p className="font-display text-4xl font-extrabold tabular-nums text-coral">{Math.floor(quedan / 60)}:{String(quedan % 60).padStart(2, "0")}</p>
+      <p className="text-xs text-gris">Si no pagas a tiempo, se libera para otra persona. Separar no es pagar.</p>
     </div>
   );
 }

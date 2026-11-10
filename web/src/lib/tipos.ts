@@ -156,6 +156,8 @@ export type PedidoDetalle = PedidoResumen & {
   enviado_en: string | null;
   entregado_en: string | null;
   pago_vence_en: string | null;
+  segundos_para_pagar: number;
+  del_live: boolean;
   pedidos_cliente: number;
   motorizados_guardados: { nombre: string; celular: string }[];
   ayuda: Ayuda | null;

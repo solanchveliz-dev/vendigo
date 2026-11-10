@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Bike, Check, ChevronRight, CreditCard, Landmark, Lock, MapPin, Minus, Package, Plus, Smartphone, Store, Trash2 } from "lucide-react";
 import { api, ErrorApi } from "@/lib/api";
 import { soles } from "@/lib/formato";
-import { guardarCarrito, leerCarrito, type ItemCarrito } from "@/lib/carrito";
+import { guardarCarrito, guardarSeparacion, leerCarrito, leerSeparacion, type ItemCarrito } from "@/lib/carrito";
 import type { Tienda } from "@/lib/tipos";
 import { Area, Aviso, Boton, Campo, Entrada, Selector, cn } from "@/components/ui";
 
@@ -61,7 +61,8 @@ function Tarjeta({ titulo, children, className }: { titulo?: React.ReactNode; ch
 
 // Compra sin cuenta, en 3 pasos como el prototipo: Tu pedido → Entrega → Pago → Listo (seguimiento).
 // El comprador le paga directo a la tienda; VendiGo solo registra el pedido y da seguimiento.
-export function Checkout({ tienda: t, vista = false }: { tienda: Tienda; vista?: boolean }) {
+// live: separación desde el Modo live (un producto, plazo de pago de minutos y siempre se paga antes).
+export function Checkout({ tienda: t, vista = false, live = false, minutosLive = 0 }: { tienda: Tienda; vista?: boolean; live?: boolean; minutosLive?: number }) {
   const router = useRouter();
   const [paso, setPaso] = useState<Paso>(1);
   const [items, setItems] = useState<ItemCarrito[] | null>(null);
@@ -78,14 +79,16 @@ export function Checkout({ tienda: t, vista = false }: { tienda: Tienda; vista?:
   const [cargando, setCargando] = useState(false);
 
   useEffect(() => {
-    setItems(leerCarrito(t.slug));
-  }, [t.slug]);
+    setItems(live ? leerSeparacion(t.slug) : leerCarrito(t.slug));
+  }, [t.slug, live]);
   useEffect(() => {
     window.scrollTo({ top: 0 });
   }, [paso]);
 
   // Cuándo se paga lo decide la tienda por forma de entrega (agencia: siempre completo antes).
-  const regla = entrega === "recojo" ? t.entrega.recojo_pago : entrega === "motorizado" ? t.entrega.motorizado_pago : "completo";
+  const reglaTienda = entrega === "recojo" ? t.entrega.recojo_pago : entrega === "motorizado" ? t.entrega.motorizado_pago : "completo";
+  // En el live no hay "pagar al recibir": una separación sin pago no puede retener el producto sin plazo.
+  const regla = live && reglaTienda === "al_recibir" ? "completo" : reglaTienda;
   const pct = entrega === "recojo" ? t.entrega.adelanto_pct : entrega === "motorizado" ? t.entrega.motorizado_adelanto_pct : 0;
   const subtotal = useMemo(() => (items ?? []).reduce((a, i) => a + i.precio_centimos * i.cantidad, 0), [items]);
   // El envío del motorizado se le paga a él aparte; no suma al total que se le paga a la tienda.
@@ -110,16 +113,17 @@ export function Checkout({ tienda: t, vista = false }: { tienda: Tienda; vista?:
   if (!items.length) {
     return (
       <div className="py-16 text-center">
-        <h1 className="text-[28px] font-extrabold text-pino">Tu pedido está vacío</h1>
-        <p className="mt-2 text-sm text-gris">Elige productos en la tienda y vuelve aquí.</p>
-        <Link href={`/t/${t.slug}`} className="mt-5 inline-flex h-11 items-center rounded-full bg-pino px-6 text-sm font-bold text-white">Ver la tienda</Link>
+        <h1 className="text-[28px] font-extrabold text-pino">{live ? "No tienes nada separado" : "Tu pedido está vacío"}</h1>
+        <p className="mt-2 text-sm text-gris">{live ? "Vuelve al live y toca “Separar” en el producto que quieres." : "Elige productos en la tienda y vuelve aquí."}</p>
+        <Link href={live ? `/t/${t.slug}/live` : `/t/${t.slug}`} className="mt-5 inline-flex h-11 items-center rounded-full bg-pino px-6 text-sm font-bold text-white">{live ? "Volver al live" : "Ver la tienda"}</Link>
       </div>
     );
   }
 
   function cambiarItems(nuevos: ItemCarrito[]) {
     setItems(nuevos);
-    guardarCarrito(t.slug, nuevos);
+    if (live) guardarSeparacion(t.slug, nuevos);
+    else guardarCarrito(t.slug, nuevos);
   }
   const campo = (k: keyof typeof f) => ({ value: f[k], onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => setF({ ...f, [k]: e.target.value }) });
 
@@ -180,8 +184,10 @@ export function Checkout({ tienda: t, vista = false }: { tienda: Tienda; vista?:
         agencia_sede: entrega === "agencia" ? f.sede.trim() : "",
         metodo_pago: metodo,
         nota: f.nota.trim(),
+        live,
       });
-      guardarCarrito(t.slug, []);
+      if (live) guardarSeparacion(t.slug, []);
+      else guardarCarrito(t.slug, []);
       try {
         sessionStorage.setItem(`vendigo:nuevo:${r.token}`, "1");
       } catch {}
@@ -214,6 +220,11 @@ export function Checkout({ tienda: t, vista = false }: { tienda: Tienda; vista?:
         <p className="text-sm text-gris">{titulos[paso][1]}</p>
       </div>
       <div className="mb-5"><Pasos actual={paso} /></div>
+      {live && (
+        <p className="mb-5 rounded-2xl bg-coral-claro/70 px-4 py-3 text-sm text-tinta ring-1 ring-coral/30">
+          <b>Separación del live.</b> Al confirmar, el producto queda separado para ti{minutosLive ? <> y tendrás <b>{minutosLive} minutos</b> para pagar y subir tu captura</> : " por unos minutos para que pagues y subas tu captura"}. Si no pagas a tiempo, se libera para otra persona. Separar no es pagar.
+        </p>
+      )}
 
       <div className="grid items-start gap-5 lg:grid-cols-[1fr_360px]">
         <div className="space-y-4">

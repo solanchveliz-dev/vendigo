@@ -240,7 +240,11 @@ type Detalle struct {
 	EnviadoEn   *time.Time `json:"enviado_en"`
 	EntregadoEn *time.Time `json:"entregado_en"`
 	// Hasta cuándo puede pagar y subir su captura (solo si el pago sigue pendiente).
-	PagoVenceEn    *time.Time   `json:"pago_vence_en"`
+	PagoVenceEn *time.Time `json:"pago_vence_en"`
+	// Segundos que quedan para pagar, calculados en el servidor (el contador del navegador solo los muestra).
+	PagoSegundos int `json:"segundos_para_pagar"`
+	// DelLive: el pedido nació como separación en un Modo live (plazo de minutos).
+	DelLive        bool         `json:"del_live"`
 	PedidosCliente int          `json:"pedidos_cliente"`
 	Motorizados    []Motorizado `json:"motorizados_guardados"`
 	Ayuda          *Ayuda       `json:"ayuda"`
@@ -288,13 +292,13 @@ func (m *Modulo) cargar(ctx context.Context, tid, pid string) (*Detalle, error) 
 	err := m.app.DB.QueryRowContext(ctx, `SELECT id, codigo, comprador_nombre, comprador_celular, comprador_dni_cifrado, entrega, estado,
 		metodo_pago, subtotal_centimos, envio_centimos, total_centimos,
 		direccion, distrito, ciudad, referencia, agencia, agencia_sede, nota_comprador, motivo_cancelacion, confirmado_por,
-		creado_en, aceptado_en, enviado_en, entregado_en, pago_vence_en,
+		creado_en, aceptado_en, enviado_en, entregado_en, pago_vence_en, del_live,
 		(SELECT count(*) FROM pedidos x WHERE x.tienda_id=pedidos.tienda_id AND x.comprador_celular=pedidos.comprador_celular)
 		FROM pedidos WHERE id::text=$1 AND tienda_id=$2`, pid, tid).Scan(
 		&d.ID, &d.Codigo, &d.Comprador, &d.Celular, &dni, &d.Entrega, &d.Estado, &d.MetodoPago,
 		&d.Subtotal, &d.EnvioCosto, &d.Total, &d.Direccion, &d.Distrito, &d.Ciudad, &d.Referencia,
 		&d.Agencia, &d.AgenciaSede, &d.Nota, &d.Motivo, &d.ConfirmadoPor, &d.CreadoEn,
-		&d.AceptadoEn, &d.EnviadoEn, &d.EntregadoEn, &d.PagoVenceEn, &d.PedidosCliente)
+		&d.AceptadoEn, &d.EnviadoEn, &d.EntregadoEn, &d.PagoVenceEn, &d.DelLive, &d.PedidosCliente)
 	if core.SinFilas(err) {
 		return nil, httpx.ErrNoEncontrado
 	}
@@ -303,6 +307,9 @@ func (m *Modulo) cargar(ctx context.Context, tid, pid string) (*Detalle, error) 
 	}
 	if dni.Valid {
 		d.DNI, _ = m.app.Cifrador.Descifrar(dni.String)
+	}
+	if d.PagoVenceEn != nil {
+		d.PagoSegundos = max(0, int(time.Until(*d.PagoVenceEn).Seconds()))
 	}
 	d.EstadoTexto = TextoEstado(d.Estado, d.Entrega)
 	if err := m.cargarPago(ctx, d); err != nil {

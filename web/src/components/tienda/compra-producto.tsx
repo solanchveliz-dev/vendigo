@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { agregarAlCarrito } from "@/lib/carrito";
+import { agregarAlCarrito, guardarSeparacion } from "@/lib/carrito";
 import { Heart, Minus, Plus, ShoppingBag, TrendingUp, Zap } from "lucide-react";
 import { soles } from "@/lib/formato";
 import type { Producto } from "@/lib/tipos";
@@ -42,7 +42,9 @@ export function GaleriaProducto({ producto: p }: { producto: Producto }) {
 }
 
 // Precio, opciones, cantidad y botones de compra.
-export function CompraProducto({ producto: p, slug, pausada = false, vista = false }: { producto: Producto; slug: string; pausada?: boolean; vista?: boolean }) {
+export function CompraProducto({ producto: p, slug, pausada = false, vista = false, live = false, minutosLive = 0 }: {
+  producto: Producto; slug: string; pausada?: boolean; vista?: boolean; live?: boolean; minutosLive?: number;
+}) {
   const router = useRouter();
   const [agregado, setAgregado] = useState(false);
   const [opcion, setOpcion] = useState(() => Math.max(0, p.variantes.findIndex((v) => v.stock > 0)));
@@ -56,6 +58,15 @@ export function CompraProducto({ producto: p, slug, pausada = false, vista = fal
   const det = (p.detalles ?? {}) as { colores?: [string, string][]; grupos?: { label: string }[] };
   const etiquetaOpciones = det.grupos?.[0]?.label ?? (p.variantes.length && det.colores?.length && !det.grupos?.length ? "Color" : "Opciones");
   const dias = p.oferta ? Math.max(0, Math.ceil((new Date(p.oferta.termina_en).getTime() - Date.now()) / 86400000)) : 0;
+
+  // Modo live: la separación va aparte del carrito normal y lleva directo a confirmar.
+  function separar() {
+    guardarSeparacion(slug, [{
+      producto_id: p.id, variante_id: variante?.id ?? "", cantidad, nombre: p.nombre, variante: variante?.nombre ?? "",
+      precio_centimos: precio, imagen_url: p.imagenes[0]?.url ?? "", stock,
+    }]);
+    router.push(`/t/${slug}/comprar?live=1${minutosLive ? `&min=${minutosLive}` : ""}`);
+  }
 
   function agregar() {
     agregarAlCarrito(slug, {
@@ -140,6 +151,17 @@ export function CompraProducto({ producto: p, slug, pausada = false, vista = fal
       {pausada && (
         <p className="mt-5 rounded-2xl bg-arena px-4 py-3 text-sm font-semibold text-tinta">Esta tienda está en pausa y no recibe pedidos por ahora.</p>
       )}
+      {live && !vista ? (
+        <div className="mt-5">
+          <button onClick={separar} disabled={stock === 0 || pausada}
+            className="inline-flex h-[52px] w-full items-center justify-center gap-2 rounded-full bg-coral px-4 font-bold text-white transition hover:opacity-90 disabled:opacity-50">
+            <Zap className="size-5 shrink-0" /> {stock === 0 ? "Agotado por ahora" : "Separar"}
+          </button>
+          <p className="mt-2 text-center text-xs text-gris">
+            {minutosLive ? `Tendrás ${minutosLive} minutos para pagar.` : "Tendrás unos minutos para pagar."} Si no pagas a tiempo, se libera para otra persona.
+          </p>
+        </div>
+      ) : (
       <div className="mt-5 flex gap-3">
         <button
           onClick={() => {
@@ -172,6 +194,7 @@ export function CompraProducto({ producto: p, slug, pausada = false, vista = fal
           <Heart className="size-5" />
         </button>
       </div>
+      )}
       {aviso && <p className="mt-2 text-center text-sm font-semibold text-gris">{aviso}</p>}
       {agregado && (
         <p className="mt-3 flex flex-wrap items-center justify-center gap-2 rounded-2xl bg-pino-claro px-4 py-2.5 text-sm font-semibold text-pino">
