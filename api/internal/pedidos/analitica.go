@@ -76,7 +76,7 @@ func Analizar(ctx context.Context, db core.Ejecutor, tid string, dias int) (*Ana
 
 	if err := db.QueryRowContext(ctx, `SELECT
 		COALESCE(SUM(total_centimos) FILTER (WHERE creado_en > `+desde+`),0),
-		COALESCE(SUM(total_centimos - comision_pasarela_centimos) FILTER (WHERE creado_en > `+desde+`),0),
+		COALESCE(SUM(total_centimos) FILTER (WHERE creado_en > `+desde+`),0),
 		count(*) FILTER (WHERE creado_en > `+desde+`),
 		COALESCE(SUM(total_centimos) FILTER (WHERE creado_en <= `+desde+`),0),
 		count(*) FILTER (WHERE creado_en <= `+desde+`),

@@ -2,12 +2,8 @@ package billetera
 
 import "time"
 
-// La pasarela (Culqi) abona a VendiGo las ventas online a los 2 días hábiles, entre 2:00 y 4:30 p. m.
-// (una venta del lunes se abona el miércoles). El dinero nunca se libera a la tienda antes de esa fecha,
-// así VendiGo no adelanta plata que todavía no recibió.
-
-const diasHabilesAbono = 2
-
+// Días hábiles de Perú (sin sábados, domingos ni feriados). Los usa el Libro de Reclamaciones
+// para el plazo de 15 días hábiles.
 var lima = func() *time.Location {
 	l, err := time.LoadLocation("America/Lima")
 	if err != nil {
@@ -16,20 +12,7 @@ var lima = func() *time.Location {
 	return l
 }()
 
-// AbonoPasarela devuelve el momento en que la pasarela abona una venta (16:30 del 2.º día hábil).
-func AbonoPasarela(venta time.Time) time.Time {
-	d := venta.In(lima)
-	d = time.Date(d.Year(), d.Month(), d.Day(), 0, 0, 0, 0, lima)
-	for n := 0; n < diasHabilesAbono; {
-		d = d.AddDate(0, 0, 1)
-		if EsDiaHabil(d) {
-			n++
-		}
-	}
-	return time.Date(d.Year(), d.Month(), d.Day(), 16, 30, 0, 0, lima)
-}
-
-// EsDiaHabil: de lunes a viernes y que no sea feriado nacional del Perú.
+// EsDiaHabil indica si la fecha es día hábil en Perú.
 func EsDiaHabil(d time.Time) bool {
 	d = d.In(lima)
 	if d.Weekday() == time.Saturday || d.Weekday() == time.Sunday {

@@ -116,12 +116,15 @@ func (m *Modulo) correoSoporte(ctx context.Context) string {
 func (m *Modulo) configuracion(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	var d struct {
-		Correo      string   `json:"correo_soporte"`
-		Inactividad int      `json:"inactividad_min"`
-		Agencias    []string `json:"agencias"`
-		Sedes       int      `json:"sedes_activas"`
+		Correo        string   `json:"correo_soporte"`
+		PlanesYape    string   `json:"planes_yape"`
+		PlanesTitular string   `json:"planes_titular"`
+		Inactividad   int      `json:"inactividad_min"`
+		Agencias      []string `json:"agencias"`
+		Sedes         int      `json:"sedes_activas"`
 	}
 	d.Correo = m.correoSoporte(ctx)
+	m.app.DB.QueryRowContext(ctx, `SELECT COALESCE((SELECT valor FROM ajustes_plataforma WHERE clave='planes_yape'),''), COALESCE((SELECT valor FROM ajustes_plataforma WHERE clave='planes_titular'),'')`).Scan(&d.PlanesYape, &d.PlanesTitular)
 	d.Inactividad = 30
 	m.app.DB.QueryRowContext(ctx, `SELECT valor::int FROM ajustes_plataforma WHERE clave='inactividad_admin_min'`).Scan(&d.Inactividad)
 	d.Agencias = []string{}
@@ -142,7 +145,9 @@ func (m *Modulo) configuracion(w http.ResponseWriter, r *http.Request) error {
 func (m *Modulo) guardarConfiguracion(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	var in struct {
-		Correo string `json:"correo_soporte"`
+		Correo        string `json:"correo_soporte"`
+		PlanesYape    string `json:"planes_yape"`
+		PlanesTitular string `json:"planes_titular"`
 	}
 	if err := httpx.Leer(r, &in); err != nil {
 		return err
@@ -151,9 +156,15 @@ func (m *Modulo) guardarConfiguracion(w http.ResponseWriter, r *http.Request) er
 	if a, err := mail.ParseAddress(in.Correo); err != nil || a.Address != in.Correo {
 		return httpx.Invalido("Escribe un correo de soporte válido.")
 	}
-	if _, err := m.app.DB.ExecContext(ctx, `INSERT INTO ajustes_plataforma (clave, valor) VALUES ('correo_soporte', $1)
-		ON CONFLICT (clave) DO UPDATE SET valor=$1, actualizado_en=now()`, in.Correo); err != nil {
-		return err
+	in.PlanesYape, in.PlanesTitular = strings.TrimSpace(in.PlanesYape), strings.TrimSpace(in.PlanesTitular)
+	if in.PlanesYape != "" && (len(in.PlanesYape) != 9 || in.PlanesYape[0] != '9' || strings.Trim(in.PlanesYape, "0123456789") != "") {
+		return httpx.Invalido("El Yape de VendiGo debe ser un celular de 9 dígitos que empiece con 9.")
+	}
+	for k, v := range map[string]string{"correo_soporte": in.Correo, "planes_yape": in.PlanesYape, "planes_titular": in.PlanesTitular} {
+		if _, err := m.app.DB.ExecContext(ctx, `INSERT INTO ajustes_plataforma (clave, valor) VALUES ($1, $2)
+			ON CONFLICT (clave) DO UPDATE SET valor=$2, actualizado_en=now()`, k, v); err != nil {
+			return err
+		}
 	}
 	m.app.Auditar(ctx, m.app.DB, adminID(ctx), "editar_configuracion", "ajustes", "correo_soporte", map[string]string{"correo": in.Correo})
 	httpx.OK(w, map[string]string{"mensaje": "Configuración guardada."})

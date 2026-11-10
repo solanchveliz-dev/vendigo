@@ -206,10 +206,12 @@ func (m *Modulo) reporteCSV(w http.ResponseWriter, r *http.Request) error {
 		"pedidos": {[]string{"Pedido", "Fecha", "Tienda", "Comprador", "Entrega", "Estado", "Total (S/)"},
 			`SELECT p.codigo, to_char(p.creado_en AT TIME ZONE 'America/Lima','DD/MM/YYYY HH24:MI'), t.nombre, p.comprador_nombre, initcap(p.entrega), initcap(replace(p.estado,'_',' ')), to_char(p.total_centimos/100.0,'FM999999990.00')
 				FROM pedidos p JOIN tiendas t ON t.id=p.tienda_id WHERE p.creado_en >= $1 AND p.creado_en < $2 ORDER BY p.creado_en`},
-		"pagos": {[]string{"Pedido", "Fecha", "Tienda", "Método", "Estado del pago", "Monto (S/)", "Comisión (S/)", "Liberado"},
-			`SELECT p.codigo, to_char(p.creado_en AT TIME ZONE 'America/Lima','DD/MM/YYYY HH24:MI'), t.nombre, initcap(replace(p.metodo_pago,'_',' ')), initcap(p.pago_estado),
-				to_char(p.total_centimos/100.0,'FM999999990.00'), to_char(p.comision_pasarela_centimos/100.0,'FM999999990.00'), CASE WHEN p.liberado THEN 'Sí' ELSE 'No' END
-				FROM pedidos p JOIN tiendas t ON t.id=p.tienda_id WHERE p.creado_en >= $1 AND p.creado_en < $2 ORDER BY p.creado_en`},
+		"pagos": {[]string{"Pedido", "Fecha", "Tienda", "Método", "Cuándo paga", "Estado del pago", "Origen", "Monto (S/)", "N.° de operación"},
+			`SELECT p.codigo, to_char(p.creado_en AT TIME ZONE 'America/Lima','DD/MM/YYYY HH24:MI'), t.nombre, initcap(replace(g.metodo,'_',' ')),
+				CASE g.momento WHEN 'antes' THEN 'Antes del envío' ELSE 'Al recibir' END, initcap(replace(g.estado,'_',' ')),
+				CASE g.origen WHEN 'tienda' THEN 'Informado por la tienda' WHEN 'proveedor' THEN 'Proveedor de pagos' ELSE 'Datos de prueba' END,
+				to_char(g.monto_centimos/100.0,'FM999999990.00'), g.referencia
+				FROM pagos g JOIN pedidos p ON p.id=g.pedido_id JOIN tiendas t ON t.id=p.tienda_id WHERE p.creado_en >= $1 AND p.creado_en < $2 ORDER BY p.creado_en`},
 		"reclamos": {[]string{"Pedido", "Fecha", "Tienda", "Motivo", "Estado", "Resuelto"},
 			`SELECT p.codigo, to_char(c.creado_en AT TIME ZONE 'America/Lima','DD/MM/YYYY HH24:MI'), t.nombre, initcap(replace(c.motivo,'_',' ')), initcap(replace(c.estado,'_',' ')), COALESCE(to_char(c.resuelto_en AT TIME ZONE 'America/Lima','DD/MM/YYYY'),'')
 				FROM reclamos c JOIN pedidos p ON p.id=c.pedido_id JOIN tiendas t ON t.id=p.tienda_id WHERE c.creado_en >= $1 AND c.creado_en < $2 ORDER BY c.creado_en`},

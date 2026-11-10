@@ -15,7 +15,6 @@ import (
 	"strings"
 
 	"github.com/solanchveliz-dev/vendigo/api/internal/archivos"
-	"github.com/solanchveliz-dev/vendigo/api/internal/billetera"
 	"github.com/solanchveliz-dev/vendigo/api/internal/config"
 	"github.com/solanchveliz-dev/vendigo/api/internal/core"
 	"github.com/solanchveliz-dev/vendigo/api/internal/db"
@@ -125,7 +124,7 @@ func main() {
 	conexion.ExecContext(ctx, `INSERT INTO preguntas (producto_id, autor_nombre, pregunta) VALUES ($1, 'Andrea Flores', '¿Hacen envíos a Arequipa?')`, ids[1])
 
 	nuevo := func(nombre, entrega string, items ...pedidos.ItemNuevo) string {
-		p := pedidos.PedidoNuevo{TiendaID: tid, Nombre: nombre, Celular: "987654321", Entrega: entrega, MetodoPago: "yape", Items: items}
+		p := pedidos.PedidoNuevo{TiendaID: tid, Nombre: nombre, Celular: "987654321", Entrega: entrega, MetodoPago: "yape_directo", Prueba: true, Items: items}
 		if entrega == "agencia" {
 			p.DNI, p.Ciudad, p.Agencia, p.AgenciaSede = "45678912", "Arequipa", "Shalom", "Shalom Arequipa Centro"
 		}
@@ -154,7 +153,7 @@ func main() {
 	app.EnTransaccion(ctx, func(tx *sql.Tx) error {
 		tx.ExecContext(ctx, `UPDATE pedidos SET estado='enviado', aceptado_en=now() - interval '4 days', enviado_en=now() - interval '3 days',
 			creado_en=now() - interval '4 days' WHERE id=$1`, listo)
-		return billetera.MarcarEntregado(ctx, tx, tid, listo, "", "excelente", "comprador")
+		return pedidos.MarcarEntregado(ctx, tx, listo, "comprador")
 	})
 	visitasDemo(ctx, conexion)
 	historialDemo(ctx, conexion)
@@ -193,12 +192,6 @@ func historialDemo(ctx context.Context, conexion *sql.DB) {
 		FROM tiendas t WHERE slug='luna-y-sol'`).Scan(&tid, &hay)
 	if tid == "" {
 		return
-	}
-	// Una versión anterior marcaba el historial como retirado sin crear los retiros: se corrige.
-	if res, _ := conexion.ExecContext(ctx, `DELETE FROM movimientos WHERE tienda_id=$1 AND tipo='retiro' AND retiro_id IS NULL AND detalle='Historial de prueba'`, tid); res != nil {
-		if n, _ := res.RowsAffected(); n > 0 {
-			fmt.Println("Se corrigió el historial de prueba: ese dinero ahora figura como disponible para retirar.")
-		}
 	}
 	if hay {
 		return
@@ -246,42 +239,28 @@ func historialDemo(ctx context.Context, conexion *sql.DB) {
 			}
 			c := clientes[n%len(clientes)]
 			entrega := entregas[n%len(entregas)]
-			metodo := []string{"yape", "tarjeta", "yape"}[n%3]
+			metodo, momento := []string{"yape_directo", "plin_directo", "yape_directo"}[n%3], "antes"
 			if entrega == "motorizado" {
-				metodo = "al_recibir"
+				metodo, momento = "efectivo", "al_recibir"
 			}
 			total := p.precio * unidades
-			comision := billetera.ComisionPasarela(total)
-			if metodo == "al_recibir" {
-				comision = 0
-			}
-			neto := total - comision
 			var pid string
 			if err := conexion.QueryRowContext(ctx, `INSERT INTO pedidos (tienda_id, comprador_nombre, comprador_celular, entrega, estado, metodo_pago, pago_estado,
-				subtotal_centimos, total_centimos, comision_pasarela_centimos, confirmado_por, liberado, liberar_en,
+				subtotal_centimos, total_centimos, confirmado_por,
 				creado_en, aceptado_en, enviado_en, entregado_en, cerrado_en)
-				VALUES ($1,$2,$3,$4,'entregado',$5,'pagado',$6,$6,$7,'comprador',true,
-				now() - make_interval(days => $8) + interval '6 days',
-				now() - make_interval(days => $8), now() - make_interval(days => $8) + interval '2 hours',
-				now() - make_interval(days => $8) + interval '1 day', now() - make_interval(days => $8) + interval '3 days',
-				now() - make_interval(days => $8) + interval '6 days') RETURNING id`,
-				tid, c[0], c[1], entrega, metodo, total, comision, hace).Scan(&pid); err != nil {
+				VALUES ($1,$2,$3,$4,'entregado',$5,'pendiente',$6,$6,'comprador',
+				now() - make_interval(days => $7), now() - make_interval(days => $7) + interval '2 hours',
+				now() - make_interval(days => $7) + interval '1 day', now() - make_interval(days => $7) + interval '3 days',
+				now() - make_interval(days => $7) + interval '6 days') RETURNING id`,
+				tid, c[0], c[1], entrega, metodo, total, hace).Scan(&pid); err != nil {
 				fmt.Println("historial:", err)
 				return
 			}
 			conexion.ExecContext(ctx, `INSERT INTO pedido_items (pedido_id, producto_id, nombre, precio_centimos, cantidad) VALUES ($1,$2,$3,$4,$5)`,
 				pid, p.id, p.nombre, p.precio, unidades)
-			// El dinero ya se cobró y se liberó: queda disponible para retirar.
-			for _, mv := range []struct {
-				tipo, bolsa string
-				monto       int
-			}{{"cobro", "a_liberar", total}, {"comision_pasarela", "a_liberar", -comision}, {"liberacion", "a_liberar", -neto},
-				{"liberacion", "disponible", neto}} {
-				if mv.monto != 0 {
-					conexion.ExecContext(ctx, `INSERT INTO movimientos (tienda_id, pedido_id, tipo, bolsa, monto_centimos, detalle, creado_en)
-						VALUES ($1,$2,$3,$4,$5,'Historial de prueba', now() - make_interval(days => $6))`, tid, pid, mv.tipo, mv.bolsa, mv.monto, hace)
-				}
-			}
+			// Historial de prueba: su pago queda marcado como "de prueba" (nunca hubo un cobro real).
+			conexion.ExecContext(ctx, `INSERT INTO pagos (pedido_id, origen, metodo, momento, estado, monto_centimos, creado_en)
+				VALUES ($1,'prueba',$2,$3,'de_prueba',$4, now() - make_interval(days => $5))`, pid, metodo, momento, total, hace)
 			n++
 		}
 	}

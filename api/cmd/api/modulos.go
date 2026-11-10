@@ -12,6 +12,7 @@ import (
 	"github.com/solanchveliz-dev/vendigo/api/internal/admin"
 	"github.com/solanchveliz-dev/vendigo/api/internal/auth"
 	"github.com/solanchveliz-dev/vendigo/api/internal/billetera"
+	"github.com/solanchveliz-dev/vendigo/api/internal/compras"
 	"github.com/solanchveliz-dev/vendigo/api/internal/core"
 	"github.com/solanchveliz-dev/vendigo/api/internal/demo"
 	"github.com/solanchveliz-dev/vendigo/api/internal/httpx"
@@ -45,7 +46,6 @@ func registrarModulos(app *core.App, api chi.Router) {
 
 	mAuth.TiendaDe = mTiendas.DeUsuario
 	mPedidos.ValidarCupo = mPlanes.ValidarCupo
-	mBilletera.Confirmar = mAuth.ConfirmarPaso
 	httpx.AlDenegar = func(r *http.Request, u httpx.Usuario) {
 		app.DB.ExecContext(r.Context(), `INSERT INTO accesos_denegados (usuario_id, rol, ruta, ip) VALUES ($1,$2,$3,$4)`,
 			u.ID, u.Rol, r.URL.Path, httpx.IP(r))
@@ -59,11 +59,14 @@ func registrarModulos(app *core.App, api chi.Router) {
 		mProductos.RutasPublicas(r)
 		mPlanes.RutasPublicas(r)
 	})
-	// Libro de Reclamaciones: público y con un límite más estricto para evitar abuso.
+	// Libro de Reclamaciones y compras sin cuenta: públicos y con un límite más estricto para evitar abuso.
 	mLibro := libro.Nuevo(app)
+	mCompras := compras.Nuevo(app)
+	mCompras.EnviarCodigo, mCompras.ValidarOTP = mAuth.GenerarOTP, mAuth.ValidarOTP
 	api.Group(func(r chi.Router) {
-		r.Use(httpx.Limite(20, time.Minute))
+		r.Use(httpx.Limite(30, time.Minute))
 		mLibro.RutasPublicas(r)
+		mCompras.Rutas(r)
 	})
 
 	// Con sesión

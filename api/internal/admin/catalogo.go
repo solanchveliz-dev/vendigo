@@ -197,9 +197,9 @@ type PedidoAdmin struct {
 
 func (m *Modulo) pedidosAdmin(w http.ResponseWriter, r *http.Request) error {
 	rows, err := m.app.DB.QueryContext(r.Context(), `SELECT p.id, p.codigo, t.id, t.nombre, p.comprador_nombre, p.entrega,
-		COALESCE(NULLIF(e.agencia,''), p.agencia), p.estado, p.pago_estado, p.metodo_pago, p.total_centimos, c.estado, p.creado_en
+		COALESCE(NULLIF(e.agencia,''), p.agencia), p.estado, COALESCE(g.estado,'pendiente'), p.metodo_pago, p.total_centimos, c.estado, p.creado_en
 		FROM pedidos p JOIN tiendas t ON t.id=p.tienda_id
-		LEFT JOIN envios e ON e.pedido_id=p.id LEFT JOIN reclamos c ON c.pedido_id=p.id
+		LEFT JOIN envios e ON e.pedido_id=p.id LEFT JOIN reclamos c ON c.pedido_id=p.id LEFT JOIN pagos g ON g.pedido_id=p.id
 		ORDER BY p.creado_en DESC LIMIT 5000`)
 	if err != nil {
 		return err
@@ -224,12 +224,11 @@ func (m *Modulo) pedidoAdmin(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	var extra struct {
-		TiendaID    string  `json:"tienda_id"`
-		Tienda      string  `json:"tienda"`
-		Transaccion *string `json:"transaccion"`
+		TiendaID string `json:"tienda_id"`
+		Tienda   string `json:"tienda"`
 	}
 	extra.TiendaID = tid
-	m.app.DB.QueryRowContext(ctx, `SELECT t.nombre, p.culqi_cargo_id FROM pedidos p JOIN tiendas t ON t.id=p.tienda_id WHERE p.id=$1`, d.ID).Scan(&extra.Tienda, &extra.Transaccion)
+	m.app.DB.QueryRowContext(ctx, `SELECT nombre FROM tiendas WHERE id=$1`, tid).Scan(&extra.Tienda)
 	httpx.OK(w, map[string]any{"pedido": d, "extra": extra})
 	return nil
 }

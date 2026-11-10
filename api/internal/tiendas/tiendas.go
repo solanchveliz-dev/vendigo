@@ -31,6 +31,7 @@ func (m *Modulo) RutasVendedor(r chi.Router) {
 	r.Method("PUT", "/tienda", httpx.Handler(m.actualizar))
 	r.Method("PUT", "/tienda/entrega", httpx.Handler(m.actualizarEntrega))
 	r.Method("PUT", "/tienda/estilo", httpx.Handler(m.guardarEstilo))
+	r.Method("PUT", "/tienda/pagos", httpx.Handler(m.guardarPagos))
 	r.Method("GET", "/tienda/ajustes", httpx.Handler(m.ajustes))
 	r.Method("PUT", "/tienda/ajustes", httpx.Handler(m.guardarAjustes))
 	r.Method("POST", "/archivos", httpx.Handler(m.pedirSubida))
@@ -104,6 +105,14 @@ type Tienda struct {
 	HistoriaKey    *string `json:"historia_foto_key"`
 	HistoriaURL    string  `json:"historia_foto_url"`
 	VendeDesde     *int    `json:"vende_desde"`
+	// Pago directo a la tienda (VendiGo no recibe el dinero)
+	YapeNumero     string   `json:"yape_numero"`
+	PlinNumero     string   `json:"plin_numero"`
+	PagoTitular    string   `json:"pago_titular"`
+	PagoQRKey      *string  `json:"pago_qr_key"`
+	PagoQRURL      string   `json:"pago_qr_url"`
+	AceptaEfectivo bool     `json:"acepta_efectivo"`
+	MetodosPago    []string `json:"metodos_pago"`
 }
 
 type Entrega struct {
@@ -139,7 +148,8 @@ const columnas = `id, nombre, slug, rubro, descripcion, ciudad, distrito, logo_k
 	entrega_recojo, direccion_recojo, horario_recojo, entrega_agencia, agencias, entrega_motorizado, costo_motorizado_centimos, zonas_motorizado, reputacion,
 	correo, horario, politicas,
 	instrucciones_recojo, dias_recojo, adelanto_pct, costo_agencia_centimos, entrega_otra, descripcion_otra, pausada, tema_color, tema_fuente, prefijo_pedido,
-	destacado_id, aviso, historia, historia_foto_key, vende_desde`
+	destacado_id, aviso, historia, historia_foto_key, vende_desde,
+	yape_numero, plin_numero, pago_titular, pago_qr_key, acepta_efectivo`
 
 func (m *Modulo) leer(ctx context.Context, where string, arg any) (Tienda, error) {
 	var t Tienda
@@ -150,7 +160,8 @@ func (m *Modulo) leer(ctx context.Context, where string, arg any) (Tienda, error
 		&e.Recojo, &e.DireccionRecojo, &e.HorarioRecojo, &e.Agencia, pq.Array(&e.Agencias), &e.Motorizado, &e.CostoMotorizado, &e.ZonasMotorizado, &t.Reputacion,
 		&t.Correo, &t.Horario, &t.Politicas,
 		&e.Instrucciones, pq.Array(&e.DiasRecojo), &e.AdelantoPct, &e.CostoAgencia, &e.Otra, &e.DescripcionOtra, &t.Pausada, &t.TemaColor, &t.TemaFuente, &t.Prefijo,
-		&t.DestacadoID, &t.Aviso, &t.Historia, &t.HistoriaKey, &t.VendeDesde)
+		&t.DestacadoID, &t.Aviso, &t.Historia, &t.HistoriaKey, &t.VendeDesde,
+		&t.YapeNumero, &t.PlinNumero, &t.PagoTitular, &t.PagoQRKey, &t.AceptaEfectivo)
 	if core.SinFilas(err) {
 		return t, httpx.ErrNoEncontrado
 	}
@@ -162,6 +173,19 @@ func (m *Modulo) leer(ctx context.Context, where string, arg any) (Tienda, error
 	}
 	if t.PortadaKey != nil {
 		t.PortadaURL = m.app.Archivos.URLPublica(*t.PortadaKey)
+	}
+	if t.PagoQRKey != nil {
+		t.PagoQRURL = m.app.Archivos.URLPublica(*t.PagoQRKey)
+	}
+	t.MetodosPago = []string{}
+	if t.YapeNumero != "" {
+		t.MetodosPago = append(t.MetodosPago, "yape_directo")
+	}
+	if t.PlinNumero != "" {
+		t.MetodosPago = append(t.MetodosPago, "plin_directo")
+	}
+	if t.AceptaEfectivo {
+		t.MetodosPago = append(t.MetodosPago, "efectivo")
 	}
 	if t.HistoriaKey != nil {
 		t.HistoriaURL = m.app.Archivos.URLPublica(*t.HistoriaKey)
@@ -462,7 +486,9 @@ func (m *Modulo) publica(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	// El WhatsApp y el correo son solo para que VendiGo avise a la tienda: no se muestran a los compradores.
+	// Los datos de Yape/Plin se muestran recién en el seguimiento del pedido, al momento de pagar.
 	t.Whatsapp, t.Correo = "", ""
+	t.YapeNumero, t.PlinNumero, t.PagoTitular, t.PagoQRKey, t.PagoQRURL = "", "", "", nil, ""
 	httpx.OK(w, t)
 	return nil
 }
@@ -501,7 +527,7 @@ func (m *Modulo) catalogos(w http.ResponseWriter, r *http.Request) error {
 
 // ---------- subida de imágenes ----------
 
-var tiposArchivo = map[string]bool{"producto": true, "logo": true, "portada": true, "historia": true, "boleta": false, "dni": false, "reclamo": false}
+var tiposArchivo = map[string]bool{"producto": true, "logo": true, "portada": true, "historia": true, "pago_qr": true, "devolucion": false, "boleta": false, "dni": false, "reclamo": false}
 var formatos = map[string]string{"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}
 
 const tamanoMaximo = 5 << 20

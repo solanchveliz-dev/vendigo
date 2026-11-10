@@ -15,6 +15,7 @@ import (
 	"github.com/solanchveliz-dev/vendigo/api/internal/billetera"
 	"github.com/solanchveliz-dev/vendigo/api/internal/core"
 	"github.com/solanchveliz-dev/vendigo/api/internal/httpx"
+	"github.com/solanchveliz-dev/vendigo/api/internal/pagos"
 	"github.com/solanchveliz-dev/vendigo/api/internal/tiendas"
 )
 
@@ -36,7 +37,11 @@ func (m *Modulo) RutasVendedor(r chi.Router) {
 	r.Method("POST", "/pedidos/{id}/rechazar", httpx.Handler(m.rechazar))
 	r.Method("POST", "/pedidos/{id}/enviar", httpx.Handler(m.enviar))
 	r.Method("POST", "/pedidos/{id}/listo-recojo", httpx.Handler(m.listoRecojo))
-	r.Method("POST", "/pedidos/{id}/entregar-recojo", httpx.Handler(m.entregarRecojo))
+	r.Method("POST", "/pedidos/{id}/entregar-recojo", httpx.Handler(m.entregar))
+	r.Method("POST", "/pedidos/{id}/entregar", httpx.Handler(m.entregar))
+	r.Method("POST", "/pedidos/{id}/pago", httpx.Handler(m.informarPago))
+	r.Method("POST", "/pedidos/{id}/devolucion", httpx.Handler(m.informarDevolucion))
+	r.Method("GET", "/ventas", httpx.Handler(m.ventas))
 	r.Method("GET", "/pedidos/{id}/etiqueta", httpx.Handler(m.etiqueta))
 	r.Method("GET", "/reclamos", httpx.Handler(m.reclamos))
 	r.Method("POST", "/reclamos/{id}/responder", httpx.Handler(m.responderReclamo))
@@ -79,22 +84,21 @@ func TextoEstado(estado, entrega string) string {
 }
 
 type Resumen struct {
-	ID          string     `json:"id"`
-	Codigo      string     `json:"codigo"`
-	Comprador   string     `json:"comprador"`
-	Entrega     string     `json:"entrega"`
-	Estado      string     `json:"estado"`
-	EstadoTexto string     `json:"estado_texto"`
-	MetodoPago  string     `json:"metodo_pago"`
-	PagoEstado  string     `json:"pago_estado"`
-	Total       int        `json:"total_centimos"`
-	Items       int        `json:"items"`
-	Producto    string     `json:"producto"`
-	ImagenURL   string     `json:"imagen_url"`
-	LiberarEn   *time.Time `json:"liberar_en"`
-	Liberado    bool       `json:"liberado"`
-	Reclamo     *string    `json:"reclamo"`
-	CreadoEn    time.Time  `json:"creado_en"`
+	ID          string    `json:"id"`
+	Codigo      string    `json:"codigo"`
+	Comprador   string    `json:"comprador"`
+	Entrega     string    `json:"entrega"`
+	Estado      string    `json:"estado"`
+	EstadoTexto string    `json:"estado_texto"`
+	MetodoPago  string    `json:"metodo_pago"`
+	PagoEstado  string    `json:"pago_estado"`
+	PagoTexto   string    `json:"pago_texto"`
+	Total       int       `json:"total_centimos"`
+	Items       int       `json:"items"`
+	Producto    string    `json:"producto"`
+	ImagenURL   string    `json:"imagen_url"`
+	Reclamo     *string   `json:"reclamo"`
+	CreadoEn    time.Time `json:"creado_en"`
 }
 
 func (m *Modulo) listar(w http.ResponseWriter, r *http.Request) error {
@@ -110,8 +114,8 @@ func (m *Modulo) listar(w http.ResponseWriter, r *http.Request) error {
 	}
 	entrega := r.URL.Query().Get("entrega")
 	q := strings.TrimSpace(r.URL.Query().Get("q"))
-	rows, err := m.app.DB.QueryContext(ctx, `SELECT p.id, p.codigo, p.comprador_nombre, p.entrega, p.estado, p.metodo_pago, p.pago_estado,
-		p.total_centimos, p.liberar_en, p.liberado, p.creado_en,
+	rows, err := m.app.DB.QueryContext(ctx, `SELECT p.id, p.codigo, p.comprador_nombre, p.entrega, p.estado, p.metodo_pago, COALESCE((SELECT g.estado FROM pagos g WHERE g.pedido_id=p.id),'pendiente'),
+		p.total_centimos, p.creado_en,
 		(SELECT COALESCE(SUM(cantidad),0) FROM pedido_items i WHERE i.pedido_id=p.id),
 		(SELECT i.nombre FROM pedido_items i WHERE i.pedido_id=p.id LIMIT 1),
 		(SELECT i.imagen_key FROM pedido_items i WHERE i.pedido_id=p.id LIMIT 1),
@@ -133,7 +137,7 @@ func (m *Modulo) listar(w http.ResponseWriter, r *http.Request) error {
 		var img sql.NullString
 		var prod sql.NullString
 		if err := rows.Scan(&p.ID, &p.Codigo, &p.Comprador, &p.Entrega, &p.Estado, &p.MetodoPago, &p.PagoEstado, &p.Total,
-			&p.LiberarEn, &p.Liberado, &p.CreadoEn, &p.Items, &prod, &img, &p.Reclamo); err != nil {
+			&p.CreadoEn, &p.Items, &prod, &img, &p.Reclamo); err != nil {
 			return err
 		}
 		p.Producto = prod.String
@@ -141,6 +145,7 @@ func (m *Modulo) listar(w http.ResponseWriter, r *http.Request) error {
 			p.ImagenURL = m.app.Archivos.URLPublica(img.String)
 		}
 		p.EstadoTexto = TextoEstado(p.Estado, p.Entrega)
+		p.PagoTexto = pagos.Textos[p.PagoEstado]
 		lista = append(lista, p)
 	}
 	conteo := map[string]int{}
@@ -218,7 +223,7 @@ type Detalle struct {
 	Nota          string   `json:"nota_comprador"`
 	Subtotal      int      `json:"subtotal_centimos"`
 	EnvioCosto    int      `json:"envio_centimos"`
-	Comision      int      `json:"comision_pasarela_centimos"`
+	Comision      int      `json:"comision_reportada_centimos"` // solo si un proveedor la informa; VendiGo cobra 0 %
 	Neto          int      `json:"neto_centimos"`
 	Motivo        string   `json:"motivo_cancelacion"`
 	ConfirmadoPor *string  `json:"confirmado_por"`
@@ -234,20 +239,55 @@ type Detalle struct {
 	PedidosCliente int          `json:"pedidos_cliente"`
 	Motorizados    []Motorizado `json:"motorizados_guardados"`
 	Ayuda          *Ayuda       `json:"ayuda"`
+	Pago           *PagoInfo    `json:"pago"`
+	Devoluciones   []Devolucion `json:"devoluciones"`
+	CodigoEntrega  string       `json:"codigo_entrega,omitempty"` // solo para el comprador (su seguimiento)
+}
+
+// PagoInfo: cómo y en qué estado está el pago (lo hace el comprador directo a la tienda).
+type PagoInfo struct {
+	Estado         string       `json:"estado"`
+	Texto          string       `json:"texto"`
+	Origen         string       `json:"origen"`
+	Metodo         string       `json:"metodo"`
+	MetodoTexto    string       `json:"metodo_texto"`
+	Momento        string       `json:"momento"`
+	Monto          int          `json:"monto_centimos"`
+	Referencia     string       `json:"referencia"`
+	ComprobanteURL string       `json:"comprobante_url"`
+	InformadoEn    *time.Time   `json:"informado_en"`
+	Eventos        []PagoEvento `json:"eventos"`
+}
+
+type PagoEvento struct {
+	Estado  string    `json:"estado"`
+	Texto   string    `json:"texto"`
+	Detalle string    `json:"detalle"`
+	Fecha   time.Time `json:"fecha"`
+}
+
+type Devolucion struct {
+	Origen       string     `json:"origen"`
+	Monto        int        `json:"monto_centimos"`
+	Estado       string     `json:"estado"`
+	EvidenciaURL string     `json:"evidencia_url"`
+	Nota         string     `json:"nota"`
+	InformadaEn  *time.Time `json:"informada_en"`
+	CreadoEn     time.Time  `json:"creado_en"`
 }
 
 func (m *Modulo) cargar(ctx context.Context, tid, pid string) (*Detalle, error) {
 	d := &Detalle{}
 	var dni sql.NullString
 	err := m.app.DB.QueryRowContext(ctx, `SELECT id, codigo, comprador_nombre, comprador_celular, comprador_dni_cifrado, entrega, estado,
-		metodo_pago, pago_estado, subtotal_centimos, envio_centimos, total_centimos, comision_pasarela_centimos,
+		metodo_pago, subtotal_centimos, envio_centimos, total_centimos,
 		direccion, distrito, ciudad, referencia, agencia, agencia_sede, nota_comprador, motivo_cancelacion, confirmado_por,
-		liberar_en, liberado, creado_en, aceptado_en, enviado_en, entregado_en,
+		creado_en, aceptado_en, enviado_en, entregado_en,
 		(SELECT count(*) FROM pedidos x WHERE x.tienda_id=pedidos.tienda_id AND x.comprador_celular=pedidos.comprador_celular)
 		FROM pedidos WHERE id::text=$1 AND tienda_id=$2`, pid, tid).Scan(
-		&d.ID, &d.Codigo, &d.Comprador, &d.Celular, &dni, &d.Entrega, &d.Estado, &d.MetodoPago, &d.PagoEstado,
-		&d.Subtotal, &d.EnvioCosto, &d.Total, &d.Comision, &d.Direccion, &d.Distrito, &d.Ciudad, &d.Referencia,
-		&d.Agencia, &d.AgenciaSede, &d.Nota, &d.Motivo, &d.ConfirmadoPor, &d.LiberarEn, &d.Liberado, &d.CreadoEn,
+		&d.ID, &d.Codigo, &d.Comprador, &d.Celular, &dni, &d.Entrega, &d.Estado, &d.MetodoPago,
+		&d.Subtotal, &d.EnvioCosto, &d.Total, &d.Direccion, &d.Distrito, &d.Ciudad, &d.Referencia,
+		&d.Agencia, &d.AgenciaSede, &d.Nota, &d.Motivo, &d.ConfirmadoPor, &d.CreadoEn,
 		&d.AceptadoEn, &d.EnviadoEn, &d.EntregadoEn, &d.PedidosCliente)
 	if core.SinFilas(err) {
 		return nil, httpx.ErrNoEncontrado
@@ -259,6 +299,9 @@ func (m *Modulo) cargar(ctx context.Context, tid, pid string) (*Detalle, error) 
 		d.DNI, _ = m.app.Cifrador.Descifrar(dni.String)
 	}
 	d.EstadoTexto = TextoEstado(d.Estado, d.Entrega)
+	if err := m.cargarPago(ctx, d); err != nil {
+		return nil, err
+	}
 	d.Neto = d.Total - d.Comision
 
 	rows, err := m.app.DB.QueryContext(ctx, `SELECT nombre, variante, imagen_key, precio_centimos, cantidad FROM pedido_items WHERE pedido_id=$1`, d.ID)
@@ -314,6 +357,20 @@ func (m *Modulo) cargar(ctx context.Context, tid, pid string) (*Detalle, error) 
 		d.ReclamoDet = &rc
 		d.Reclamo = &rc.Estado
 	}
+	d.Devoluciones = []Devolucion{}
+	if rows, err := m.app.DB.QueryContext(ctx, `SELECT origen, monto_centimos, estado, COALESCE(evidencia_key,''), nota, informada_en, creado_en
+		FROM devoluciones WHERE pedido_id=$1 ORDER BY creado_en`, d.ID); err == nil {
+		for rows.Next() {
+			var x Devolucion
+			var key string
+			rows.Scan(&x.Origen, &x.Monto, &x.Estado, &key, &x.Nota, &x.InformadaEn, &x.CreadoEn)
+			if key != "" {
+				x.EvidenciaURL, _ = m.app.Archivos.URLLectura(ctx, key)
+			}
+			d.Devoluciones = append(d.Devoluciones, x)
+		}
+		rows.Close()
+	}
 	d.Acciones = acciones(d)
 	if l, err := m.leerAyudas(ctx, tid, d.ID); err == nil && len(l) > 0 {
 		d.Ayuda = &l[0]
@@ -340,21 +397,81 @@ func (m *Modulo) firmar(ctx context.Context, keys []string) []string {
 
 // acciones indica qué botones mostrar según el estado (la web y la app no deciden por su cuenta).
 func acciones(d *Detalle) []string {
+	out := []string{}
+	if d.Pago != nil && d.Estado != "rechazado" && d.Estado != "cancelado" {
+		switch d.Pago.Estado {
+		case "pendiente", "comprobante_enviado", "no_recibido":
+			out = append(out, "confirmar_pago")
+		}
+	}
+	for _, x := range d.Devoluciones {
+		if x.Estado == "pendiente_tienda" {
+			out = append(out, "informar_devolucion")
+			break
+		}
+	}
+	listo := d.Pago == nil || pagos.PermiteAvanzar(d.Pago.Estado)
 	switch d.Estado {
 	case "por_aceptar":
-		return []string{"aceptar", "rechazar"}
+		return append(out, "aceptar", "rechazar")
 	case "preparando":
-		if d.Entrega == "recojo" {
-			return []string{"listo_recojo", "etiqueta"}
+		if !listo {
+			return append(out, "etiqueta")
 		}
-		return []string{"enviar", "etiqueta"}
+		if d.Entrega == "recojo" {
+			return append(out, "listo_recojo", "etiqueta")
+		}
+		return append(out, "enviar", "etiqueta")
 	case "listo_recojo":
-		return []string{"entregar_recojo"}
+		return append(out, "entregar")
+	case "enviado":
+		if d.Entrega == "motorizado" {
+			return append(out, "entregar")
+		}
 	}
 	if d.ReclamoDet != nil && d.ReclamoDet.Estado == "abierto" {
-		return []string{"responder_reclamo"}
+		out = append(out, "responder_reclamo")
 	}
-	return []string{}
+	return out
+}
+
+// cargarPago agrega al detalle el pago del pedido y su historial.
+func (m *Modulo) cargarPago(ctx context.Context, d *Detalle) error {
+	var p PagoInfo
+	var comp sql.NullString
+	var comision sql.NullInt64
+	err := m.app.DB.QueryRowContext(ctx, `SELECT id, estado, origen, metodo, momento, monto_centimos, referencia, comprobante_key, comision_reportada_centimos, informado_en
+		FROM pagos WHERE pedido_id=$1`, d.ID).Scan(new(string), &p.Estado, &p.Origen, &p.Metodo, &p.Momento, &p.Monto, &p.Referencia, &comp, &comision, &p.InformadoEn)
+	if core.SinFilas(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	p.Texto, p.MetodoTexto = pagos.Textos[p.Estado], pagos.MetodosDirectos[p.Metodo]
+	if p.MetodoTexto == "" {
+		p.MetodoTexto = p.Metodo
+	}
+	if comp.Valid {
+		p.ComprobanteURL, _ = m.app.Archivos.URLLectura(ctx, comp.String)
+	}
+	if comision.Valid {
+		d.Comision = int(comision.Int64)
+	}
+	p.Eventos = []PagoEvento{}
+	rows, err := m.app.DB.QueryContext(ctx, `SELECT e.estado, e.detalle, e.creado_en FROM pago_eventos e JOIN pagos g ON g.id=e.pago_id
+		WHERE g.pedido_id=$1 ORDER BY e.creado_en, e.id`, d.ID)
+	if err == nil {
+		for rows.Next() {
+			var e PagoEvento
+			rows.Scan(&e.Estado, &e.Detalle, &e.Fecha)
+			e.Texto = pagos.Textos[e.Estado]
+			p.Eventos = append(p.Eventos, e)
+		}
+		rows.Close()
+	}
+	d.Pago, d.PagoEstado, d.PagoTexto = &p, p.Estado, p.Texto
+	return nil
 }
 
 func (m *Modulo) obtener(w http.ResponseWriter, r *http.Request) error {
@@ -450,10 +567,17 @@ func (m *Modulo) rechazar(w http.ResponseWriter, r *http.Request) error {
 		if err := devolverStock(ctx, tx, pid); err != nil {
 			return err
 		}
-		if err := billetera.RegistrarDevolucion(ctx, tx, tid, pid, codigo); err != nil {
+		devolver, err := pagos.AbrirDevolucion(ctx, tx, pid, "cancelacion")
+		if err != nil {
 			return err
 		}
-		return evento(ctx, tx, pid, "rechazado", "La tienda no pudo atender el pedido: "+in.Motivo+". Se devolvió tu dinero.")
+		texto := "La tienda no pudo atender el pedido: " + in.Motivo + "."
+		if devolver {
+			texto += " Como ya pagaste, la tienda debe devolverte tu dinero; verás aquí cuando lo informe."
+		} else {
+			texto += " No se realizó ningún cobro."
+		}
+		return evento(ctx, tx, pid, "rechazado", texto)
 	})
 	if err != nil {
 		return err
@@ -491,6 +615,9 @@ func (m *Modulo) enviar(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	d, err := m.cambiar(r, []string{"preparando"}, func(tx *sql.Tx, tid, pid, codigo, entrega string) error {
+		if err := pagoListo(ctx, tx, pid); err != nil {
+			return err
+		}
 		var detalle string
 		switch entrega {
 		case "agencia":
@@ -580,34 +707,13 @@ func (m *Modulo) listoRecojo(w http.ResponseWriter, r *http.Request) error {
 		if entrega != "recojo" {
 			return httpx.Conflicto("estado_invalido", "Este pedido no es para recoger en tienda.")
 		}
+		if err := pagoListo(ctx, tx, pid); err != nil {
+			return err
+		}
 		if _, err := tx.ExecContext(ctx, `UPDATE pedidos SET estado='listo_recojo' WHERE id=$1`, pid); err != nil {
 			return err
 		}
 		return evento(ctx, tx, pid, "listo_recojo", "Tu pedido está listo. Muestra tu código de recojo en la tienda.")
-	})
-	if err != nil {
-		return err
-	}
-	httpx.OK(w, d)
-	return nil
-}
-
-func (m *Modulo) entregarRecojo(w http.ResponseWriter, r *http.Request) error {
-	ctx := r.Context()
-	var in struct {
-		Codigo string `json:"codigo"`
-	}
-	if err := httpx.Leer(r, &in); err != nil {
-		return err
-	}
-	d, err := m.cambiar(r, []string{"listo_recojo"}, func(tx *sql.Tx, tid, pid, codigo, entrega string) error {
-		var esperado, rep string
-		tx.QueryRowContext(ctx, `SELECT p.codigo_recojo, t.reputacion FROM pedidos p JOIN tiendas t ON t.id=p.tienda_id WHERE p.id=$1`, pid).Scan(&esperado, &rep)
-		// El código lo muestra el comprador en su app: confirma que la persona correcta recogió el pedido.
-		if strings.TrimSpace(in.Codigo) != esperado {
-			return httpx.Invalido("El código de recojo no coincide. Pídele al cliente el código que aparece en su pedido.")
-		}
-		return billetera.MarcarEntregado(ctx, tx, tid, pid, codigo, rep, "vendedor")
 	})
 	if err != nil {
 		return err
@@ -684,31 +790,27 @@ func (m *Modulo) devolverReclamo(w http.ResponseWriter, r *http.Request) error {
 	var pid string
 	err = m.app.EnTransaccion(ctx, func(tx *sql.Tx) error {
 		var codigo string
-		var liberado bool
-		err := tx.QueryRowContext(ctx, `SELECT p.id, p.codigo, p.liberado FROM reclamos c JOIN pedidos p ON p.id=c.pedido_id
-			WHERE c.id::text=$1 AND p.tienda_id=$2 AND c.estado IN ('abierto','en_revision') FOR UPDATE OF c`, chi.URLParam(r, "id"), tid).Scan(&pid, &codigo, &liberado)
+		err := tx.QueryRowContext(ctx, `SELECT p.id, p.codigo FROM reclamos c JOIN pedidos p ON p.id=c.pedido_id
+			WHERE c.id::text=$1 AND p.tienda_id=$2 AND c.estado IN ('abierto','en_revision') FOR UPDATE OF c`, chi.URLParam(r, "id"), tid).Scan(&pid, &codigo)
 		if core.SinFilas(err) {
 			return httpx.Conflicto("reclamo_cerrado", "Este reclamo ya se resolvió o no existe.")
 		}
 		if err != nil {
 			return err
 		}
-		if liberado {
-			return httpx.Conflicto("ya_liberado", "El dinero de este pedido ya se liberó. Escríbenos para resolverlo.")
-		}
 		if _, err := tx.ExecContext(ctx, `UPDATE reclamos SET estado='a_favor_comprador', respuesta_vendedor=COALESCE(respuesta_vendedor, 'La tienda aceptó devolver el dinero.'),
 			respondido_en=COALESCE(respondido_en, now()), resuelto_en=now() WHERE pedido_id=$1`, pid); err != nil {
 			return err
 		}
-		if err := billetera.RegistrarDevolucion(ctx, tx, tid, pid, codigo); err != nil {
+		if _, err := pagos.AbrirDevolucion(ctx, tx, pid, "reclamo"); err != nil {
 			return err
 		}
-		if _, err := tx.ExecContext(ctx, `UPDATE pedidos SET estado='cancelado', motivo_cancelacion='La tienda aceptó el reclamo y devolvió el dinero', cerrado_en=now() WHERE id=$1`, pid); err != nil {
+		if _, err := tx.ExecContext(ctx, `UPDATE pedidos SET estado='cancelado', motivo_cancelacion='La tienda aceptó el reclamo y debe devolver el dinero', cerrado_en=now() WHERE id=$1`, pid); err != nil {
 			return err
 		}
 		u, _ := httpx.UsuarioDe(ctx)
 		m.app.Auditar(ctx, tx, u.ID, "devolver_reclamo", "pedido", pid, nil)
-		return evento(ctx, tx, pid, "cancelado", "La tienda aceptó tu reclamo. Te devolvimos todo tu dinero por el mismo medio de pago.")
+		return evento(ctx, tx, pid, "cancelado", "La tienda aceptó tu reclamo y debe devolverte tu dinero. Verás aquí cuando informe la devolución.")
 	})
 	if err != nil {
 		return err
@@ -831,15 +933,20 @@ func (m *Modulo) resumen(w http.ResponseWriter, r *http.Request) error {
 	}
 	rows.Close()
 
-	saldos, err := billetera.LeerSaldos(ctx, m.app.DB, tid)
-	if err != nil {
-		return err
+	// Pagos que la tienda debe revisar (no es un saldo: VendiGo no guarda dinero).
+	var cobros struct {
+		PorConfirmar int `json:"pagos_por_confirmar"`
+		Monto        int `json:"pagos_por_confirmar_centimos"`
+		Devoluciones int `json:"devoluciones_pendientes"`
 	}
+	m.app.DB.QueryRowContext(ctx, `SELECT count(*), COALESCE(SUM(g.monto_centimos),0) FROM pagos g JOIN pedidos p ON p.id=g.pedido_id
+		WHERE p.tienda_id=$1 AND g.estado IN ('pendiente','comprobante_enviado','no_recibido') AND p.estado NOT IN ('rechazado','cancelado')`, tid).Scan(&cobros.PorConfirmar, &cobros.Monto)
+	m.app.DB.QueryRowContext(ctx, `SELECT count(*) FROM devoluciones d JOIN pedidos p ON p.id=d.pedido_id WHERE p.tienda_id=$1 AND d.estado='pendiente_tienda'`, tid).Scan(&cobros.Devoluciones)
 	httpx.OK(w, map[string]any{
 		"pedidos": cont, "reclamos_abiertos": reclamos, "preguntas_pendientes": preguntas, "ayudas_abiertas": ayudas, "notificaciones_no_leidas": noLeidas,
 		"vendido_hoy_centimos": hoy, "vendido_mes_centimos": mes, "pedidos_mes": pedidosMes, "stock_bajo": stockBajo,
 		"clientes": clientes, "productos_publicados": publicados,
-		"semana": semana, "saldos": saldos,
+		"semana": semana, "cobros": cobros,
 	})
 	return nil
 }
@@ -894,9 +1001,8 @@ func (m *Modulo) leerNotificaciones(w http.ResponseWriter, r *http.Request) erro
 // aFavor: "comprador" (se devuelve el dinero y se cancela el pedido) o "vendedor" (el dinero sigue su curso).
 func ResolverReclamo(ctx context.Context, app *core.App, tx *sql.Tx, reclamoID, aFavor, nota, adminID string) (string, error) {
 	var pid, tid, codigo, estado string
-	var liberado bool
-	err := tx.QueryRowContext(ctx, `SELECT p.id, p.tienda_id, p.codigo, p.estado, p.liberado FROM reclamos c JOIN pedidos p ON p.id=c.pedido_id
-		WHERE c.id::text=$1 AND c.estado IN ('abierto','en_revision') FOR UPDATE OF c`, reclamoID).Scan(&pid, &tid, &codigo, &estado, &liberado)
+	err := tx.QueryRowContext(ctx, `SELECT p.id, p.tienda_id, p.codigo, p.estado FROM reclamos c JOIN pedidos p ON p.id=c.pedido_id
+		WHERE c.id::text=$1 AND c.estado IN ('abierto','en_revision') FOR UPDATE OF c`, reclamoID).Scan(&pid, &tid, &codigo, &estado)
 	if core.SinFilas(err) {
 		return "", httpx.Conflicto("reclamo_cerrado", "Este reclamo ya se resolvió o no existe.")
 	}
@@ -905,22 +1011,26 @@ func ResolverReclamo(ctx context.Context, app *core.App, tx *sql.Tx, reclamoID, 
 	}
 	switch aFavor {
 	case "comprador":
-		if liberado {
-			return "", httpx.Conflicto("ya_liberado", "El dinero de este pedido ya se liberó a la tienda; la devolución debe gestionarse aparte.")
-		}
 		if _, err := tx.ExecContext(ctx, `UPDATE reclamos SET estado='a_favor_comprador', nota_admin=$2, resuelto_en=now() WHERE id::text=$1`, reclamoID, nota); err != nil {
 			return "", err
 		}
-		if err := billetera.RegistrarDevolucion(ctx, tx, tid, pid, codigo); err != nil {
+		devolver, err := pagos.AbrirDevolucion(ctx, tx, pid, "reclamo")
+		if err != nil {
 			return "", err
 		}
 		if _, err := tx.ExecContext(ctx, `UPDATE pedidos SET estado='cancelado', motivo_cancelacion='VendiGo resolvió el reclamo a favor del comprador', cerrado_en=now() WHERE id=$1`, pid); err != nil {
 			return "", err
 		}
-		if err := evento(ctx, tx, pid, "cancelado", "VendiGo revisó tu reclamo y te dio la razón. Te devolvimos todo tu dinero."); err != nil {
+		texto := "VendiGo revisó tu reclamo y te dio la razón."
+		aviso := "Pedido " + codigo + ": " + nota
+		if devolver {
+			texto += " La tienda debe devolverte tu dinero; verás aquí cuando lo informe."
+			aviso += " Devuelve el pago al comprador e infórmalo con tu captura desde el pedido."
+		}
+		if err := evento(ctx, tx, pid, "cancelado", texto); err != nil {
 			return "", err
 		}
-		billetera.Notificar(ctx, tx, tid, "Reclamo resuelto a favor del comprador", "Pedido "+codigo+": "+nota, "/vendedor/cobros/reclamo/"+pid)
+		billetera.Notificar(ctx, tx, tid, "Reclamo resuelto a favor del comprador", aviso, "/vendedor/pedidos/"+pid)
 	case "vendedor":
 		if _, err := tx.ExecContext(ctx, `UPDATE reclamos SET estado='a_favor_vendedor', nota_admin=$2, resuelto_en=now() WHERE id::text=$1`, reclamoID, nota); err != nil {
 			return "", err
@@ -928,7 +1038,7 @@ func ResolverReclamo(ctx context.Context, app *core.App, tx *sql.Tx, reclamoID, 
 		if err := evento(ctx, tx, pid, estado, "VendiGo revisó el reclamo y las pruebas de la tienda. El pedido queda como entregado."); err != nil {
 			return "", err
 		}
-		billetera.Notificar(ctx, tx, tid, "Reclamo resuelto a tu favor", "Pedido "+codigo+": tu dinero se libera en la fecha prevista.", "/vendedor/cobros/reclamo/"+pid)
+		billetera.Notificar(ctx, tx, tid, "Reclamo resuelto a tu favor", "Pedido "+codigo+": el pedido queda como entregado.", "/vendedor/cobros/reclamo/"+pid)
 	default:
 		return "", httpx.Invalido("Elige a favor de quién se resuelve.")
 	}
@@ -956,4 +1066,73 @@ func CargarComoAdmin(ctx context.Context, app *core.App, ref string) (*Detalle, 
 	}
 	d.Acciones, d.Motorizados, d.Ayuda = []string{}, []Motorizado{}, nil
 	return d, tid, nil
+}
+
+// TiendaPago: datos para que el comprador le pague directo a la tienda.
+type TiendaPago struct {
+	Nombre   string `json:"nombre"`
+	Slug     string `json:"slug"`
+	Yape     string `json:"yape_numero"`
+	Plin     string `json:"plin_numero"`
+	Titular  string `json:"pago_titular"`
+	QRURL    string `json:"pago_qr_url"`
+	Whatsapp string `json:"whatsapp"`
+}
+
+// CargarComoComprador arma el seguimiento del pedido para el comprador (por su enlace secreto).
+// Incluye el código de entrega y los datos de pago de la tienda.
+func CargarComoComprador(ctx context.Context, app *core.App, token string) (*Detalle, *TiendaPago, error) {
+	if len(token) < 20 {
+		return nil, nil, httpx.ErrNoEncontrado
+	}
+	var id, tid, codigoEntrega string
+	err := app.DB.QueryRowContext(ctx, `SELECT id, tienda_id, codigo_recojo FROM pedidos WHERE token_seguimiento=$1`, token).Scan(&id, &tid, &codigoEntrega)
+	if core.SinFilas(err) {
+		return nil, nil, httpx.ErrNoEncontrado
+	}
+	if err != nil {
+		return nil, nil, err
+	}
+	d, err := (&Modulo{app: app}).cargar(ctx, tid, id)
+	if err != nil {
+		return nil, nil, err
+	}
+	if n := len(d.DNI); n > 4 {
+		d.DNI = "•••• " + d.DNI[n-4:]
+	}
+	if d.Entrega != "agencia" {
+		d.CodigoEntrega = codigoEntrega
+	}
+	d.Motorizados, d.Ayuda = []Motorizado{}, nil
+	// Lo que puede hacer el comprador ahora.
+	d.Acciones = []string{}
+	if d.Pago != nil && d.Estado != "rechazado" && d.Estado != "cancelado" {
+		switch d.Pago.Estado {
+		case "pendiente", "no_recibido", "comprobante_enviado":
+			d.Acciones = append(d.Acciones, "enviar_comprobante")
+		}
+	}
+	if d.Estado == "enviado" && d.Entrega == "agencia" {
+		d.Acciones = append(d.Acciones, "confirmar_recibido")
+	}
+	if d.ReclamoDet == nil && (d.Estado == "enviado" || (d.Estado == "entregado" && d.EntregadoEn != nil && time.Since(*d.EntregadoEn) <= DiasReclamo*24*time.Hour)) {
+		d.Acciones = append(d.Acciones, "reclamar")
+	}
+	var t TiendaPago
+	var qr sql.NullString
+	app.DB.QueryRowContext(ctx, `SELECT nombre, slug, yape_numero, plin_numero, pago_titular, pago_qr_key, whatsapp FROM tiendas WHERE id=$1`, tid).
+		Scan(&t.Nombre, &t.Slug, &t.Yape, &t.Plin, &t.Titular, &qr, &t.Whatsapp)
+	if qr.Valid {
+		t.QRURL = app.Archivos.URLPublica(qr.String)
+	}
+	return d, &t, nil
+}
+
+// IDPorToken devuelve el id del pedido de un enlace de seguimiento.
+func IDPorToken(ctx context.Context, q core.Ejecutor, token string) (id, tienda, codigo string, err error) {
+	err = q.QueryRowContext(ctx, `SELECT id, tienda_id, codigo FROM pedidos WHERE token_seguimiento=$1 AND length($1) >= 20`, token).Scan(&id, &tienda, &codigo)
+	if core.SinFilas(err) {
+		err = httpx.ErrNoEncontrado
+	}
+	return
 }

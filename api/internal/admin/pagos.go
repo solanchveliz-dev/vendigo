@@ -5,33 +5,37 @@ import (
 	"time"
 
 	"github.com/solanchveliz-dev/vendigo/api/internal/httpx"
+	pagospkg "github.com/solanchveliz-dev/vendigo/api/internal/pagos"
 )
 
-// Pagos de los compradores (pasan por Culqi y quedan retenidos hasta la entrega)
-// y suscripciones de las tiendas a los planes. Todo sale de los pedidos y pagos reales.
+// Pagos de los pedidos (el comprador le paga directo a la tienda; VendiGo solo registra y da seguimiento)
+// y suscripciones de las tiendas a los planes de VendiGo.
 
 type PagoAdmin struct {
-	PedidoID  string     `json:"pedido_id"`
-	Codigo    string     `json:"codigo"`
-	Cargo     *string    `json:"cargo"`
-	Tienda    string     `json:"tienda"`
-	Comprador string     `json:"comprador"`
-	Metodo    string     `json:"metodo"`
-	Estado    string     `json:"estado"` // retenido, liberado, pendiente, devuelto
-	Monto     int        `json:"monto_centimos"`
-	Comision  int        `json:"comision_centimos"`
-	LiberarEn *time.Time `json:"liberar_en"`
-	CreadoEn  time.Time  `json:"creado_en"`
+	PedidoID   string     `json:"pedido_id"`
+	Codigo     string     `json:"codigo"`
+	Tienda     string     `json:"tienda"`
+	Comprador  string     `json:"comprador"`
+	Metodo     string     `json:"metodo"`
+	Momento    string     `json:"momento"`
+	Estado     string     `json:"estado"`
+	Texto      string     `json:"estado_texto"`
+	Origen     string     `json:"origen"`
+	Monto      int        `json:"monto_centimos"`
+	Referencia string     `json:"referencia"`
+	Informado  *time.Time `json:"informado_en"`
+	Devolucion *string    `json:"devolucion"`
+	CreadoEn   time.Time  `json:"creado_en"`
 }
 
+// pagos lista los pagos de los pedidos tal como los informan el comprador y la tienda.
+// VendiGo no recibe ese dinero: solo da seguimiento.
 func (m *Modulo) pagos(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
-	rows, err := m.app.DB.QueryContext(ctx, `SELECT p.id, p.codigo, p.culqi_cargo_id, t.nombre, p.comprador_nombre, p.metodo_pago,
-		CASE WHEN p.pago_estado='devuelto' THEN 'devuelto' WHEN p.pago_estado='pendiente' THEN 'pendiente'
-			WHEN p.liberado THEN 'liberado' ELSE 'retenido' END,
-		p.total_centimos, p.comision_pasarela_centimos, p.liberar_en, p.creado_en
-		FROM pedidos p JOIN tiendas t ON t.id=p.tienda_id
-		WHERE NOT (p.pago_estado='pendiente' AND p.estado IN ('rechazado','cancelado'))
+	rows, err := m.app.DB.QueryContext(ctx, `SELECT p.id, p.codigo, t.nombre, p.comprador_nombre, g.metodo, g.momento, g.estado, g.origen,
+		g.monto_centimos, g.referencia, g.informado_en,
+		(SELECT d.estado FROM devoluciones d WHERE d.pedido_id=p.id ORDER BY d.creado_en DESC LIMIT 1), p.creado_en
+		FROM pagos g JOIN pedidos p ON p.id=g.pedido_id JOIN tiendas t ON t.id=p.tienda_id
 		ORDER BY p.creado_en DESC LIMIT 5000`)
 	if err != nil {
 		return err
@@ -40,27 +44,27 @@ func (m *Modulo) pagos(w http.ResponseWriter, r *http.Request) error {
 	out := []PagoAdmin{}
 	for rows.Next() {
 		var p PagoAdmin
-		if err := rows.Scan(&p.PedidoID, &p.Codigo, &p.Cargo, &p.Tienda, &p.Comprador, &p.Metodo, &p.Estado, &p.Monto, &p.Comision, &p.LiberarEn, &p.CreadoEn); err != nil {
+		if err := rows.Scan(&p.PedidoID, &p.Codigo, &p.Tienda, &p.Comprador, &p.Metodo, &p.Momento, &p.Estado, &p.Origen, &p.Monto, &p.Referencia, &p.Informado, &p.Devolucion, &p.CreadoEn); err != nil {
 			return err
 		}
+		p.Texto = pagospkg.Textos[p.Estado]
 		out = append(out, p)
 	}
 	var k struct {
-		HoyN         int `json:"hoy"`
-		HoyMonto     int `json:"hoy_monto_centimos"`
-		Retenido     int `json:"retenido_centimos"`
-		RetenidoN    int `json:"retenido"`
-		LiberadoMes  int `json:"liberado_mes_centimos"`
-		DevueltosMes int `json:"devueltos_mes"`
+		InformadosHoy int `json:"informados_hoy"`
+		InformadosMto int `json:"informados_hoy_centimos"`
+		PorConfirmar  int `json:"por_confirmar"`
+		AlRecibir     int `json:"al_recibir"`
+		Devoluciones  int `json:"devoluciones_pendientes"`
+		DevolucionMto int `json:"devoluciones_pendientes_centimos"`
 	}
 	m.app.DB.QueryRowContext(ctx, `SELECT
-		count(*) FILTER (WHERE pago_estado='pagado' AND (creado_en AT TIME ZONE 'America/Lima')::date=(now() AT TIME ZONE 'America/Lima')::date),
-		COALESCE(SUM(total_centimos) FILTER (WHERE pago_estado='pagado' AND (creado_en AT TIME ZONE 'America/Lima')::date=(now() AT TIME ZONE 'America/Lima')::date),0),
-		COALESCE(SUM(total_centimos) FILTER (WHERE pago_estado='pagado' AND NOT liberado),0),
-		count(*) FILTER (WHERE pago_estado='pagado' AND NOT liberado),
-		COALESCE(SUM(total_centimos-comision_pasarela_centimos) FILTER (WHERE liberado AND date_trunc('month', COALESCE(liberar_en,creado_en))=date_trunc('month', now())),0),
-		count(*) FILTER (WHERE pago_estado='devuelto' AND date_trunc('month', COALESCE(cerrado_en,creado_en))=date_trunc('month', now()))
-		FROM pedidos`).Scan(&k.HoyN, &k.HoyMonto, &k.Retenido, &k.RetenidoN, &k.LiberadoMes, &k.DevueltosMes)
+		count(*) FILTER (WHERE g.estado IN ('informado_tienda','confirmado') AND (g.informado_en AT TIME ZONE 'America/Lima')::date=(now() AT TIME ZONE 'America/Lima')::date),
+		COALESCE(SUM(g.monto_centimos) FILTER (WHERE g.estado IN ('informado_tienda','confirmado') AND (g.informado_en AT TIME ZONE 'America/Lima')::date=(now() AT TIME ZONE 'America/Lima')::date),0),
+		count(*) FILTER (WHERE g.estado IN ('pendiente','comprobante_enviado','no_recibido') AND p.estado NOT IN ('rechazado','cancelado')),
+		count(*) FILTER (WHERE g.estado='paga_al_recibir' AND p.estado NOT IN ('rechazado','cancelado','entregado'))
+		FROM pagos g JOIN pedidos p ON p.id=g.pedido_id`).Scan(&k.InformadosHoy, &k.InformadosMto, &k.PorConfirmar, &k.AlRecibir)
+	m.app.DB.QueryRowContext(ctx, `SELECT count(*), COALESCE(SUM(monto_centimos),0) FROM devoluciones WHERE estado='pendiente_tienda'`).Scan(&k.Devoluciones, &k.DevolucionMto)
 	httpx.OK(w, map[string]any{"pagos": out, "resumen": k})
 	return nil
 }

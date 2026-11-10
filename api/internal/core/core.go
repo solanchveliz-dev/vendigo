@@ -32,10 +32,17 @@ type Almacen interface {
 // Notificador envía códigos y avisos (SNS, SES o consola en pruebas).
 type Notificador interface {
 	EnviarCodigo(ctx context.Context, celular, codigo string) error
+	// EnviarTexto manda un SMS informativo (por ejemplo, el enlace de seguimiento de un pedido).
+	EnviarTexto(ctx context.Context, celular, texto string) error
 }
 
 // NotificadorConsola muestra los códigos en la consola. Solo para desarrollo.
 type NotificadorConsola struct{}
+
+func (NotificadorConsola) EnviarTexto(_ context.Context, celular, texto string) error {
+	slog.Info("SMS (solo desarrollo)", "celular", celular, "texto", texto)
+	return nil
+}
 
 func (NotificadorConsola) EnviarCodigo(_ context.Context, celular, codigo string) error {
 	slog.Info("código de verificación (solo desarrollo)", "celular", celular, "codigo", codigo)

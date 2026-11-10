@@ -9,7 +9,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/solanchveliz-dev/vendigo/api/internal/billetera"
 	"github.com/solanchveliz-dev/vendigo/api/internal/core"
 	"github.com/solanchveliz-dev/vendigo/api/internal/httpx"
 	"github.com/solanchveliz-dev/vendigo/api/internal/pedidos"
@@ -81,7 +80,7 @@ func (m *Modulo) pedido(w http.ResponseWriter, r *http.Request) error {
 	n := nombres[rand.IntN(len(nombres))]
 	p := pedidos.PedidoNuevo{
 		TiendaID: tid, Nombre: n, Celular: "9" + digitos(8), Entrega: in.Entrega,
-		MetodoPago: []string{"yape", "tarjeta", "yape"}[rand.IntN(3)], CulqiCargo: "chr_test_" + digitos(10),
+		MetodoPago: []string{"yape_directo", "plin_directo", "yape_directo"}[rand.IntN(3)], Prueba: true,
 		Items: items,
 	}
 	switch in.Entrega {
@@ -185,11 +184,11 @@ func (m *Modulo) pregunta(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (m *Modulo) barrer(w http.ResponseWriter, r *http.Request) error {
-	c, l, err := billetera.Barrer(r.Context(), m.app)
+	c, err := pedidos.Barrer(r.Context(), m.app)
 	if err != nil {
 		return err
 	}
-	httpx.OK(w, map[string]int{"confirmados": c, "liberados": l})
+	httpx.OK(w, map[string]int{"confirmados": c})
 	return nil
 }
 

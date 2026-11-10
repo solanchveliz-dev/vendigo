@@ -144,7 +144,7 @@ func (m *Modulo) actual(w http.ResponseWriter, r *http.Request) error {
 }
 
 // cambiar activa otro plan. El primer plan de pago tiene el primer mes gratis.
-// En esta versión el cobro de la suscripción se simula; en producción se hace con Culqi (cargo recurrente).
+// Los planes de pago se activan cuando VendiGo confirma que recibió el pago en su propia cuenta (el admin lo registra).
 func (m *Modulo) cambiar(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	tid, err := tiendas.ID(ctx, m.app)
@@ -170,39 +170,59 @@ func (m *Modulo) cambiar(w http.ResponseWriter, r *http.Request) error {
 		if u.Plan.ID == in.PlanID {
 			return httpx.Conflicto("mismo_plan", "Ya estás en el plan "+nombre+".")
 		}
+		var pendiente bool
+		tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM pagos_plan WHERE tienda_id=$1 AND estado='pendiente')`, tid).Scan(&pendiente)
+		if pendiente {
+			return httpx.Conflicto("pago_pendiente", "Ya tienes un pago de plan por confirmar. Espera a que VendiGo lo revise.")
+		}
 		gratis := precio > 0 && u.PuedeMesGratis
-		monto := precio
-		if gratis || precio == 0 {
-			monto = 0
-		}
-		var fin any
-		if precio > 0 {
-			fin = time.Now().AddDate(0, 1, 0)
-		}
-		if _, err := tx.ExecContext(ctx, `UPDATE suscripciones SET activa=false, fin=COALESCE(fin, now()) WHERE tienda_id=$1 AND activa`, tid); err != nil {
-			return err
-		}
-		if _, err := tx.ExecContext(ctx, `INSERT INTO suscripciones (tienda_id, plan_id, mes_gratis, monto_centimos, fin) VALUES ($1,$2,$3,$4,$5)`,
-			tid, in.PlanID, gratis, monto, fin); err != nil {
-			return err
-		}
-		if precio > 0 {
-			concepto := "Plan " + nombre
-			if gratis {
-				concepto += " · primer mes gratis"
+		usr, _ := httpx.UsuarioDe(ctx)
+		if precio > 0 && !gratis {
+			// Plan de pago: se activa cuando VendiGo confirme que recibió el pago (en su propia cuenta).
+			if _, err := tx.ExecContext(ctx, `INSERT INTO pagos_plan (tienda_id, concepto, monto_centimos, metodo, estado, tipo, plan_id)
+				VALUES ($1,$2,$3,'yape','pendiente','plan',$4)`, tid, "Plan "+nombre, precio, in.PlanID); err != nil {
+				return err
 			}
-			if _, err := tx.ExecContext(ctx, `INSERT INTO pagos_plan (tienda_id, concepto, monto_centimos) VALUES ($1,$2,$3)`, tid, concepto, monto); err != nil {
+			m.app.Auditar(ctx, tx, usr.ID, "pedir_plan", "tienda", tid, map[string]any{"plan": in.PlanID, "monto": precio})
+			return nil
+		}
+		if err := AplicarPlan(ctx, tx, tid, in.PlanID, gratis, 0); err != nil {
+			return err
+		}
+		if gratis {
+			if _, err := tx.ExecContext(ctx, `INSERT INTO pagos_plan (tienda_id, concepto, monto_centimos, estado, tipo, plan_id, confirmado_en)
+				VALUES ($1,$2,0,'confirmado','plan',$3, now())`, tid, "Plan "+nombre+" · primer mes gratis", in.PlanID); err != nil {
 				return err
 			}
 		}
-		usr, _ := httpx.UsuarioDe(ctx)
-		m.app.Auditar(ctx, tx, usr.ID, "cambiar_plan", "tienda", tid, map[string]any{"plan": in.PlanID, "monto": monto})
+		m.app.Auditar(ctx, tx, usr.ID, "cambiar_plan", "tienda", tid, map[string]any{"plan": in.PlanID, "monto": 0})
 		return nil
 	})
 	if err != nil {
 		return err
 	}
 	return m.actual(w, r)
+}
+
+// AplicarPlan activa el plan de la tienda (cuando es gratis, es el mes gratis o VendiGo ya confirmó el pago).
+func AplicarPlan(ctx context.Context, tx *sql.Tx, tid, planID string, mesGratis bool, monto int) error {
+	var fin any
+	if planID != "gratis" {
+		fin = time.Now().AddDate(0, 1, 0)
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE suscripciones SET activa=false, fin=COALESCE(fin, now()) WHERE tienda_id=$1 AND activa`, tid); err != nil {
+		return err
+	}
+	_, err := tx.ExecContext(ctx, `INSERT INTO suscripciones (tienda_id, plan_id, mes_gratis, monto_centimos, fin) VALUES ($1,$2,$3,$4,$5)`,
+		tid, planID, mesGratis, monto, fin)
+	return err
+}
+
+// AplicarVentasExtra suma el paquete de ventas del mes cuando VendiGo confirmó su pago.
+func AplicarVentasExtra(ctx context.Context, tx *sql.Tx, tid string, monto int) error {
+	_, err := tx.ExecContext(ctx, `INSERT INTO ventas_extra (tienda_id, cantidad, monto_centimos, periodo) VALUES ($1,$2,$3,$4)`,
+		tid, paqueteVentas, monto, inicioMes().Format("2006-01-02"))
+	return err
 }
 
 func (m *Modulo) comprarExtra(w http.ResponseWriter, r *http.Request) error {
@@ -219,12 +239,14 @@ func (m *Modulo) comprarExtra(w http.ResponseWriter, r *http.Request) error {
 		return httpx.Conflicto("ilimitado", "Tu plan tiene ventas ilimitadas.")
 	}
 	err = m.app.EnTransaccion(ctx, func(tx *sql.Tx) error {
-		if _, err := tx.ExecContext(ctx, `INSERT INTO ventas_extra (tienda_id, cantidad, monto_centimos, periodo) VALUES ($1,$2,$3,$4)`,
-			tid, paqueteVentas, paquetePrecio, inicioMes().Format("2006-01-02")); err != nil {
-			return err
+		var pendiente bool
+		tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM pagos_plan WHERE tienda_id=$1 AND estado='pendiente')`, tid).Scan(&pendiente)
+		if pendiente {
+			return httpx.Conflicto("pago_pendiente", "Ya tienes un pago por confirmar. Espera a que VendiGo lo revise.")
 		}
-		_, err := tx.ExecContext(ctx, `INSERT INTO pagos_plan (tienda_id, concepto, monto_centimos) VALUES ($1,$2,$3)`,
-			tid, fmt.Sprintf("+%d ventas", paqueteVentas), paquetePrecio)
+		// Se suman cuando VendiGo confirme que recibió el pago.
+		_, err := tx.ExecContext(ctx, `INSERT INTO pagos_plan (tienda_id, concepto, monto_centimos, metodo, estado, tipo)
+			VALUES ($1,$2,$3,'yape','pendiente','ventas_extra')`, tid, fmt.Sprintf("+%d ventas", paqueteVentas), paquetePrecio)
 		return err
 	})
 	if err != nil {
@@ -239,7 +261,7 @@ func (m *Modulo) pagos(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	rows, err := m.app.DB.QueryContext(ctx, `SELECT id, concepto, monto_centimos, metodo, creado_en FROM pagos_plan WHERE tienda_id=$1 ORDER BY creado_en DESC`, tid)
+	rows, err := m.app.DB.QueryContext(ctx, `SELECT id, concepto, monto_centimos, metodo, estado, referencia, motivo_rechazo, creado_en FROM pagos_plan WHERE tienda_id=$1 ORDER BY creado_en DESC`, tid)
 	if err != nil {
 		return err
 	}
@@ -249,14 +271,20 @@ func (m *Modulo) pagos(w http.ResponseWriter, r *http.Request) error {
 		Concepto string    `json:"concepto"`
 		Monto    int       `json:"monto_centimos"`
 		Metodo   string    `json:"metodo"`
+		Estado   string    `json:"estado"`
+		Ref      string    `json:"referencia"`
+		Motivo   string    `json:"motivo_rechazo"`
 		Fecha    time.Time `json:"fecha"`
 	}
 	out := []pago{}
 	for rows.Next() {
 		var p pago
-		rows.Scan(&p.ID, &p.Concepto, &p.Monto, &p.Metodo, &p.Fecha)
+		rows.Scan(&p.ID, &p.Concepto, &p.Monto, &p.Metodo, &p.Estado, &p.Ref, &p.Motivo, &p.Fecha)
 		out = append(out, p)
 	}
-	httpx.OK(w, map[string]any{"pagos": out})
+	// Datos para pagarle a VendiGo (los configura el admin). El plan se activa cuando VendiGo confirma el pago.
+	var yape, titular string
+	m.app.DB.QueryRowContext(ctx, `SELECT COALESCE((SELECT valor FROM ajustes_plataforma WHERE clave='planes_yape'),''), COALESCE((SELECT valor FROM ajustes_plataforma WHERE clave='planes_titular'),'')`).Scan(&yape, &titular)
+	httpx.OK(w, map[string]any{"pagos": out, "pago_vendigo": map[string]string{"yape": yape, "titular": titular}})
 	return nil
 }

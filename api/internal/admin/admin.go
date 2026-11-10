@@ -1,5 +1,5 @@
 // Package admin es el panel del administrador de VendiGo: supervisa a las vendedoras,
-// revisa identidades, registra las transferencias de los retiros y resuelve reclamos.
+// revisa identidades, modera tiendas y productos, da seguimiento a pedidos y resuelve reclamos.
 // Cada acción queda en la auditoría con quién la hizo.
 package admin
 
@@ -42,9 +42,6 @@ func (m *Modulo) Rutas(r chi.Router) {
 	r.Method("GET", "/verificaciones/{id}", httpx.Handler(m.verificacion))
 	r.Method("POST", "/verificaciones/{id}/aprobar", httpx.Handler(m.aprobar))
 	r.Method("POST", "/verificaciones/{id}/rechazar", httpx.Handler(m.rechazar))
-	r.Method("GET", "/retiros", httpx.Handler(m.retiros))
-	r.Method("POST", "/retiros/{id}/pagado", httpx.Handler(m.retiroPagado))
-	r.Method("POST", "/retiros/{id}/rechazar", httpx.Handler(m.retiroRechazar))
 	r.Method("GET", "/reclamos", httpx.Handler(m.reclamos))
 	r.Method("POST", "/reclamos/{id}/resolver", httpx.Handler(m.resolverReclamo))
 	r.Method("GET", "/auditoria", httpx.Handler(m.auditoria))
@@ -67,6 +64,9 @@ func (m *Modulo) Rutas(r chi.Router) {
 	r.Method("GET", "/pedidos/{id}", httpx.Handler(m.pedidoAdmin))
 	r.Method("GET", "/pagos", httpx.Handler(m.pagos))
 	r.Method("GET", "/suscripciones", httpx.Handler(m.suscripciones))
+	r.Method("GET", "/pagos-plan", httpx.Handler(m.pagosPlan))
+	r.Method("POST", "/pagos-plan/{id}/confirmar", httpx.Handler(m.confirmarPagoPlan))
+	r.Method("POST", "/pagos-plan/{id}/rechazar", httpx.Handler(m.rechazarPagoPlan))
 	r.Method("GET", "/planes", httpx.Handler(m.planes))
 	r.Method("PUT", "/planes/{id}", httpx.Handler(m.guardarPlan))
 	r.Method("GET", "/reportes", httpx.Handler(m.reportes))
@@ -125,8 +125,7 @@ func (m *Modulo) resumen(w http.ResponseWriter, r *http.Request) error {
 		Suspendidas    int `json:"suspendidas"`
 		NuevasSemana   int `json:"nuevas_semana"`
 		Verificaciones int `json:"verificaciones_pendientes"`
-		Retiros        int `json:"retiros_pendientes"`
-		RetirosMonto   int `json:"retiros_pendientes_centimos"`
+		PagosPlan      int `json:"pagos_plan_pendientes"`
 		Reclamos       int `json:"reclamos_abiertos"`
 		Bloqueos       int `json:"cuentas_bloqueadas"`
 		Incidencias    int `json:"incidencias_abiertas"`
@@ -136,12 +135,11 @@ func (m *Modulo) resumen(w http.ResponseWriter, r *http.Request) error {
 		(SELECT count(*) FROM usuarios WHERE rol='vendedor' AND NOT activo),
 		(SELECT count(*) FROM usuarios WHERE rol='vendedor' AND creado_en > now() - interval '7 days'),
 		(SELECT count(*) FROM verificaciones WHERE estado='pendiente'),
-		(SELECT count(*) FROM retiros WHERE estado='en_proceso'),
-		(SELECT COALESCE(SUM(monto_centimos),0) FROM retiros WHERE estado='en_proceso'),
+		(SELECT count(*) FROM pagos_plan WHERE estado='pendiente'),
 		(SELECT count(*) FROM reclamos WHERE estado IN ('abierto','en_revision')),
 		(SELECT count(*) FROM usuarios WHERE bloqueado_hasta > now()),
 		(SELECT count(*) FROM incidencias WHERE estado<>'resuelta')`).
-		Scan(&d.Vendedoras, &d.Suspendidas, &d.NuevasSemana, &d.Verificaciones, &d.Retiros, &d.RetirosMonto, &d.Reclamos, &d.Bloqueos, &d.Incidencias)
+		Scan(&d.Vendedoras, &d.Suspendidas, &d.NuevasSemana, &d.Verificaciones, &d.PagosPlan, &d.Reclamos, &d.Bloqueos, &d.Incidencias)
 	if err != nil {
 		return err
 	}
@@ -177,7 +175,7 @@ const consultaVendedoras = `SELECT u.id, u.nombre, u.celular, COALESCE(u.email,'
 	COALESCE((SELECT p.nombre FROM suscripciones s JOIN planes p ON p.id=s.plan_id WHERE s.tienda_id=t.id AND s.activa LIMIT 1),''),
 	COALESCE((SELECT v.estado FROM verificaciones v WHERE v.tienda_id=t.id ORDER BY v.creado_en DESC LIMIT 1),'sin_enviar'),
 	(SELECT count(*) FROM pedidos p WHERE p.tienda_id=t.id AND p.estado NOT IN ('rechazado','cancelado')),
-	COALESCE((SELECT SUM(total_centimos) FROM pedidos p WHERE p.tienda_id=t.id AND p.pago_estado='pagado' AND p.estado NOT IN ('rechazado','cancelado')),0),
+	COALESCE((SELECT SUM(total_centimos) FROM pedidos p WHERE p.tienda_id=t.id AND p.estado='entregado'),0),
 	(SELECT max(a.creado_en) FROM accesos a WHERE a.usuario_id=u.id AND a.exito), COALESCE(t.reputacion,'')
 	FROM usuarios u LEFT JOIN tiendas t ON t.usuario_id=u.id
 	WHERE u.rol='vendedor'`
@@ -251,10 +249,17 @@ func (m *Modulo) vendedor(w http.ResponseWriter, r *http.Request) error {
 		historial = leerEventos(rows)
 	}
 
-	var saldos billetera.Saldos
+	// Ventas informativas de la tienda (VendiGo no guarda su dinero, así que no hay saldos).
+	var ventas struct {
+		Vendido      int `json:"vendido_centimos"`
+		Entregados   int `json:"pedidos_entregados"`
+		PorConfirmar int `json:"pagos_por_confirmar"`
+		Devoluciones int `json:"devoluciones_pendientes"`
+	}
 	type pagoPlan struct {
 		Concepto string    `json:"concepto"`
 		Monto    int       `json:"monto_centimos"`
+		Estado   string    `json:"estado"`
 		Fecha    time.Time `json:"creado_en"`
 	}
 	pagos := []pagoPlan{}
@@ -269,7 +274,10 @@ func (m *Modulo) vendedor(w http.ResponseWriter, r *http.Request) error {
 	}
 	extra.Entrega = []string{}
 	if v.TiendaID != "" {
-		saldos, _ = billetera.LeerSaldos(ctx, m.app.DB, v.TiendaID)
+		m.app.DB.QueryRowContext(ctx, `SELECT COALESCE(SUM(p.total_centimos) FILTER (WHERE p.estado='entregado'),0), count(*) FILTER (WHERE p.estado='entregado'),
+			count(*) FILTER (WHERE g.estado IN ('pendiente','comprobante_enviado','no_recibido') AND p.estado NOT IN ('rechazado','cancelado')),
+			(SELECT count(*) FROM devoluciones d JOIN pedidos x ON x.id=d.pedido_id WHERE x.tienda_id=$1 AND d.estado='pendiente_tienda')
+			FROM pedidos p JOIN pagos g ON g.pedido_id=p.id WHERE p.tienda_id=$1`, v.TiendaID).Scan(&ventas.Vendido, &ventas.Entregados, &ventas.PorConfirmar, &ventas.Devoluciones)
 		var recojo, agencia, moto, otra bool
 		m.app.DB.QueryRowContext(ctx, `SELECT COALESCE(NULLIF(distrito,'')||', '||ciudad, ciudad), entrega_recojo, entrega_agencia, entrega_motorizado, entrega_otra, reputacion,
 			(SELECT count(*) FROM reclamos c JOIN pedidos p ON p.id=c.pedido_id WHERE p.tienda_id=t.id),
@@ -286,16 +294,16 @@ func (m *Modulo) vendedor(w http.ResponseWriter, r *http.Request) error {
 				extra.Entrega = append(extra.Entrega, e.t)
 			}
 		}
-		if rows, err := m.app.DB.QueryContext(ctx, `SELECT concepto, monto_centimos, creado_en FROM pagos_plan WHERE tienda_id=$1 ORDER BY creado_en DESC LIMIT 6`, v.TiendaID); err == nil {
+		if rows, err := m.app.DB.QueryContext(ctx, `SELECT concepto, monto_centimos, estado, creado_en FROM pagos_plan WHERE tienda_id=$1 ORDER BY creado_en DESC LIMIT 6`, v.TiendaID); err == nil {
 			for rows.Next() {
 				var x pagoPlan
-				rows.Scan(&x.Concepto, &x.Monto, &x.Fecha)
+				rows.Scan(&x.Concepto, &x.Monto, &x.Estado, &x.Fecha)
 				pagos = append(pagos, x)
 			}
 			rows.Close()
 		}
 	}
-	httpx.OK(w, map[string]any{"vendedora": v, "accesos": accesos, "historial": historial, "saldos": saldos, "tienda": extra, "pagos_plan": pagos})
+	httpx.OK(w, map[string]any{"vendedora": v, "accesos": accesos, "historial": historial, "ventas": ventas, "tienda": extra, "pagos_plan": pagos})
 	return nil
 }
 
@@ -482,129 +490,13 @@ func (m *Modulo) rechazar(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-// ---------- retiros ----------
-
-func (m *Modulo) retiros(w http.ResponseWriter, r *http.Request) error {
-	estado := r.URL.Query().Get("estado")
-	if estado == "" {
-		estado = "en_proceso"
-	}
-	rows, err := m.app.DB.QueryContext(r.Context(), `SELECT r.id, r.numero, r.tienda_id, t.nombre, u.id, u.nombre, r.monto_centimos, r.banco, r.ultimos4,
-		COALESCE(c.titular,''), COALESCE(c.tipo,''), r.estado, r.operacion, r.motivo_rechazo, r.creado_en, r.pagado_en,
-		(SELECT count(*) FROM pedidos p WHERE p.retiro_id=r.id)
-		FROM retiros r JOIN tiendas t ON t.id=r.tienda_id JOIN usuarios u ON u.id=t.usuario_id
-		LEFT JOIN cuentas_bancarias c ON c.tienda_id=r.tienda_id
-		WHERE r.estado=$1 OR $1='todos' ORDER BY r.creado_en DESC LIMIT 200`, estado)
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
-	type retiro struct {
-		ID        string     `json:"id"`
-		Numero    int64      `json:"numero"`
-		TiendaID  string     `json:"tienda_id"`
-		Tienda    string     `json:"tienda"`
-		UsuarioID string     `json:"usuario_id"`
-		Vendedora string     `json:"vendedora"`
-		Monto     int        `json:"monto_centimos"`
-		Banco     string     `json:"banco"`
-		Ultimos4  string     `json:"ultimos4"`
-		Titular   string     `json:"titular"`
-		TipoCta   string     `json:"tipo_cuenta"`
-		Estado    string     `json:"estado"`
-		Operacion string     `json:"operacion"`
-		Motivo    string     `json:"motivo_rechazo"`
-		CreadoEn  time.Time  `json:"creado_en"`
-		PagadoEn  *time.Time `json:"pagado_en"`
-		Pedidos   int        `json:"pedidos"`
-	}
-	out := []retiro{}
-	for rows.Next() {
-		var x retiro
-		if err := rows.Scan(&x.ID, &x.Numero, &x.TiendaID, &x.Tienda, &x.UsuarioID, &x.Vendedora, &x.Monto, &x.Banco, &x.Ultimos4, &x.Titular, &x.TipoCta,
-			&x.Estado, &x.Operacion, &x.Motivo, &x.CreadoEn, &x.PagadoEn, &x.Pedidos); err != nil {
-			return err
-		}
-		out = append(out, x)
-	}
-	// Indicadores de arriba: en proceso, pagado esta semana y dinero retenido
-	// (saldo disponible de tiendas que aún no tienen su identidad verificada).
-	var k struct {
-		EnProceso      int `json:"en_proceso_centimos"`
-		EnProcesoN     int `json:"en_proceso"`
-		PagadoSemana   int `json:"pagado_semana_centimos"`
-		PagadoSemanaN  int `json:"pagado_semana"`
-		Retenido       int `json:"retenido_centimos"`
-		RetenidoTienda int `json:"retenido_tiendas"`
-	}
-	m.app.DB.QueryRowContext(r.Context(), `SELECT
-		COALESCE((SELECT SUM(monto_centimos) FROM retiros WHERE estado='en_proceso'),0), (SELECT count(*) FROM retiros WHERE estado='en_proceso'),
-		COALESCE((SELECT SUM(monto_centimos) FROM retiros WHERE estado='pagado' AND pagado_en > date_trunc('week', now() AT TIME ZONE 'America/Lima') AT TIME ZONE 'America/Lima'),0),
-		(SELECT count(*) FROM retiros WHERE estado='pagado' AND pagado_en > date_trunc('week', now() AT TIME ZONE 'America/Lima') AT TIME ZONE 'America/Lima'),
-		COALESCE((SELECT SUM(x.s) FROM (SELECT m.tienda_id, SUM(m.monto_centimos) s FROM movimientos m WHERE m.bolsa='disponible'
-			AND NOT EXISTS (SELECT 1 FROM verificaciones v WHERE v.tienda_id=m.tienda_id AND v.estado='aprobada') GROUP BY m.tienda_id HAVING SUM(m.monto_centimos)>0) x),0),
-		(SELECT count(*) FROM (SELECT m.tienda_id FROM movimientos m WHERE m.bolsa='disponible'
-			AND NOT EXISTS (SELECT 1 FROM verificaciones v WHERE v.tienda_id=m.tienda_id AND v.estado='aprobada') GROUP BY m.tienda_id HAVING SUM(m.monto_centimos)>0) y)`).
-		Scan(&k.EnProceso, &k.EnProcesoN, &k.PagadoSemana, &k.PagadoSemanaN, &k.Retenido, &k.RetenidoTienda)
-	httpx.OK(w, map[string]any{"retiros": out, "indicadores": k})
-	return nil
-}
-
-func (m *Modulo) retiroPagado(w http.ResponseWriter, r *http.Request) error {
-	ctx := r.Context()
-	var in struct {
-		Operacion string `json:"operacion"`
-	}
-	if err := httpx.Leer(r, &in); err != nil {
-		return err
-	}
-	in.Operacion = strings.TrimSpace(in.Operacion)
-	if len(in.Operacion) < 4 || len(in.Operacion) > 30 {
-		return httpx.Invalido("Escribe el número de operación de la transferencia.")
-	}
-	id := chi.URLParam(r, "id")
-	err := m.app.EnTransaccion(ctx, func(tx *sql.Tx) error {
-		if _, err := billetera.MarcarRetiroPagado(ctx, tx, id, in.Operacion); err != nil {
-			return err
-		}
-		m.app.Auditar(ctx, tx, adminID(ctx), "retiro_pagado", "retiro", id, map[string]string{"operacion": in.Operacion})
-		return nil
-	})
-	if err != nil {
-		return err
-	}
-	httpx.OK(w, map[string]string{"mensaje": "Retiro marcado como transferido. Le avisamos a la vendedora."})
-	return nil
-}
-
-func (m *Modulo) retiroRechazar(w http.ResponseWriter, r *http.Request) error {
-	ctx := r.Context()
-	motivo, err := motivoObligatorio(r)
-	if err != nil {
-		return err
-	}
-	id := chi.URLParam(r, "id")
-	err = m.app.EnTransaccion(ctx, func(tx *sql.Tx) error {
-		if _, err := billetera.RechazarRetiro(ctx, tx, id, motivo); err != nil {
-			return err
-		}
-		m.app.Auditar(ctx, tx, adminID(ctx), "retiro_rechazado", "retiro", id, map[string]string{"motivo": motivo})
-		return nil
-	})
-	if err != nil {
-		return err
-	}
-	httpx.OK(w, map[string]string{"mensaje": "Retiro rechazado. El dinero volvió a su saldo disponible."})
-	return nil
-}
-
 // ---------- reclamos ----------
 
 func (m *Modulo) reclamos(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	abiertos := r.URL.Query().Get("estado") != "todos"
 	rows, err := m.app.DB.QueryContext(ctx, `SELECT c.id, p.id, p.codigo, t.nombre, p.comprador_nombre, p.total_centimos, c.motivo, c.descripcion,
-		c.fotos, COALESCE(c.respuesta_vendedor,''), c.evidencias, c.estado, c.nota_admin, c.creado_en, c.respondido_en, c.resuelto_en, p.liberado,
+		c.fotos, COALESCE(c.respuesta_vendedor,''), c.evidencias, c.estado, c.nota_admin, c.creado_en, c.respondido_en, c.resuelto_en, COALESCE((SELECT d.estado FROM devoluciones d WHERE d.pedido_id=p.id ORDER BY d.creado_en DESC LIMIT 1),''),
 		p.entrega, COALESCE(e.agencia,''), COALESCE(e.numero_orden,''), e.boleta_key IS NOT NULL, t.reputacion,
 		(SELECT count(*) FROM reclamos c2 JOIN pedidos p2 ON p2.id=c2.pedido_id WHERE p2.comprador_celular=p.comprador_celular AND c2.id<>c.id),
 		(SELECT count(*) FROM reclamos c3 JOIN pedidos p3 ON p3.id=c3.pedido_id WHERE p3.tienda_id=p.tienda_id AND c3.estado='a_favor_comprador'),
@@ -632,7 +524,7 @@ func (m *Modulo) reclamos(w http.ResponseWriter, r *http.Request) error {
 		CreadoEn       time.Time  `json:"creado_en"`
 		Respondido     *time.Time `json:"respondido_en"`
 		Resuelto       *time.Time `json:"resuelto_en"`
-		Liberado       bool       `json:"liberado"`
+		Devolucion     string     `json:"devolucion"` // estado de la devolución que hace la tienda
 		Entrega        string     `json:"entrega"`
 		Agencia        string     `json:"agencia"`
 		NumeroOrden    string     `json:"numero_orden"`
@@ -647,7 +539,7 @@ func (m *Modulo) reclamos(w http.ResponseWriter, r *http.Request) error {
 		var x reclamo
 		var fotos, evid []string
 		if err := rows.Scan(&x.ID, &x.PedidoID, &x.Codigo, &x.Tienda, &x.Comprador, &x.Total, &x.Motivo, &x.Descripcion,
-			pq.Array(&fotos), &x.Respuesta, pq.Array(&evid), &x.Estado, &x.Nota, &x.CreadoEn, &x.Respondido, &x.Resuelto, &x.Liberado,
+			pq.Array(&fotos), &x.Respuesta, pq.Array(&evid), &x.Estado, &x.Nota, &x.CreadoEn, &x.Respondido, &x.Resuelto, &x.Devolucion,
 			&x.Entrega, &x.Agencia, &x.NumeroOrden, &x.Boleta, &x.Reputacion, &x.ClienteAntes, &x.TiendaPerdidos, &x.Confirmado); err != nil {
 			return err
 		}
@@ -661,17 +553,17 @@ func (m *Modulo) reclamos(w http.ResponseWriter, r *http.Request) error {
 		out = append(out, x)
 	}
 	var k struct {
-		Retenido  int `json:"retenido_centimos"`
-		RetenidoN int `json:"retenido_pedidos"`
-		Abiertos  int `json:"abiertos"`
-		Planes    int `json:"ingresos_planes_mes_centimos"`
+		DevolucionesMonto int `json:"devoluciones_pendientes_centimos"`
+		Devoluciones      int `json:"devoluciones_pendientes"`
+		Abiertos          int `json:"abiertos"`
+		Planes            int `json:"ingresos_planes_mes_centimos"`
 	}
 	m.app.DB.QueryRowContext(ctx, `SELECT
-		COALESCE((SELECT SUM(monto_centimos) FROM movimientos WHERE bolsa='a_liberar'),0),
-		(SELECT count(*) FROM pedidos WHERE pago_estado='pagado' AND NOT liberado AND estado NOT IN ('rechazado','cancelado')),
+		COALESCE((SELECT SUM(monto_centimos) FROM devoluciones WHERE estado='pendiente_tienda'),0),
+		(SELECT count(*) FROM devoluciones WHERE estado='pendiente_tienda'),
 		(SELECT count(*) FROM reclamos WHERE estado IN ('abierto','en_revision')),
-		COALESCE((SELECT SUM(monto_centimos) FROM pagos_plan WHERE date_trunc('month', creado_en AT TIME ZONE 'America/Lima') = date_trunc('month', now() AT TIME ZONE 'America/Lima')),0)`).
-		Scan(&k.Retenido, &k.RetenidoN, &k.Abiertos, &k.Planes)
+		COALESCE((SELECT SUM(monto_centimos) FROM pagos_plan WHERE estado='confirmado' AND date_trunc('month', creado_en AT TIME ZONE 'America/Lima') = date_trunc('month', now() AT TIME ZONE 'America/Lima')),0)`).
+		Scan(&k.DevolucionesMonto, &k.Devoluciones, &k.Abiertos, &k.Planes)
 	httpx.OK(w, map[string]any{"reclamos": out, "indicadores": k})
 	return nil
 }

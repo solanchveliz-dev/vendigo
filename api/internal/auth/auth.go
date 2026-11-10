@@ -195,6 +195,11 @@ func (m *Modulo) enviarOTP(w http.ResponseWriter, r *http.Request, celular, prop
 	return nil
 }
 
+// ValidarOTP lo usan otros módulos (por ejemplo, la compra sin cuenta) para verificar el celular.
+func (m *Modulo) ValidarOTP(ctx context.Context, tx *sql.Tx, celular, proposito, codigo string) error {
+	return m.validarOTP(ctx, tx, celular, proposito, codigo)
+}
+
 // validarOTP marca el código como usado si es correcto.
 func (m *Modulo) validarOTP(ctx context.Context, tx *sql.Tx, celular, proposito, codigo string) error {
 	var id, hash string

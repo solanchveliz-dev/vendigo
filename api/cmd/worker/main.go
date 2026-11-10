@@ -10,10 +10,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/solanchveliz-dev/vendigo/api/internal/billetera"
 	"github.com/solanchveliz-dev/vendigo/api/internal/config"
 	"github.com/solanchveliz-dev/vendigo/api/internal/core"
 	"github.com/solanchveliz-dev/vendigo/api/internal/db"
+	"github.com/solanchveliz-dev/vendigo/api/internal/pedidos"
 )
 
 func main() {
@@ -35,12 +35,12 @@ func main() {
 	app := &core.App{Cfg: cfg, DB: conexion}
 
 	pasada := func() {
-		c, l, err := billetera.Barrer(ctx, app)
+		c, err := pedidos.Barrer(ctx, app)
 		if err != nil {
 			slog.Error("barrido", "err", err)
 			return
 		}
-		slog.Info("barrido", "confirmados", c, "liberados", l)
+		slog.Info("barrido", "confirmados", c)
 	}
 	pasada()
 	if *unaVez {

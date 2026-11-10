@@ -51,10 +51,10 @@ func (m *Modulo) panel(w http.ResponseWriter, r *http.Request) error {
 		(SELECT count(*) FROM tiendas WHERE activa AND revisada_en IS NULL),
 		(SELECT count(*) FROM pedidos WHERE date_trunc('month', creado_en AT TIME ZONE 'America/Lima') = date_trunc('month', now() AT TIME ZONE 'America/Lima')),
 		(SELECT count(*) FROM pedidos WHERE date_trunc('month', creado_en AT TIME ZONE 'America/Lima') = date_trunc('month', now() AT TIME ZONE 'America/Lima') - interval '1 month'),
-		(SELECT count(*) FROM pedidos WHERE pago_estado IN ('pagado','devuelto')),
+		(SELECT count(*) FROM pagos WHERE estado IN ('informado_tienda','confirmado')),
 		(SELECT count(*) FROM pedidos),
-		(SELECT COALESCE(SUM(total_centimos),0) FROM pedidos WHERE pago_estado='pagado' AND estado NOT IN ('rechazado','cancelado')),
-		(SELECT COALESCE(SUM(monto_centimos),0) FROM pagos_plan WHERE date_trunc('month', creado_en AT TIME ZONE 'America/Lima') = date_trunc('month', now() AT TIME ZONE 'America/Lima')),
+		(SELECT COALESCE(SUM(total_centimos),0) FROM pedidos WHERE estado='entregado'),
+		(SELECT COALESCE(SUM(monto_centimos),0) FROM pagos_plan WHERE estado='confirmado' AND date_trunc('month', creado_en AT TIME ZONE 'America/Lima') = date_trunc('month', now() AT TIME ZONE 'America/Lima')),
 		(SELECT count(*) FROM suscripciones WHERE activa AND plan_id<>'gratis'),
 		(SELECT count(*) FROM suscripciones WHERE activa AND plan_id='gratis'),
 		(SELECT count(*) FROM reclamos WHERE estado IN ('abierto','en_revision'))`).

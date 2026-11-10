@@ -7,12 +7,14 @@ import (
 	"fmt"
 	"math/big"
 	"strings"
+	"time"
 
 	"github.com/lib/pq"
 
 	"github.com/solanchveliz-dev/vendigo/api/internal/billetera"
 	"github.com/solanchveliz-dev/vendigo/api/internal/core"
 	"github.com/solanchveliz-dev/vendigo/api/internal/httpx"
+	"github.com/solanchveliz-dev/vendigo/api/internal/pagos"
 	"github.com/solanchveliz-dev/vendigo/api/internal/productos"
 )
 
@@ -35,8 +37,9 @@ type PedidoNuevo struct {
 	Referencia  string
 	Agencia     string
 	AgenciaSede string
-	MetodoPago  string
-	CulqiCargo  string
+	MetodoPago  string // yape_directo, plin_directo o efectivo (pago directo a la tienda)
+	MomentoPago string // antes o al_recibir
+	Prueba      bool   // datos de prueba (solo modo desarrollo y seed)
 	Nota        string
 	Items       []ItemNuevo
 }
@@ -46,16 +49,18 @@ func codigoRecojo() string {
 	return fmt.Sprintf("%04d", n.Int64())
 }
 
-// Crear registra un pedido pagado (o con pago al recibir), reserva el stock y anota el cobro "a liberar".
-// Lo usan el checkout del comprador y los datos de prueba.
+// Crear registra un pedido, reserva el stock y crea su pago (que el comprador hace directo a la tienda).
+// VendiGo no cobra ni retiene dinero. Lo usan la compra del comprador y los datos de prueba.
 func Crear(ctx context.Context, app *core.App, tx *sql.Tx, in PedidoNuevo) (string, string, error) {
 	if len(in.Items) == 0 {
 		return "", "", httpx.Invalido("El pedido no tiene productos.")
 	}
-	var recojo, agencia, moto, pausada bool
+	var recojo, agencia, moto, pausada, efectivo bool
 	var costoMoto int
-	if err := tx.QueryRowContext(ctx, `SELECT entrega_recojo, entrega_agencia, entrega_motorizado, costo_motorizado_centimos, pausada FROM tiendas WHERE id=$1 AND activa`,
-		in.TiendaID).Scan(&recojo, &agencia, &moto, &costoMoto, &pausada); err != nil {
+	var yape, plin string
+	if err := tx.QueryRowContext(ctx, `SELECT entrega_recojo, entrega_agencia, entrega_motorizado, costo_motorizado_centimos, pausada,
+		yape_numero, plin_numero, acepta_efectivo FROM tiendas WHERE id=$1 AND activa`,
+		in.TiendaID).Scan(&recojo, &agencia, &moto, &costoMoto, &pausada, &yape, &plin, &efectivo); err != nil {
 		if core.SinFilas(err) {
 			return "", "", httpx.ErrNoEncontrado
 		}
@@ -82,13 +87,35 @@ func Crear(ctx context.Context, app *core.App, tx *sql.Tx, in PedidoNuevo) (stri
 			return "", "", httpx.Invalido("Esta tienda no tiene delivery con motorizado.")
 		}
 		envio = costoMoto
-		in.MetodoPago = "al_recibir"
 	default:
 		return "", "", httpx.Invalido("Elige una forma de entrega.")
 	}
-	pago := "pagado"
-	if in.MetodoPago == "al_recibir" {
-		pago = "pendiente"
+	// Forma de pago: siempre directo a la tienda.
+	switch in.MetodoPago {
+	case "yape_directo":
+		if yape == "" && !in.Prueba {
+			return "", "", httpx.Invalido("Esta tienda no recibe Yape.")
+		}
+	case "plin_directo":
+		if plin == "" && !in.Prueba {
+			return "", "", httpx.Invalido("Esta tienda no recibe Plin.")
+		}
+	case "efectivo":
+		if !efectivo && !in.Prueba {
+			return "", "", httpx.Invalido("Esta tienda no recibe efectivo.")
+		}
+		if in.Entrega == "agencia" {
+			return "", "", httpx.Invalido("Con envío por agencia el pago es antes de enviar (Yape o Plin).")
+		}
+		in.MomentoPago = "al_recibir"
+	default:
+		return "", "", httpx.Invalido("Elige cómo vas a pagar.")
+	}
+	if in.Entrega == "agencia" {
+		in.MomentoPago = "antes"
+	}
+	if in.MomentoPago != "al_recibir" {
+		in.MomentoPago = "antes"
 	}
 
 	type linea struct {
@@ -168,10 +195,6 @@ func Crear(ctx context.Context, app *core.App, tx *sql.Tx, in PedidoNuevo) (stri
 	if in.CompradorID != "" {
 		comprador = in.CompradorID
 	}
-	var culqi any
-	if in.CulqiCargo != "" {
-		culqi = in.CulqiCargo
-	}
 	var pid, codigo string
 	// Si la tienda eligió su prefijo, el pedido sale con su propia numeración (LUNA-1001); si no, VG-….
 	var propio sql.NullString
@@ -184,7 +207,7 @@ func Crear(ctx context.Context, app *core.App, tx *sql.Tx, in PedidoNuevo) (stri
 		subtotal_centimos, envio_centimos, total_centimos, nota_comprador, codigo)
 		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20, COALESCE($21, 'VG-' || nextval('pedidos_codigo_seq'))) RETURNING id, codigo`,
 		in.TiendaID, comprador, in.Nombre, in.Celular, dni, in.Entrega, in.Direccion, in.Distrito, in.Ciudad, in.Referencia,
-		in.Agencia, in.AgenciaSede, codigoRecojo(), in.MetodoPago, pago, culqi, subtotal, envio, total, in.Nota, propio).Scan(&pid, &codigo)
+		in.Agencia, in.AgenciaSede, codigoRecojo(), in.MetodoPago, "pendiente", nil, subtotal, envio, total, in.Nota, propio).Scan(&pid, &codigo)
 	if err != nil {
 		return "", "", err
 	}
@@ -202,13 +225,15 @@ func Crear(ctx context.Context, app *core.App, tx *sql.Tx, in PedidoNuevo) (stri
 			return "", "", err
 		}
 	}
-	detalle := "Pagaste con pago protegido. Tu dinero queda seguro hasta que recibas el pedido."
-	if pago == "pagado" {
-		if _, err := billetera.RegistrarCobro(ctx, tx, in.TiendaID, pid, codigo, total); err != nil {
-			return "", "", err
-		}
-	} else {
-		detalle = "Pagas cuando el motorizado te entregue el pedido."
+	if err := pagos.Registrar(ctx, tx, pid, in.MetodoPago, in.MomentoPago, total, in.Prueba); err != nil {
+		return "", "", err
+	}
+	detalle := "Pedido recibido. Paga directo a la tienda y envía tu comprobante desde tu seguimiento."
+	if in.MomentoPago == "al_recibir" {
+		detalle = "Pedido recibido. Pagas directo a la tienda cuando recibas tu pedido."
+	}
+	if in.Prueba {
+		detalle = "Pedido de prueba (no hubo pago real)."
 	}
 	if err := evento(ctx, tx, pid, "por_aceptar", detalle); err != nil {
 		return "", "", err
@@ -217,71 +242,46 @@ func Crear(ctx context.Context, app *core.App, tx *sql.Tx, in PedidoNuevo) (stri
 	return pid, codigo, nil
 }
 
-// PagarAlRecibir: el comprador paga al motorizado desde su app y con eso confirma la entrega.
-func PagarAlRecibir(ctx context.Context, tx *sql.Tx, pid string) error {
-	var tid, codigo, rep, estado string
-	var total int
-	err := tx.QueryRowContext(ctx, `SELECT p.tienda_id, p.codigo, t.reputacion, p.estado, p.total_centimos FROM pedidos p JOIN tiendas t ON t.id=p.tienda_id
-		WHERE p.id::text=$1 AND p.metodo_pago='al_recibir' FOR UPDATE`, pid).Scan(&tid, &codigo, &rep, &estado, &total)
-	if core.SinFilas(err) {
-		return httpx.ErrNoEncontrado
-	}
-	if err != nil {
-		return err
-	}
-	if estado != "enviado" {
-		return httpx.Conflicto("estado_invalido", "El pedido todavía no está en camino.")
-	}
-	if _, err := tx.ExecContext(ctx, `UPDATE pedidos SET pago_estado='pagado' WHERE id=$1`, pid); err != nil {
-		return err
-	}
-	if _, err := billetera.RegistrarCobro(ctx, tx, tid, pid, codigo, total); err != nil {
-		return err
-	}
-	return billetera.MarcarEntregado(ctx, tx, tid, pid, codigo, rep, "comprador")
-}
-
-// ConfirmarRecibido: el comprador confirma que le llegó (agencia).
+// ConfirmarRecibido: el comprador confirma desde su seguimiento que le llegó el pedido.
 func ConfirmarRecibido(ctx context.Context, tx *sql.Tx, pid string) error {
-	var tid, codigo, rep, estado, metodo string
-	err := tx.QueryRowContext(ctx, `SELECT p.tienda_id, p.codigo, t.reputacion, p.estado, p.metodo_pago FROM pedidos p JOIN tiendas t ON t.id=p.tienda_id
-		WHERE p.id::text=$1 FOR UPDATE`, pid).Scan(&tid, &codigo, &rep, &estado, &metodo)
+	var estado string
+	err := tx.QueryRowContext(ctx, `SELECT estado FROM pedidos WHERE id::text=$1 FOR UPDATE`, pid).Scan(&estado)
 	if core.SinFilas(err) {
 		return httpx.ErrNoEncontrado
 	}
 	if err != nil {
 		return err
-	}
-	if metodo == "al_recibir" {
-		return PagarAlRecibir(ctx, tx, pid)
 	}
 	if estado != "enviado" {
 		return httpx.Conflicto("estado_invalido", "El pedido todavía no fue enviado.")
 	}
-	return billetera.MarcarEntregado(ctx, tx, tid, pid, codigo, rep, "comprador")
+	return MarcarEntregado(ctx, tx, pid, "comprador")
 }
 
-// AbrirReclamo bloquea el dinero mientras VendiGo revisa las pruebas.
-// Con motorizado no hay reclamo de "no me llegó": si no llega, el comprador no paga.
+// DiasReclamo es el plazo para reclamar después de recibir el pedido.
+const DiasReclamo = 7
+
+// AbrirReclamo registra el problema para que la tienda responda y VendiGo medie.
+// Si pagaba al recibir y no le llegó, no hay nada que reclamar: no pagó.
 func AbrirReclamo(ctx context.Context, tx *sql.Tx, pid, motivo, descripcion string, fotos []string) error {
-	var tid, codigo, entrega, estado string
-	var liberado bool
-	err := tx.QueryRowContext(ctx, `SELECT tienda_id, codigo, entrega, estado, liberado FROM pedidos WHERE id::text=$1 FOR UPDATE`, pid).
-		Scan(&tid, &codigo, &entrega, &estado, &liberado)
+	var tid, codigo, entrega, estado, pago string
+	var entregado *time.Time
+	err := tx.QueryRowContext(ctx, `SELECT p.tienda_id, p.codigo, p.entrega, p.estado, p.entregado_en, g.estado FROM pedidos p JOIN pagos g ON g.pedido_id=p.id
+		WHERE p.id::text=$1 FOR UPDATE OF p`, pid).Scan(&tid, &codigo, &entrega, &estado, &entregado, &pago)
 	if err != nil {
 		return httpx.ErrNoEncontrado
 	}
 	if _, ok := MotivosReclamo[motivo]; !ok {
 		return httpx.Invalido("Elige el motivo del reclamo.")
 	}
-	if entrega == "motorizado" && motivo == "no_llego" {
-		return httpx.Invalido("Con motorizado pagas al recibir: si no llega, no pagas nada.")
+	if motivo == "no_llego" && pago == "paga_al_recibir" {
+		return httpx.Invalido("Pagas al recibir: si no llega, no pagas nada.")
 	}
 	if estado != "enviado" && estado != "entregado" {
 		return httpx.Conflicto("estado_invalido", "Solo puedes reclamar un pedido enviado o entregado.")
 	}
-	if liberado {
-		return httpx.Conflicto("plazo_vencido", "El plazo para reclamar este pedido ya terminó.")
+	if estado == "entregado" && entregado != nil && time.Since(*entregado) > DiasReclamo*24*time.Hour {
+		return httpx.Conflicto("plazo_vencido", "El plazo para reclamar este pedido ya terminó (7 días después de recibirlo).")
 	}
 	if fotos == nil {
 		fotos = []string{}
@@ -293,9 +293,9 @@ func AbrirReclamo(ctx context.Context, tx *sql.Tx, pid, motivo, descripcion stri
 		}
 		return err
 	}
-	if err := evento(ctx, tx, pid, "reclamo", "Abriste un reclamo: "+MotivosReclamo[motivo]+". El dinero queda bloqueado hasta resolverlo."); err != nil {
+	if err := evento(ctx, tx, pid, "reclamo", "Abriste un reclamo: "+MotivosReclamo[motivo]+". La tienda responderá y VendiGo revisará el caso."); err != nil {
 		return err
 	}
-	billetera.Notificar(ctx, tx, tid, "Reclamo en el pedido "+codigo, "Responde con tu boleta de envío como prueba. El dinero queda bloqueado hasta resolverlo.", "/vendedor/cobros/reclamo/"+pid)
+	billetera.Notificar(ctx, tx, tid, "Reclamo en el pedido "+codigo, "Responde con tu boleta de envío o tu prueba. VendiGo revisará el caso.", "/vendedor/cobros/reclamo/"+pid)
 	return nil
 }

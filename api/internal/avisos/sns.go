@@ -31,3 +31,15 @@ func (s *SNS) EnviarCodigo(ctx context.Context, celular, codigo string) error {
 	})
 	return err
 }
+
+// EnviarTexto manda un SMS informativo, por ejemplo el enlace de seguimiento de un pedido.
+func (s *SNS) EnviarTexto(ctx context.Context, celular, texto string) error {
+	_, err := s.cliente.Publish(ctx, &sns.PublishInput{
+		PhoneNumber: aws.String("+51" + celular),
+		Message:     aws.String(texto),
+		MessageAttributes: map[string]types.MessageAttributeValue{
+			"AWS.SNS.SMS.SMSType": {DataType: aws.String("String"), StringValue: aws.String("Transactional")},
+		},
+	})
+	return err
+}
