@@ -155,6 +155,7 @@ export type PedidoDetalle = PedidoResumen & {
   aceptado_en: string | null;
   enviado_en: string | null;
   entregado_en: string | null;
+  pago_vence_en: string | null;
   pedidos_cliente: number;
   motorizados_guardados: { nombre: string; celular: string }[];
   ayuda: Ayuda | null;

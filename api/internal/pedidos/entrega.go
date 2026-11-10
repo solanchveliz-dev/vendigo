@@ -3,6 +3,7 @@ package pedidos
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -37,6 +38,11 @@ func MarcarEntregado(ctx context.Context, tx *sql.Tx, pedidoID, por string) erro
 func Barrer(ctx context.Context, app *core.App) (int, error) {
 	if err := EscalarReclamos(ctx, app); err != nil {
 		slog.Error("escalar reclamos", "err", err)
+	}
+	if n, err := VencerPedidosSinPago(ctx, app); err != nil {
+		slog.Error("vencer pedidos sin pago", "err", err)
+	} else if n > 0 {
+		slog.Info("pedidos vencidos sin pago", "cantidad", n)
 	}
 	rows, err := app.DB.QueryContext(ctx, `SELECT p.id FROM pedidos p
 		WHERE p.estado='enviado' AND p.entrega='agencia' AND p.enviado_en < now() - interval '7 days'
@@ -337,3 +343,63 @@ func EscalarReclamos(ctx context.Context, app *core.App) error {
 		return nil
 	})
 }
+
+// VencerPedidosSinPago cancela los pedidos cuyo plazo para pagar venció SIN captura (pago "pendiente") y devuelve
+// el stock. Si el comprador ya subió su captura, nunca se cancela solo: lo decide la tienda o un reclamo.
+func VencerPedidosSinPago(ctx context.Context, app *core.App) (int, error) {
+	rows, err := app.DB.QueryContext(ctx, `SELECT p.id FROM pedidos p JOIN pagos g ON g.pedido_id=p.id
+		WHERE p.pago_vence_en < now() AND g.estado='pendiente' AND p.estado IN ('por_aceptar','preparando','listo_recojo')
+		ORDER BY p.pago_vence_en LIMIT 200`)
+	if err != nil {
+		return 0, err
+	}
+	var ids []string
+	for rows.Next() {
+		var id string
+		rows.Scan(&id)
+		ids = append(ids, id)
+	}
+	rows.Close()
+	n := 0
+	for _, id := range ids {
+		err := app.EnTransaccion(ctx, func(tx *sql.Tx) error {
+			var tid, codigo, estado, pago string
+			// Se vuelve a revisar con el pedido bloqueado: si la captura llegó justo ahora, no se cancela.
+			err := tx.QueryRowContext(ctx, `SELECT p.tienda_id, p.codigo, p.estado, g.estado FROM pedidos p JOIN pagos g ON g.pedido_id=p.id
+				WHERE p.id=$1 AND p.pago_vence_en < now() FOR UPDATE OF p, g`, id).Scan(&tid, &codigo, &estado, &pago)
+			if core.SinFilas(err) {
+				return errSinCambio
+			}
+			if err != nil {
+				return err
+			}
+			if pago != "pendiente" || (estado != "por_aceptar" && estado != "preparando" && estado != "listo_recojo") {
+				return errSinCambio
+			}
+			if err := devolverStock(ctx, tx, id); err != nil {
+				return err
+			}
+			if _, err := tx.ExecContext(ctx, `UPDATE pedidos SET estado='cancelado', vencido_sin_pago=true,
+				motivo_cancelacion='Venció el plazo para pagar', cerrado_en=now() WHERE id=$1`, id); err != nil {
+				return err
+			}
+			if err := eventoConSMS(ctx, tx, id, "cancelado", "Tu pedido se canceló porque no se registró el pago a tiempo. Si todavía lo quieres, puedes volver a pedirlo en la tienda."); err != nil {
+				return err
+			}
+			billetera.Notificar(ctx, tx, tid, "Pedido "+codigo+" vencido",
+				"El cliente no pagó a tiempo: el pedido se canceló solo y el stock volvió a tu tienda.", "/vendedor/pedidos/"+id)
+			return nil
+		})
+		if errors.Is(err, errSinCambio) {
+			continue
+		}
+		if err != nil {
+			slog.Error("vencer pedido sin pago", "pedido", id, "err", err)
+			continue
+		}
+		n++
+	}
+	return n, nil
+}
+
+var errSinCambio = errors.New("sin cambio")

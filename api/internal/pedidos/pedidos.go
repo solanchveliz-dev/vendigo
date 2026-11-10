@@ -236,9 +236,11 @@ type Detalle struct {
 	ReclamoDet    *Reclamo `json:"reclamo_detalle"`
 	Acciones      []string `json:"acciones"`
 	// Para la línea de tiempo y la tarjeta del cliente.
-	AceptadoEn     *time.Time   `json:"aceptado_en"`
-	EnviadoEn      *time.Time   `json:"enviado_en"`
-	EntregadoEn    *time.Time   `json:"entregado_en"`
+	AceptadoEn  *time.Time `json:"aceptado_en"`
+	EnviadoEn   *time.Time `json:"enviado_en"`
+	EntregadoEn *time.Time `json:"entregado_en"`
+	// Hasta cuándo puede pagar y subir su captura (solo si el pago sigue pendiente).
+	PagoVenceEn    *time.Time   `json:"pago_vence_en"`
 	PedidosCliente int          `json:"pedidos_cliente"`
 	Motorizados    []Motorizado `json:"motorizados_guardados"`
 	Ayuda          *Ayuda       `json:"ayuda"`
@@ -286,13 +288,13 @@ func (m *Modulo) cargar(ctx context.Context, tid, pid string) (*Detalle, error) 
 	err := m.app.DB.QueryRowContext(ctx, `SELECT id, codigo, comprador_nombre, comprador_celular, comprador_dni_cifrado, entrega, estado,
 		metodo_pago, subtotal_centimos, envio_centimos, total_centimos,
 		direccion, distrito, ciudad, referencia, agencia, agencia_sede, nota_comprador, motivo_cancelacion, confirmado_por,
-		creado_en, aceptado_en, enviado_en, entregado_en,
+		creado_en, aceptado_en, enviado_en, entregado_en, pago_vence_en,
 		(SELECT count(*) FROM pedidos x WHERE x.tienda_id=pedidos.tienda_id AND x.comprador_celular=pedidos.comprador_celular)
 		FROM pedidos WHERE id::text=$1 AND tienda_id=$2`, pid, tid).Scan(
 		&d.ID, &d.Codigo, &d.Comprador, &d.Celular, &dni, &d.Entrega, &d.Estado, &d.MetodoPago,
 		&d.Subtotal, &d.EnvioCosto, &d.Total, &d.Direccion, &d.Distrito, &d.Ciudad, &d.Referencia,
 		&d.Agencia, &d.AgenciaSede, &d.Nota, &d.Motivo, &d.ConfirmadoPor, &d.CreadoEn,
-		&d.AceptadoEn, &d.EnviadoEn, &d.EntregadoEn, &d.PedidosCliente)
+		&d.AceptadoEn, &d.EnviadoEn, &d.EntregadoEn, &d.PagoVenceEn, &d.PedidosCliente)
 	if core.SinFilas(err) {
 		return nil, httpx.ErrNoEncontrado
 	}

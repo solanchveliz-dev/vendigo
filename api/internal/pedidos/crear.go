@@ -40,9 +40,18 @@ type PedidoNuevo struct {
 	MetodoPago  string // yape_directo, plin_directo, tarjeta_tienda o transferencia_tienda (directo a la tienda; sin efectivo)
 	MomentoPago string // antes o al_recibir
 	Prueba      bool   // datos de prueba (solo modo desarrollo y seed)
-	Nota        string
-	Items       []ItemNuevo
+	// PlazoPago: tiempo para pagar y subir la captura. 0 = el de la venta normal (PlazoPagoNormal).
+	PlazoPago time.Duration
+	Nota      string
+	Items     []ItemNuevo
 }
+
+// PlazoPagoNormal: en la venta normal el comprador tiene 24 h para pagar y subir su captura; si no lo hace,
+// el pedido se cancela solo y el stock vuelve (VencerPedidosSinPago).
+const PlazoPagoNormal = 24 * time.Hour
+
+// limaZona: hora de Perú para los textos que ve el comprador (Perú no cambia de horario).
+var limaZona = time.FixedZone("Lima", -5*3600)
 
 func codigoRecojo() string {
 	n, _ := rand.Int(rand.Reader, big.NewInt(10000))
@@ -259,6 +268,18 @@ func Crear(ctx context.Context, app *core.App, tx *sql.Tx, in PedidoNuevo) (stri
 	if err := pagos.Registrar(ctx, tx, pid, in.MetodoPago, in.MomentoPago, total, adelanto, in.Prueba); err != nil {
 		return "", "", err
 	}
+	plazo := ""
+	if in.MomentoPago != "al_recibir" && !in.Prueba {
+		if in.PlazoPago <= 0 {
+			in.PlazoPago = PlazoPagoNormal
+		}
+		var vence time.Time
+		if err := tx.QueryRowContext(ctx, `UPDATE pedidos SET pago_vence_en = now() + make_interval(secs => $2) WHERE id=$1 RETURNING pago_vence_en`,
+			pid, in.PlazoPago.Seconds()).Scan(&vence); err != nil {
+			return "", "", err
+		}
+		plazo = " Tienes hasta el " + vence.In(limaZona).Format("02/01 a las 15:04") + " para pagar; si no, el pedido se cancela solo."
+	}
 	detalle := "Pedido recibido. Paga directo a la tienda y envía tu comprobante desde tu seguimiento."
 	switch in.MomentoPago {
 	case "al_recibir":
@@ -266,6 +287,7 @@ func Crear(ctx context.Context, app *core.App, tx *sql.Tx, in PedidoNuevo) (stri
 	case "adelanto":
 		detalle = fmt.Sprintf("Pedido recibido. Paga el adelanto de S/ %.2f a la tienda y envía tu comprobante; el resto lo pagas al recibir.", float64(adelanto)/100)
 	}
+	detalle += plazo
 	if in.Prueba {
 		detalle = "Pedido de prueba (no hubo pago real)."
 	}

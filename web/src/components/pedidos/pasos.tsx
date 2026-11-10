@@ -129,7 +129,7 @@ export function AvisoAccion({
     titulo = p.pago?.estado === "comprobante_enviado" ? "Revisa el pago" : "Esperando el pago";
     texto = p.pago?.estado === "comprobante_enviado"
       ? <>{nombre} envió su comprobante de <b>{soles(aPagarAntes)}</b>{adel ? " (adelanto)" : ""}. Revisa tu Yape/Plin y toca “Revisar el pago” en la tarjeta Pago.</>
-      : <>{nombre} debe pagarte <b>{soles(aPagarAntes)}</b>{adel ? " de adelanto" : ""} por Yape o Plin. Envía el pedido recién cuando confirmes que te llegó.</>;
+      : <>{nombre} debe pagarte <b>{soles(aPagarAntes)}</b>{adel ? " de adelanto" : ""} por Yape o Plin. Envía el pedido recién cuando confirmes que te llegó.{p.pago_vence_en && <> Si no paga antes del {fecha(p.pago_vence_en, true)}, el pedido se cancela solo y el stock vuelve.</>}</>;
   } else if (p.estado === "por_aceptar") {
     icono = <Lock className="size-5" />;
     titulo = "Acepta el pedido";

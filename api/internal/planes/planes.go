@@ -107,7 +107,7 @@ func LeerUso(ctx context.Context, q core.Ejecutor, tiendaID string) (Uso, error)
 		u.ProximoCobro = &fin.Time
 	}
 	mes := inicioMes()
-	q.QueryRowContext(ctx, `SELECT count(*) FROM pedidos WHERE tienda_id=$1 AND aceptado_en >= $2 AND estado <> 'rechazado'`, tiendaID, mes).Scan(&u.VentasUsadas)
+	q.QueryRowContext(ctx, `SELECT count(*) FROM pedidos WHERE tienda_id=$1 AND aceptado_en >= $2 AND estado <> 'rechazado' AND NOT vencido_sin_pago`, tiendaID, mes).Scan(&u.VentasUsadas)
 	q.QueryRowContext(ctx, `SELECT COALESCE(SUM(cantidad),0) FROM ventas_extra WHERE tienda_id=$1 AND periodo=$2`, tiendaID, mes.Format("2006-01-02")).Scan(&u.VentasExtra)
 	if u.Plan.VentasMes != nil {
 		lim := *u.Plan.VentasMes + u.VentasExtra

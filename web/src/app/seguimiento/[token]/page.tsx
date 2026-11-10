@@ -265,6 +265,11 @@ export default function Seguimiento({ params }: { params: Promise<{ token: strin
                     Paga <b className="text-tinta">{soles(montoAhora)}</b>{esAdelanto && <> de adelanto (el resto, {soles(pago.monto_centimos - montoAhora)}, al recibir)</>} directo a {t.nombre}. VendiGo no recibe este dinero.
                   </p>
                 )}
+                {pago.estado === "pendiente" && p.pago_vence_en && p.estado !== "cancelado" && p.estado !== "rechazado" && (
+                  <p className="mt-2 rounded-xl bg-aviso-claro px-3 py-2 text-sm text-tinta">
+                    Tienes hasta el <b>{fecha(p.pago_vence_en, true)}</b> para pagar y subir tu captura. Si no, el pedido se cancela solo y el producto vuelve a la tienda.
+                  </p>
+                )}
                 <DatosPago metodo={pago.metodo} t={t} monto={montoAhora} copiar={copiar} />
 
                 {puede("enviar_comprobante") && (
