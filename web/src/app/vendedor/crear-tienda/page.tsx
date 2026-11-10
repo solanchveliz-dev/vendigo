@@ -38,6 +38,12 @@ export default function CrearTienda() {
       await sesion("renovar");
       router.replace("/vendedor");
     } catch (err) {
+      // Si la tienda ya se creó (por ejemplo, en un intento anterior), entra directo al panel.
+      if ((err as ErrorApi).codigo === "tienda_existe") {
+        await sesion("renovar").catch(() => null);
+        router.replace("/vendedor");
+        return;
+      }
       setError((err as ErrorApi).message);
       setCargando(false);
     }
