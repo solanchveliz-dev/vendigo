@@ -51,6 +51,25 @@ func (m *Modulo) RutasPrivadas(r chi.Router) {
 	r.Method("POST", "/me/mfa/activar", httpx.Handler(m.activarMFA))
 	r.Method("POST", "/me/mfa/desactivar", httpx.Handler(m.desactivarMFA))
 	r.Method("POST", "/me/confirmar", httpx.Handler(m.pedirConfirmacion))
+	r.Method("POST", "/me/acceso-denegado", httpx.Handler(m.accesoDenegado))
+}
+
+// accesoDenegado: la web avisa que esta cuenta intentó abrir una sección de otro rol (queda en Seguridad del admin).
+func (m *Modulo) accesoDenegado(w http.ResponseWriter, r *http.Request) error {
+	var in struct {
+		Ruta string `json:"ruta"`
+	}
+	if err := httpx.Leer(r, &in); err != nil {
+		return err
+	}
+	u, _ := httpx.UsuarioDe(r.Context())
+	ruta := strings.TrimSpace(in.Ruta)
+	if !strings.HasPrefix(ruta, "/") || len(ruta) > 200 {
+		ruta = "(desconocida)"
+	}
+	m.app.DB.ExecContext(r.Context(), `INSERT INTO accesos_denegados (usuario_id, rol, ruta, ip) VALUES ($1,$2,$3,$4)`, u.ID, u.Rol, "web:"+ruta, httpx.IP(r))
+	w.WriteHeader(http.StatusNoContent)
+	return nil
 }
 
 var (

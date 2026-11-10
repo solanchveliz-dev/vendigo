@@ -150,7 +150,7 @@ export function Checkout({ tienda: t, vista = false }: { tienda: Tienda; vista?:
     if (!metodo) return setError("Elige cómo vas a pagar.");
     setCargando(true);
     try {
-      const r = await api.post<{ mensaje: string; codigo_dev?: string }>("/compras/codigo", { celular: f.celular });
+      const r = await api.post<{ mensaje: string; codigo_dev?: string }>("/compras/codigo", { celular: f.celular, slug: t.slug });
       setEnviado(true);
       setCodigoDev(r.codigo_dev ?? "");
     } catch (x) {

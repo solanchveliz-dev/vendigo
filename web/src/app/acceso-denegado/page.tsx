@@ -1,9 +1,14 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { Lock } from "lucide-react";
+import { RegistrarAccesoDenegado } from "@/components/registrar-acceso";
 
 export default function AccesoDenegado() {
   return (
     <main className="grid min-h-screen place-items-center bg-crema px-5">
+      <Suspense fallback={null}>
+        <RegistrarAccesoDenegado />
+      </Suspense>
       <div className="max-w-md text-center">
         <span className="mx-auto mb-5 grid size-16 place-items-center rounded-2xl bg-white text-pino ring-1 ring-linea"><Lock className="size-7" /></span>
         <h1 className="font-display text-3xl font-extrabold text-pino">No tienes acceso a esta sección</h1>

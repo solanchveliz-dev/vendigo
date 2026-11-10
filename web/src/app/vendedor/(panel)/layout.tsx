@@ -45,6 +45,11 @@ export default function LayoutPanel({ children }: { children: React.ReactNode })
   }, []);
 
   useEffect(() => {
+    // Un administrador no usa el panel de vendedora: vuelve a su panel.
+    if (yo.datos?.rol === "admin") {
+      router.replace("/admin");
+      return;
+    }
     // Sin tienda todavía: la crea dentro del panel (los demás menús se activan al crearla).
     if (yo.datos && !yo.datos.tienda_id && ruta !== "/vendedor/crear-tienda") router.replace("/vendedor/crear-tienda");
     if (yo.datos?.tienda_id) recargarResumen();
@@ -55,7 +60,7 @@ export default function LayoutPanel({ children }: { children: React.ReactNode })
   }, [ruta, yo.datos?.tienda_id, recargarResumen]);
 
   const sinTienda = !!yo.datos && !yo.datos.tienda_id;
-  if (!yo.datos || (sinTienda && ruta !== "/vendedor/crear-tienda")) return <div className="px-6"><Cargando /></div>;
+  if (!yo.datos || yo.datos.rol === "admin" || (sinTienda && ruta !== "/vendedor/crear-tienda")) return <div className="px-6"><Cargando /></div>;
 
   const cuentas: Record<string, number> = {
     pedidos: (resumen?.pedidos.por_aceptar ?? 0) + (resumen?.pedidos.por_enviar ?? 0) + (resumen?.pedidos.recogen ?? 0),

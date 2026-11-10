@@ -303,6 +303,10 @@ func (m *Modulo) crear(w http.ResponseWriter, r *http.Request) error {
 	}
 	u, _ := httpx.UsuarioDe(r.Context())
 	ctx := r.Context()
+	// Roles separados: una cuenta de administrador no puede tener tienda (seguiría siendo admin y su panel no funcionaría).
+	if u.Rol == "admin" {
+		return httpx.NuevoError(http.StatusForbidden, "admin_sin_tienda", "Las cuentas de administrador no pueden tener tienda. Usa una cuenta de vendedora aparte.")
+	}
 	if m.DeUsuario(ctx, u.ID) != nil {
 		return httpx.Conflicto("tienda_existe", "Ya tienes una tienda.")
 	}

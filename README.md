@@ -24,6 +24,17 @@ Planificadas (todavía no están en el repositorio): `app/` (app móvil con Reac
 - `feature/<nombre>`: una rama por función, sale de `develop` y vuelve a `develop`.
 - `release/<versión>`: preparación de una entrega antes de pasar a `main`.
 
+## Roles y permisos
+
+| Rol | Cómo entra | Qué puede hacer | Qué no puede hacer |
+|---|---|---|---|
+| Comprador | Sin cuenta: confirma su celular con un código SMS al comprar | Comprar, pagar directo a la tienda, seguir su pedido con un enlace secreto, reclamar | Entrar a `/vendedor` o `/admin`; comprar en su propia tienda |
+| Vendedora | Celular o correo y contraseña (verificación en dos pasos opcional) | Su panel `/vendedor`: tienda, productos, pedidos, reclamos, planes. Su tienda se muestra cuando el admin aprueba su DNI | Entrar a `/admin`; comprar en su propia tienda |
+| Administrador | Solo correo de la empresa, contraseña y código de su app (siempre) | Panel `/admin`: verificar identidades y RUC, mediar reclamos, fondo de emergencia, cobros, seguridad | Tener tienda o entrar al panel de vendedora |
+
+La API exige el rol en cada ruta (`/vendedor/*` y `/admin/*`) y registra cada intento sin permiso; la web además
+redirige a cada cuenta a su panel. Una cuenta de comprador puede crear su tienda y pasa a ser vendedora.
+
 ## Cómo levantar el proyecto en local
 
 Requisitos: Docker Desktop, Go 1.24 o superior y Node.js 20 o superior.

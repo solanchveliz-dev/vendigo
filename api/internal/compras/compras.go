@@ -44,6 +44,7 @@ var reCelular = regexp.MustCompile(`^9\d{8}$`)
 func (m *Modulo) codigo(w http.ResponseWriter, r *http.Request) error {
 	var in struct {
 		Celular string `json:"celular"`
+		Slug    string `json:"slug"` // tienda donde compra (para avisar antes de enviar el SMS si es la suya)
 	}
 	if err := httpx.Leer(r, &in); err != nil {
 		return err
@@ -51,6 +52,9 @@ func (m *Modulo) codigo(w http.ResponseWriter, r *http.Request) error {
 	in.Celular = strings.TrimSpace(in.Celular)
 	if !reCelular.MatchString(in.Celular) {
 		return httpx.Invalido("Escribe un celular de 9 dígitos que empiece con 9.")
+	}
+	if in.Slug != "" && m.esSuTienda(r, in.Slug, in.Celular) {
+		return errPropiaTienda
 	}
 	c, err := m.EnviarCodigo(r.Context(), in.Celular, "compra")
 	if err != nil {
@@ -62,6 +66,18 @@ func (m *Modulo) codigo(w http.ResponseWriter, r *http.Request) error {
 	}
 	httpx.OK(w, resp)
 	return nil
+}
+
+var errPropiaTienda = httpx.Conflicto("propia_tienda", "No puedes comprar en tu propia tienda con el celular de tu cuenta.")
+
+// esSuTienda: el celular que compra es el de la dueña de la tienda.
+func (m *Modulo) esSuTienda(r *http.Request, slug, celular string) bool {
+	var duena string
+	if m.app.DB.QueryRowContext(r.Context(), `SELECT u.celular FROM tiendas t JOIN usuarios u ON u.id=t.usuario_id WHERE t.slug=$1`, slug).Scan(&duena) != nil {
+		return false
+	}
+	duena = strings.TrimPrefix(strings.ReplaceAll(duena, " ", ""), "+51")
+	return duena != "" && duena == strings.TrimPrefix(strings.ReplaceAll(celular, " ", ""), "+51")
 }
 
 type compraReq struct {
@@ -106,6 +122,10 @@ func (m *Modulo) comprar(w http.ResponseWriter, r *http.Request) error {
 	var tid string
 	if err := m.app.DB.QueryRowContext(ctx, `SELECT id FROM tiendas WHERE slug=$1 AND activa AND tienda_identidad_verificada(id)`, in.Slug).Scan(&tid); err != nil {
 		return httpx.ErrNoEncontrado
+	}
+	// Una vendedora no puede comprar en su propia tienda (inflaría sus ventas y su reputación).
+	if m.esSuTienda(r, in.Slug, in.Celular) {
+		return errPropiaTienda
 	}
 	var pid, codigo, token string
 	err := m.app.EnTransaccion(ctx, func(tx *sql.Tx) error {

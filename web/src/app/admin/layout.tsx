@@ -51,7 +51,7 @@ export default function LayoutAdmin({ children }: { children: React.ReactNode })
     if (yo.datos && yo.datos.rol !== "admin") {
       // Queda registrado como intento de acceso denegado (la API responde 403).
       api.get("/admin/resumen").catch(() => null);
-      router.replace("/acceso-denegado");
+      router.replace(`/acceso-denegado?desde=${encodeURIComponent(ruta)}`);
     }
   }, [yo.datos, router]);
 
