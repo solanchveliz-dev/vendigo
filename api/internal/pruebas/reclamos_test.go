@@ -34,8 +34,12 @@ func TestReclamoPorPagoNoReconocido(t *testing.T) {
 	}); err == nil {
 		t.Fatal("no debía poder reclamarse el pago antes de 48 h sin respuesta de la tienda")
 	}
-	// Pasaron 48 h sin que la tienda revise: ya se puede reclamar.
-	comprobanteHace(t, p1, 49)
+	// Pasaron 48 h sin que la tienda revise: ya se puede reclamar. (Cuenta el ÚLTIMO comprobante enviado, así que
+	// se mueve ese mismo envío 49 h atrás; si el comprador reenvía su captura, el plazo de la tienda vuelve a empezar.)
+	if _, err := base.Exec(`UPDATE pago_eventos e SET creado_en = now() - interval '49 hours' FROM pagos g
+		WHERE g.id=e.pago_id AND g.pedido_id=$1 AND e.estado='comprobante_enviado'`, p1); err != nil {
+		t.Fatal(err)
+	}
 	r1 := abrirReclamo(t, p1, "pago_no_reconocido")
 	// VendiGo revisa el comprobante y le da la razón al comprador: devolución pendiente y pedido cancelado.
 	enTransaccion(t, func(tx *sql.Tx) error {
