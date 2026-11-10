@@ -5,8 +5,10 @@ import { useEffect, useState } from "react";
 import { api, ErrorApi, useApi } from "@/lib/api";
 import { Boton, Cargando, Entrada, useAvisar } from "@/components/ui";
 import { Tarjeta, Titulo } from "@/components/admin/ui";
+import { CobroVendiGoForm } from "@/components/admin/cobro-vendigo";
+import type { PagoVendiGo } from "@/lib/pagos-plan";
 
-type Config = { correo_soporte: string; planes_yape: string; planes_titular: string; inactividad_min: number; agencias: string[]; sedes_activas: number; extras: Record<string, number> };
+type Config = { correo_soporte: string; planes_yape: string; planes_titular: string; inactividad_min: number; agencias: string[]; sedes_activas: number; extras: Record<string, number>; cobro_vendigo: PagoVendiGo };
 
 const EXTRAS: { k: string; t: string; ayuda: string; dias?: boolean }[] = [
   { k: "garantia_tope_centimos", t: "Tope del fondo de emergencia (S/)", ayuda: "Máximo que devuelve VendiGo por pedido que no llegó." },
@@ -51,14 +53,10 @@ export default function Configuracion() {
     }
   }
   const [guardando, setGuardando] = useState(false);
-  const [yape, setYape] = useState("");
-  const [titular, setTitular] = useState("");
   const [ex, setEx] = useState<Record<string, string>>({});
   useEffect(() => {
     if (c) {
       setCorreo(c.correo_soporte);
-      setYape(c.planes_yape);
-      setTitular(c.planes_titular);
       setEx(Object.fromEntries(EXTRAS.map((e) => [e.k, aTexto(e, c.extras?.[e.k] ?? 0)])));
     }
   }, [c]);
@@ -69,8 +67,6 @@ export default function Configuracion() {
     try {
       const r = await api.put<{ mensaje: string }>("/admin/configuracion", {
         correo_soporte: correo,
-        planes_yape: yape.trim(),
-        planes_titular: titular.trim(),
         extras: Object.fromEntries(EXTRAS.map((e) => [e.k, e.dias ? parseInt(ex[e.k] || "0", 10) : Math.round(parseFloat(ex[e.k] || "0") * 100)])),
       });
       avisar(r.mensaje);
@@ -101,15 +97,6 @@ export default function Configuracion() {
                 <Entrada value="Soles (PEN)" disabled />
                 <span className="mt-1 block text-xs text-gris">Todos los precios se muestran en soles.</span>
               </label>
-              <label className="block">
-                <span className="mb-1.5 block text-sm font-semibold text-tinta">Yape de VendiGo (cobro de planes)</span>
-                <Entrada inputMode="numeric" maxLength={9} value={yape} onChange={(e) => setYape(e.target.value.replace(/\D/g, ""))} placeholder="9XXXXXXXX" />
-                <span className="mt-1 block text-xs text-gris">Las tiendas pagan aquí su plan. Solo se usa para planes, nunca para ventas.</span>
-              </label>
-              <label className="block">
-                <span className="mb-1.5 block text-sm font-semibold text-tinta">Titular del Yape</span>
-                <Entrada value={titular} onChange={(e) => setTitular(e.target.value)} maxLength={80} placeholder="Nombre que ve la tienda al yapear" />
-              </label>
             </div>
             <p className="mt-6 text-sm font-bold text-tinta">Impulsos y fondo de emergencia</p>
             <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -121,8 +108,10 @@ export default function Configuracion() {
                 </label>
               ))}
             </div>
-            <Boton className="mt-4" onClick={guardar} cargando={guardando} disabled={!cambioExtras && correo.trim() === c.correo_soporte && yape.trim() === c.planes_yape && titular.trim() === c.planes_titular}>Guardar configuración</Boton>
+            <Boton className="mt-4" onClick={guardar} cargando={guardando} disabled={!cambioExtras && correo.trim() === c.correo_soporte}>Guardar configuración</Boton>
           </Tarjeta>
+
+          <CobroVendiGoForm inicial={c.cobro_vendigo} correo={c.correo_soporte} alGuardar={recargar} />
 
           <Tarjeta titulo="Datos del proveedor (Libro de Reclamaciones)">
             <p className="-mt-2 mb-4 text-sm text-gris">Salen en cada hoja de reclamación. Usa los datos de tu RUC tal como figuran en SUNAT.</p>

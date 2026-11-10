@@ -6,12 +6,12 @@ import { useApi } from "@/lib/api";
 import { soles } from "@/lib/formato";
 import { Boton, Cargando, Vacio } from "@/components/ui";
 import { ESTADO_PAGO_PLAN, METODOS, type PagoPlan, type PagoVendiGo } from "@/lib/pagos-plan";
-import { YapeVendiGo } from "@/components/panel/yape-vendigo";
+import { PagarAVendiGo } from "@/components/panel/pagar-vendigo";
 
 
 // "Pagos de tu plan": lo que la tienda le paga a VendiGo (mensualidad y extras).
 export default function PagosDelPlan() {
-  const { datos } = useApi<{ pagos: PagoPlan[]; pago_vendigo: PagoVendiGo }>("/vendedor/plan/pagos");
+  const { datos, recargar } = useApi<{ pagos: PagoPlan[]; pago_vendigo: PagoVendiGo }>("/vendedor/plan/pagos");
 
   return (
     <div className="space-y-5">
@@ -23,7 +23,7 @@ export default function PagosDelPlan() {
         <h1 className="text-[34px] font-extrabold leading-tight text-pino">Pagos de tu plan</h1>
         <p className="text-sm text-gris">Lo que le pagas a VendiGo por tu plan. Es aparte de tus ventas: tus clientes te pagan directo a ti.</p>
       </div>
-      {datos?.pagos.filter((p) => p.estado === "pendiente").map((p) => <YapeVendiGo key={p.id} pago={p} vendigo={datos.pago_vendigo} />)}
+      {datos?.pagos.filter((p) => p.estado === "pendiente").map((p) => <PagarAVendiGo key={p.id} concepto={p.concepto} monto={p.monto_centimos} vendigo={datos.pago_vendigo} pagoId={p.id} referenciaInformada={p.referencia_tienda} alListo={recargar} />)}
 
       {!datos ? (
         <Cargando />

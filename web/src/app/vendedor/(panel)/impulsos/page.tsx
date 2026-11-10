@@ -33,7 +33,7 @@ export default function Impulsos() {
       <div>
         <div className="mb-2 h-1 w-8 rounded-full bg-coral" />
         <h1 className="text-[28px] font-extrabold leading-tight text-pino">Impulsar productos</h1>
-        <p className="mt-1 text-sm text-gris">Tu producto sale primero cuando alguien busca algo relacionado en VendiGo. Lo pagas con Yape desde aquí.</p>
+        <p className="mt-1 text-sm text-gris">Tu producto sale primero cuando alguien busca algo relacionado en VendiGo. Pagas a VendiGo con el método que prefieras y lo registras aquí.</p>
       </div>
 
       <section className="flex flex-wrap items-end gap-3 rounded-[22px] bg-white p-5 shadow-suave ring-1 ring-linea/60">

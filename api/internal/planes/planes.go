@@ -32,6 +32,7 @@ func (m *Modulo) RutasVendedor(r chi.Router) {
 	r.Method("POST", "/plan", httpx.Handler(m.cambiar))
 	r.Method("POST", "/plan/ventas-extra", httpx.Handler(m.comprarExtra))
 	r.Method("GET", "/plan/pagos", httpx.Handler(m.pagos))
+	r.Method("POST", "/plan/pagos/{id}/informar", httpx.Handler(m.informarPago))
 	r.Method("GET", "/destacados", httpx.Handler(m.destacados))
 	r.Method("POST", "/productos/{id}/destacar", httpx.Handler(m.destacar))
 }
@@ -263,7 +264,7 @@ func (m *Modulo) pagos(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	rows, err := m.app.DB.QueryContext(ctx, `SELECT id, concepto, monto_centimos, metodo, estado, referencia, motivo_rechazo, creado_en FROM pagos_plan WHERE tienda_id=$1 ORDER BY creado_en DESC`, tid)
+	rows, err := m.app.DB.QueryContext(ctx, `SELECT id, concepto, monto_centimos, metodo, estado, referencia, referencia_tienda, motivo_rechazo, creado_en FROM pagos_plan WHERE tienda_id=$1 ORDER BY creado_en DESC`, tid)
 	if err != nil {
 		return err
 	}
@@ -275,18 +276,17 @@ func (m *Modulo) pagos(w http.ResponseWriter, r *http.Request) error {
 		Metodo   string    `json:"metodo"`
 		Estado   string    `json:"estado"`
 		Ref      string    `json:"referencia"`
+		RefT     string    `json:"referencia_tienda"`
 		Motivo   string    `json:"motivo_rechazo"`
 		Fecha    time.Time `json:"fecha"`
 	}
 	out := []pago{}
 	for rows.Next() {
 		var p pago
-		rows.Scan(&p.ID, &p.Concepto, &p.Monto, &p.Metodo, &p.Estado, &p.Ref, &p.Motivo, &p.Fecha)
+		rows.Scan(&p.ID, &p.Concepto, &p.Monto, &p.Metodo, &p.Estado, &p.Ref, &p.RefT, &p.Motivo, &p.Fecha)
 		out = append(out, p)
 	}
 	// Datos para pagarle a VendiGo (los configura el admin). El plan se activa cuando VendiGo confirma el pago.
-	var yape, titular string
-	m.app.DB.QueryRowContext(ctx, `SELECT COALESCE((SELECT valor FROM ajustes_plataforma WHERE clave='planes_yape'),''), COALESCE((SELECT valor FROM ajustes_plataforma WHERE clave='planes_titular'),'')`).Scan(&yape, &titular)
-	httpx.OK(w, map[string]any{"pagos": out, "pago_vendigo": map[string]string{"yape": yape, "titular": titular}})
+	httpx.OK(w, map[string]any{"pagos": out, "pago_vendigo": LeerCobro(ctx, m.app.DB)})
 	return nil
 }

@@ -7,12 +7,25 @@ export type PagoPlan = {
   metodo: string;
   estado: "pendiente" | "confirmado" | "rechazado";
   referencia: string;
+  referencia_tienda: string;
   motivo_rechazo: string;
   fecha: string;
 };
-export type PagoVendiGo = { yape: string; titular: string };
+// Métodos con los que las tiendas le pagan a VendiGo (los configura el admin).
+export type PagoVendiGo = {
+  yape: string;
+  plin: string;
+  titular: string;
+  tarjeta_link: string;
+  tarjeta_marcas: string[];
+  banco: string;
+  cuenta: string;
+  cci: string;
+  banco_titular: string;
+  metodos: ("yape" | "plin" | "tarjeta" | "transferencia")[];
+};
 
-export const METODOS: Record<string, string> = { yape: "Yape a VendiGo", tarjeta: "Tarjeta", plin: "Plin a VendiGo" };
+export const METODOS: Record<string, string> = { yape: "Yape a VendiGo", plin: "Plin a VendiGo", tarjeta: "Tarjeta", transferencia: "Transferencia a VendiGo" };
 
 export const ESTADO_PAGO_PLAN: Record<PagoPlan["estado"], { t: string; clase: string }> = {
   pendiente: { t: "Por confirmar", clase: "bg-aviso-claro text-aviso" },

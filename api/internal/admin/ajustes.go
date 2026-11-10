@@ -13,6 +13,7 @@ import (
 
 	"github.com/solanchveliz-dev/vendigo/api/internal/core"
 	"github.com/solanchveliz-dev/vendigo/api/internal/httpx"
+	"github.com/solanchveliz-dev/vendigo/api/internal/planes"
 )
 
 // Agencias de envío, configuración general y la bandeja de avisos del admin.
@@ -122,15 +123,17 @@ var limitesExtras = map[string][2]int{"garantia_tope_centimos": {1000, 500000}, 
 func (m *Modulo) configuracion(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	var d struct {
-		Correo        string         `json:"correo_soporte"`
-		PlanesYape    string         `json:"planes_yape"`
-		PlanesTitular string         `json:"planes_titular"`
-		Inactividad   int            `json:"inactividad_min"`
-		Agencias      []string       `json:"agencias"`
-		Sedes         int            `json:"sedes_activas"`
-		Extras        map[string]int `json:"extras"` // precios de Protección y destacados, tope y plazo de la Protección
+		Correo        string              `json:"correo_soporte"`
+		PlanesYape    string              `json:"planes_yape"`
+		PlanesTitular string              `json:"planes_titular"`
+		Inactividad   int                 `json:"inactividad_min"`
+		Agencias      []string            `json:"agencias"`
+		Sedes         int                 `json:"sedes_activas"`
+		Extras        map[string]int      `json:"extras"` // precio de impulsos, tope y plazo del fondo de emergencia
+		Cobro         planes.CobroVendiGo `json:"cobro_vendigo"`
 	}
 	d.Correo = m.correoSoporte(ctx)
+	d.Cobro = planes.LeerCobro(ctx, m.app.DB)
 	d.Extras = map[string]int{}
 	for k, def := range extrasPorDefecto {
 		v := def
@@ -158,10 +161,11 @@ func (m *Modulo) configuracion(w http.ResponseWriter, r *http.Request) error {
 func (m *Modulo) guardarConfiguracion(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	var in struct {
-		Correo        string         `json:"correo_soporte"`
-		PlanesYape    string         `json:"planes_yape"`
-		PlanesTitular string         `json:"planes_titular"`
-		Extras        map[string]int `json:"extras"`
+		Correo        string               `json:"correo_soporte"`
+		PlanesYape    string               `json:"planes_yape"`
+		PlanesTitular string               `json:"planes_titular"`
+		Extras        map[string]int       `json:"extras"`
+		Cobro         *planes.CobroVendiGo `json:"cobro_vendigo"`
 	}
 	if err := httpx.Leer(r, &in); err != nil {
 		return err
@@ -174,7 +178,20 @@ func (m *Modulo) guardarConfiguracion(w http.ResponseWriter, r *http.Request) er
 	if in.PlanesYape != "" && (len(in.PlanesYape) != 9 || in.PlanesYape[0] != '9' || strings.Trim(in.PlanesYape, "0123456789") != "") {
 		return httpx.Invalido("El Yape de VendiGo debe ser un celular de 9 dígitos que empiece con 9.")
 	}
-	valores := map[string]string{"correo_soporte": in.Correo, "planes_yape": in.PlanesYape, "planes_titular": in.PlanesTitular}
+	// Los datos de cobro de VendiGo solo se tocan si vienen (cobro_vendigo o, por compatibilidad, planes_yape).
+	valores := map[string]string{"correo_soporte": in.Correo}
+	if in.Cobro == nil && in.PlanesYape != "" {
+		valores["planes_yape"], valores["planes_titular"] = in.PlanesYape, in.PlanesTitular
+	}
+	if c := in.Cobro; c != nil {
+		if err := validarCobro(c); err != nil {
+			return err
+		}
+		for k, v := range map[string]string{"planes_yape": c.Yape, "planes_plin": c.Plin, "planes_titular": c.Titular, "planes_tarjeta_link": c.TarjetaLink,
+			"planes_tarjeta_marcas": strings.Join(c.TarjetaMarcas, ","), "planes_banco": c.Banco, "planes_cuenta": c.Cuenta, "planes_cci": c.CCI, "planes_banco_titular": c.BancoTitular} {
+			valores[k] = v
+		}
+	}
 	for k, v := range in.Extras {
 		lim, ok := limitesExtras[k]
 		if !ok {
@@ -235,5 +252,35 @@ func (m *Modulo) leerAviso(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	httpx.OK(w, map[string]string{"mensaje": "Listo."})
+	return nil
+}
+
+// validarCobro revisa los métodos con los que las tiendas le pagan a VendiGo.
+func validarCobro(c *planes.CobroVendiGo) error {
+	for _, p := range []*string{&c.Yape, &c.Plin, &c.Titular, &c.TarjetaLink, &c.Banco, &c.Cuenta, &c.CCI, &c.BancoTitular} {
+		*p = strings.TrimSpace(*p)
+	}
+	c.CCI = strings.ReplaceAll(c.CCI, "-", "")
+	digitos := func(x string) bool { return x != "" && strings.Trim(x, "0123456789") == "" }
+	celular := func(x string) bool { return x == "" || (len(x) == 9 && x[0] == '9' && digitos(x)) }
+	cuenta := strings.ReplaceAll(c.Cuenta, "-", "")
+	transf := c.Cuenta != "" || c.CCI != ""
+	switch {
+	case !celular(c.Yape) || !celular(c.Plin):
+		return httpx.Invalido("El Yape y el Plin de VendiGo deben ser celulares de 9 dígitos que empiecen con 9.")
+	case (c.Yape != "" || c.Plin != "") && len([]rune(c.Titular)) < 3:
+		return httpx.Invalido("Escribe el titular del Yape/Plin de VendiGo.")
+	case c.TarjetaLink != "" && (!strings.HasPrefix(c.TarjetaLink, "https://") || len(c.TarjetaLink) > 300):
+		return httpx.Invalido("El link de pago con tarjeta debe empezar con https://")
+	case transf && (c.Banco == "" || len([]rune(c.BancoTitular)) < 3):
+		return httpx.Invalido("Completa el banco y el titular de la cuenta de VendiGo.")
+	case c.Cuenta != "" && (!digitos(cuenta) || len(cuenta) < 10 || len(cuenta) > 20):
+		return httpx.Invalido("El número de cuenta debe tener entre 10 y 20 dígitos.")
+	case c.CCI != "" && (!digitos(c.CCI) || len(c.CCI) != 20):
+		return httpx.Invalido("El CCI debe tener 20 dígitos.")
+	}
+	if c.TarjetaLink == "" {
+		c.TarjetaMarcas = nil
+	}
 	return nil
 }

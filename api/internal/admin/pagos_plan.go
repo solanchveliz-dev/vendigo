@@ -23,6 +23,7 @@ type PagoPlanAdmin struct {
 	Tienda     string     `json:"tienda"`
 	Concepto   string     `json:"concepto"`
 	Tipo       string     `json:"tipo"`
+	Metodo     string     `json:"metodo"`
 	Monto      int        `json:"monto_centimos"`
 	Estado     string     `json:"estado"`
 	Referencia string     `json:"referencia"`
@@ -33,7 +34,7 @@ type PagoPlanAdmin struct {
 }
 
 func (m *Modulo) pagosPlan(w http.ResponseWriter, r *http.Request) error {
-	rows, err := m.app.DB.QueryContext(r.Context(), `SELECT pp.id, t.id, t.nombre, pp.concepto, pp.tipo, pp.monto_centimos, pp.estado, pp.referencia, pp.referencia_tienda, pp.motivo_rechazo,
+	rows, err := m.app.DB.QueryContext(r.Context(), `SELECT pp.id, t.id, t.nombre, pp.concepto, pp.tipo, pp.metodo, pp.monto_centimos, pp.estado, pp.referencia, pp.referencia_tienda, pp.motivo_rechazo,
 		pp.creado_en, pp.confirmado_en FROM pagos_plan pp JOIN tiendas t ON t.id=pp.tienda_id
 		ORDER BY pp.estado<>'pendiente', pp.creado_en DESC LIMIT 2000`)
 	if err != nil {
@@ -43,7 +44,7 @@ func (m *Modulo) pagosPlan(w http.ResponseWriter, r *http.Request) error {
 	out := []PagoPlanAdmin{}
 	for rows.Next() {
 		var p PagoPlanAdmin
-		if err := rows.Scan(&p.ID, &p.TiendaID, &p.Tienda, &p.Concepto, &p.Tipo, &p.Monto, &p.Estado, &p.Referencia, &p.RefTienda, &p.Motivo, &p.CreadoEn, &p.Confirmado); err != nil {
+		if err := rows.Scan(&p.ID, &p.TiendaID, &p.Tienda, &p.Concepto, &p.Tipo, &p.Metodo, &p.Monto, &p.Estado, &p.Referencia, &p.RefTienda, &p.Motivo, &p.CreadoEn, &p.Confirmado); err != nil {
 			return err
 		}
 		out = append(out, p)

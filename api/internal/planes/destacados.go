@@ -118,9 +118,7 @@ func (m *Modulo) destacados(w http.ResponseWriter, r *http.Request) error {
 		}
 		lista = append(lista, it)
 	}
-	var yape, titular string
-	m.app.DB.QueryRowContext(ctx, `SELECT COALESCE((SELECT valor FROM ajustes_plataforma WHERE clave='planes_yape'),''), COALESCE((SELECT valor FROM ajustes_plataforma WHERE clave='planes_titular'),'')`).Scan(&yape, &titular)
-	httpx.OK(w, map[string]any{"paquetes": paquetes(ctx, m.app.DB), "impulsos": lista, "pago_vendigo": map[string]string{"yape": yape, "titular": titular}})
+	httpx.OK(w, map[string]any{"paquetes": paquetes(ctx, m.app.DB), "impulsos": lista, "pago_vendigo": LeerCobro(ctx, m.app.DB)})
 	return nil
 }
 
@@ -134,6 +132,7 @@ func (m *Modulo) destacar(w http.ResponseWriter, r *http.Request) error {
 	}
 	var in struct {
 		Dias       int    `json:"dias"`
+		Metodo     string `json:"metodo"`
 		Referencia string `json:"referencia"`
 	}
 	if err := httpx.Leer(r, &in); err != nil {
@@ -143,8 +142,14 @@ func (m *Modulo) destacar(w http.ResponseWriter, r *http.Request) error {
 	if !slices.Contains(DiasImpulso, in.Dias) {
 		return httpx.Invalido("Elige cuántos días quieres impulsar tu producto: 3, 7 o 15.")
 	}
+	if in.Metodo == "" {
+		in.Metodo = "yape"
+	}
+	if err := metodoValido(ctx, m.app.DB, in.Metodo); err != nil {
+		return err
+	}
 	if len(in.Referencia) < 4 || len(in.Referencia) > 40 {
-		return httpx.Invalido("Escribe el número de operación de tu Yape a VendiGo.")
+		return httpx.Invalido("Escribe el número de operación de tu pago a VendiGo.")
 	}
 	base, diasBase := PrecioDestacado(ctx, m.app.DB)
 	precio := precioImpulso(base, diasBase, in.Dias)
@@ -169,13 +174,13 @@ func (m *Modulo) destacar(w http.ResponseWriter, r *http.Request) error {
 			return httpx.Conflicto("pago_pendiente", "Este producto ya tiene un impulso por confirmar.")
 		}
 		_, err = tx.ExecContext(ctx, `INSERT INTO pagos_plan (tienda_id, concepto, monto_centimos, metodo, estado, tipo, producto_id, dias, referencia_tienda)
-			VALUES ($1,$2,$3,'yape','pendiente','destacado',$4,$5,$6)`, tid, fmt.Sprintf("Impulsar «%s» %d días", nombre, in.Dias), precio, pid, in.Dias, in.Referencia)
+			VALUES ($1,$2,$3,$7,'pendiente','destacado',$4,$5,$6)`, tid, fmt.Sprintf("Impulsar «%s» %d días", nombre, in.Dias), precio, pid, in.Dias, in.Referencia, in.Metodo)
 		return err
 	})
 	if err != nil {
 		return err
 	}
-	httpx.JSON(w, http.StatusCreated, map[string]any{"mensaje": "¡Listo! Recibimos tu pedido. Tu producto empieza a destacar cuando VendiGo confirme tu Yape (te avisamos)."})
+	httpx.JSON(w, http.StatusCreated, map[string]any{"mensaje": "¡Listo! Recibimos tu pedido. Tu producto empieza a destacar cuando VendiGo confirme tu pago (te avisamos)."})
 	return nil
 }
 

@@ -3,16 +3,18 @@
 import Link from "next/link";
 import { use, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, ChevronRight, Copy, Eye, Rocket, Search, Sparkles, Store } from "lucide-react";
-import { api, ErrorApi, useApi } from "@/lib/api";
+import { ChevronRight, Eye, Rocket, Search, Sparkles, Store } from "lucide-react";
+import { api, useApi } from "@/lib/api";
 import { fecha, soles } from "@/lib/formato";
 import type { Producto } from "@/lib/tipos";
-import { Aviso, Boton, Campo, Cargando, Entrada, cn, useAvisar } from "@/components/ui";
+import { Aviso, Boton, Cargando, cn, useAvisar } from "@/components/ui";
+import { PagarAVendiGo } from "@/components/panel/pagar-vendigo";
+import type { PagoVendiGo } from "@/lib/pagos-plan";
 
 type Datos = {
   paquetes: { dias: number; precio_centimos: number }[];
   impulsos: { producto_id: string; estado: "activo" | "pendiente" | "terminado"; fin: string | null }[];
-  pago_vendigo: { yape: string; titular: string };
+  pago_vendigo: PagoVendiGo;
 };
 
 // Impulsar un producto (como en Marketplace): se elige cuántos días, se yapea a VendiGo y se registra el pago aquí mismo.
@@ -24,26 +26,16 @@ export default function Impulsar({ params }: { params: Promise<{ id: string }> }
   const { datos: d } = useApi<Datos>("/vendedor/destacados");
   const [dias, setDias] = useState(7);
   const [paso, setPaso] = useState<1 | 2>(1);
-  const [ref, setRef] = useState("");
-  const [error, setError] = useState("");
-  const [enviando, setEnviando] = useState(false);
 
   if (!p || !d) return <Cargando />;
   const paquete = d.paquetes.find((x) => x.dias === dias) ?? d.paquetes[0];
   const pendiente = d.impulsos.some((x) => x.producto_id === id && x.estado === "pendiente");
   const final = p.oferta?.precio_final_centimos ?? p.precio_centimos;
 
-  async function pagar() {
-    setError("");
-    setEnviando(true);
-    try {
-      const r = await api.post<{ mensaje: string }>(`/vendedor/productos/${id}/destacar`, { dias: paquete.dias, referencia: ref.trim() });
-      avisar(r.mensaje);
-      router.push("/vendedor/impulsos");
-    } catch (e) {
-      setError((e as ErrorApi).message);
-      setEnviando(false);
-    }
+  async function pagar(metodo: string, referencia: string) {
+    const r = await api.post<{ mensaje: string }>(`/vendedor/productos/${id}/destacar`, { dias: paquete.dias, metodo, referencia });
+    avisar(r.mensaje);
+    router.push("/vendedor/impulsos");
   }
 
   return (
@@ -64,7 +56,7 @@ export default function Impulsar({ params }: { params: Promise<{ id: string }> }
       {!p.activo || p.stock <= 0 ? (
         <Aviso tono="aviso">Solo puedes impulsar productos publicados y con stock.</Aviso>
       ) : pendiente ? (
-        <Aviso tono="aviso">Este producto ya tiene un impulso esperando que VendiGo confirme tu Yape. Te avisamos apenas se active.</Aviso>
+        <Aviso tono="aviso">Este producto ya tiene un impulso esperando que VendiGo confirme tu pago. Te avisamos apenas se active.</Aviso>
       ) : (
         <div className="grid items-start gap-5 lg:grid-cols-[1fr_300px]">
           <div className="space-y-4">
@@ -98,32 +90,7 @@ export default function Impulsar({ params }: { params: Promise<{ id: string }> }
                 </section>
               </>
             ) : (
-              <section className="space-y-4 rounded-[22px] bg-white p-5 shadow-suave ring-1 ring-linea/60">
-                <h2 className="font-extrabold text-tinta">Paga con Yape a VendiGo</h2>
-                {d.pago_vendigo.yape ? (
-                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-gradient-to-r from-pino to-pino-2 p-5 text-white">
-                    <div>
-                      <p className="text-xs text-white/75">Yapea {soles(paquete.precio_centimos)} al</p>
-                      <p className="font-display text-3xl font-extrabold">{d.pago_vendigo.yape}</p>
-                      {d.pago_vendigo.titular && <p className="text-sm text-white/80">{d.pago_vendigo.titular}</p>}
-                    </div>
-                    <button onClick={() => navigator.clipboard?.writeText(d.pago_vendigo.yape).then(() => avisar("Número copiado"), () => undefined)} className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-4 py-2 text-sm font-bold">
-                      <Copy className="size-4" /> Copiar
-                    </button>
-                  </div>
-                ) : (
-                  <Aviso tono="aviso">VendiGo todavía no configuró su Yape. Escríbenos desde Ayuda.</Aviso>
-                )}
-                <ol className="list-decimal space-y-1 pl-5 text-sm text-tinta">
-                  <li>Abre tu Yape y paga {soles(paquete.precio_centimos)} a ese número.</li>
-                  <li>Copia el número de operación que te muestra Yape.</li>
-                  <li>Pégalo aquí y confirma. Tu producto se impulsa apenas VendiGo lo valide.</li>
-                </ol>
-                <Campo etiqueta="N.° de operación">
-                  <Entrada value={ref} onChange={(e) => setRef(e.target.value.replace(/\s/g, ""))} maxLength={40} inputMode="numeric" placeholder="Ej. 12345678" />
-                </Campo>
-                {error && <Aviso tono="error">{error}</Aviso>}
-              </section>
+              <PagarAVendiGo concepto={`Impulsar ${paquete.dias} días`} monto={paquete.precio_centimos} vendigo={d.pago_vendigo} alPagar={pagar} boton="Ya pagué, impulsar" />
             )}
           </div>
 
@@ -148,7 +115,6 @@ export default function Impulsar({ params }: { params: Promise<{ id: string }> }
               <Boton bloque tamano="lg" onClick={() => setPaso(2)}><Rocket className="size-4" /> Continuar al pago</Boton>
             ) : (
               <>
-                <Boton bloque tamano="lg" onClick={pagar} cargando={enviando} disabled={ref.trim().length < 4 || !d.pago_vendigo.yape}><Check className="size-4" /> Ya pagué, impulsar</Boton>
                 <Boton bloque variante="secundario" onClick={() => setPaso(1)}>Volver</Boton>
               </>
             )}

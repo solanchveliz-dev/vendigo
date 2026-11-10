@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { ArrowRight, Check, ReceiptText, ShoppingBag, Sparkles, X, Rocket } from "lucide-react";
 import type { PagoPlan, PagoVendiGo } from "@/lib/pagos-plan";
-import { YapeVendiGo } from "@/components/panel/yape-vendigo";
+import { PagarAVendiGo } from "@/components/panel/pagar-vendigo";
 import { api, ErrorApi, useApi } from "@/lib/api";
 import { fecha, soles } from "@/lib/formato";
 import type { Creditos, Plan, UsoPlan } from "@/lib/tipos";
@@ -57,7 +57,7 @@ export default function TuSuscripcion() {
       uso.setDatos(nuevo);
       ia.recargar();
       pagos.recargar();
-      avisar(nuevo.plan.id === elegido.id ? `Listo: ahora estás en el plan ${elegido.nombre}.` : `Pedido registrado. Yapea ${soles(elegido.precio_centimos)} a VendiGo y activamos tu plan al confirmarlo.`);
+      avisar(nuevo.plan.id === elegido.id ? `Listo: ahora estás en el plan ${elegido.nombre}.` : `Pedido registrado. Paga ${soles(elegido.precio_centimos)} a VendiGo y activamos tu plan al confirmarlo.`);
       setElegido(null);
     } catch (e) {
       avisar((e as ErrorApi).message, "error");
@@ -71,7 +71,7 @@ export default function TuSuscripcion() {
     try {
       uso.setDatos(await api.post<UsoPlan>("/vendedor/plan/ventas-extra"));
       pagos.recargar();
-      avisar("Pedido registrado. Yapea S/ 5.00 a VendiGo y sumamos tus 20 ventas al confirmarlo.");
+      avisar("Pedido registrado. Paga S/ 5.00 a VendiGo y sumamos tus 20 ventas al confirmarlo.");
       setExtra(false);
     } catch (e) {
       avisar((e as ErrorApi).message, "error");
@@ -109,7 +109,7 @@ export default function TuSuscripcion() {
         </div>
       </div>
 
-      {pendiente && <YapeVendiGo pago={pendiente} vendigo={pagos.datos?.pago_vendigo ?? null} />}
+      {pendiente && <PagarAVendiGo key={pendiente.id} concepto={pendiente.concepto} monto={pendiente.monto_centimos} vendigo={pagos.datos?.pago_vendigo ?? null} pagoId={pendiente.id} referenciaInformada={pendiente.referencia_tienda} alListo={pagos.recargar} />}
 
       <div className="grid items-start gap-5 lg:grid-cols-2">
         <section className="rounded-[22px] bg-white p-5 shadow-suave ring-1 ring-linea/60">
@@ -203,7 +203,7 @@ export default function TuSuscripcion() {
             <p className="pb-2">Tus ventas y tu plan van por separado:</p>
             <div className="flex justify-between border-t border-linea py-2"><span>Tus clientes te pagan</span><b>Directo a ti (Yape o Plin)</b></div>
             <div className="flex justify-between border-t border-linea py-2"><span>Comisión de VendiGo por venta</span><b>0 %</b></div>
-            <div className="flex justify-between border-t border-linea py-2"><span>Tu plan</span><b>Lo yapeas a VendiGo</b></div>
+            <div className="flex justify-between border-t border-linea py-2"><span>Tu plan</span><b>Lo pagas a VendiGo</b></div>
             <p className="pt-1 text-xs text-gris">VendiGo no recibe ni guarda el dinero de tus ventas.</p>
           </div>
         </div>
@@ -228,8 +228,8 @@ export default function TuSuscripcion() {
               {elegido.precio_centimos === 0
                 ? `Vuelves al plan Gratis hoy: ${elegido.ventas_mes} ventas al mes y sin pronóstico ni analista de ventas.`
                 : gratisMes
-                  ? `El cambio es inmediato y tu primer mes es gratis. Luego pagas ${soles(elegido.precio_centimos)} al mes con Yape a VendiGo. Puedes cambiar cuando quieras.`
-                  : `Yapeas ${soles(elegido.precio_centimos)} a VendiGo y tu plan se activa cuando el equipo confirme el pago (te avisamos).`}
+                  ? `El cambio es inmediato y tu primer mes es gratis. Luego pagas ${soles(elegido.precio_centimos)} al mes a VendiGo (Yape, Plin, tarjeta o transferencia). Puedes cambiar cuando quieras.`
+                  : `Pagas ${soles(elegido.precio_centimos)} a VendiGo y tu plan se activa cuando el equipo confirme el pago (te avisamos).`}
               {sobran > 0 && ` Tienes ${u.productos_publicados} productos publicados y este plan permite ${elegido.productos_max}: no podrás publicar nuevos hasta ocultar ${sobran}.`}
             </div>
             <div className="flex flex-wrap gap-2">
@@ -241,7 +241,7 @@ export default function TuSuscripcion() {
       </Modal>
 
       <Modal abierto={extra} onCerrar={() => setExtra(false)} titulo="¿Comprar 20 ventas más?">
-        <p className="text-sm text-gris">Yapeas S/ 5.00 a VendiGo y, cuando el equipo confirme el pago, se suman a tu cupo de este mes. Las ventas extra no pasan al mes siguiente.</p>
+        <p className="text-sm text-gris">Pagas S/ 5.00 a VendiGo y, cuando el equipo confirme el pago, se suman a tu cupo de este mes. Las ventas extra no pasan al mes siguiente.</p>
         <div className="mt-4 flex gap-2">
           <Boton cargando={ocupado} onClick={comprarExtra} disabled={!!pendiente}>Pedir por S/ 5</Boton>
           <Boton variante="secundario" onClick={() => setExtra(false)}>Cancelar</Boton>

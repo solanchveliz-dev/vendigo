@@ -6,6 +6,7 @@ import { soles } from "@/lib/formato";
 import { fechaHora } from "@/lib/admin";
 import { Area, Boton, Campo, Entrada, Modal, useAvisar } from "@/components/ui";
 import { Estado, Tarjeta } from "@/components/admin/ui";
+import { METODOS } from "@/lib/pagos-plan";
 
 type PagoPlan = {
   id: string;
@@ -17,6 +18,7 @@ type PagoPlan = {
   estado: "pendiente" | "confirmado" | "rechazado";
   referencia: string;
   referencia_tienda: string;
+  metodo: string;
   motivo_rechazo: string;
   creado_en: string;
   confirmado_en: string | null;
@@ -67,7 +69,7 @@ export function PagosPlan() {
         </button>
       }
     >
-      <p className="mb-3 text-sm text-gris">Revisa en el Yape de VendiGo que el pago llegó. Al confirmar se activa el plan o el paquete de ventas.</p>
+      <p className="mb-3 text-sm text-gris">Revisa en la cuenta de VendiGo (Yape, Plin, tarjeta o banco) que el pago llegó. Al confirmar se activa el plan o el paquete de ventas.</p>
       {!datos ? (
         <p className="text-sm text-gris">Cargando…</p>
       ) : !lista.length ? (
@@ -79,7 +81,7 @@ export function PagosPlan() {
               <b className="block text-tinta">{p.tienda}</b>
               <span className="text-xs text-gris">
                 {p.concepto} · {fechaHora(p.creado_en)}
-                {p.referencia ? ` · Op. ${p.referencia}` : p.referencia_tienda ? ` · La tienda indica Op. ${p.referencia_tienda}` : ""}
+                {p.referencia ? ` · Op. ${p.referencia}` : p.referencia_tienda ? ` · Pagó por ${METODOS[p.metodo] ?? p.metodo}, op. ${p.referencia_tienda}` : p.estado === "pendiente" ? " · Aún no informa su pago" : ""}
                 {p.motivo_rechazo && ` · ${p.motivo_rechazo}`}
               </span>
             </span>
@@ -102,7 +104,7 @@ export function PagosPlan() {
               {abrir.p.tienda} · {abrir.p.concepto} · <b className="text-tinta">{soles(abrir.p.monto_centimos)}</b>
             </p>
             {abrir.accion === "confirmar" ? (
-              <Campo etiqueta="Número de operación de Yape" ayuda="Compáralo con el movimiento recibido en el Yape de VendiGo antes de confirmar.">
+              <Campo etiqueta="Número de operación" ayuda="Compáralo con el movimiento recibido en la cuenta de VendiGo antes de confirmar.">
                 <Entrada value={texto} onChange={(e) => setTexto(e.target.value)} maxLength={40} placeholder="Ej. 12345678" />
               </Campo>
             ) : (
