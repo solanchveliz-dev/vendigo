@@ -50,7 +50,6 @@ func (m *Modulo) RutasPrivadas(r chi.Router) {
 	r.Method("POST", "/me/mfa/iniciar", httpx.Handler(m.iniciarMFA))
 	r.Method("POST", "/me/mfa/activar", httpx.Handler(m.activarMFA))
 	r.Method("POST", "/me/mfa/desactivar", httpx.Handler(m.desactivarMFA))
-	r.Method("POST", "/me/confirmar", httpx.Handler(m.pedirConfirmacion))
 	r.Method("POST", "/me/acceso-denegado", httpx.Handler(m.accesoDenegado))
 }
 

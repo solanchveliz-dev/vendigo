@@ -396,19 +396,19 @@ func (m *Modulo) Procesar(ctx context.Context, pid, pagoID string) error {
 			}
 			if estadoPedido == "cancelado" || estadoPedido == "rechazado" {
 				// Pagó justo cuando el pedido se cerró (por ejemplo, venció): la tienda debe devolverlo.
-				if err := pagos.Cambiar(ctx, tx, pid, pagos.Cambio{Estado: "confirmado", Detalle: "Mercado Pago aprobó el pago después de cerrarse el pedido.", Referencia: pagoID}); err != nil {
+				if err := pagos.CambiarPorProveedor(ctx, tx, pid, pagos.Cambio{Estado: "confirmado", Detalle: "Mercado Pago aprobó el pago después de cerrarse el pedido.", Referencia: pagoID}); err != nil {
 					return err
 				}
 				_, err := pagos.AbrirDevolucion(ctx, tx, pid, "cancelacion")
 				return err
 			}
-			if err := pagos.Cambiar(ctx, tx, pid, pagos.Cambio{Estado: "confirmado", Detalle: "Mercado Pago confirmó el pago.", Referencia: pagoID}); err != nil {
+			if err := pagos.CambiarPorProveedor(ctx, tx, pid, pagos.Cambio{Estado: "confirmado", Detalle: "Mercado Pago confirmó el pago.", Referencia: pagoID}); err != nil {
 				return err
 			}
 			billetera.Notificar(ctx, tx, tid, "Pago confirmado: "+codigo, "Mercado Pago confirmó el pago. Ya puedes preparar el pedido.", "/vendedor/pedidos/"+pid)
 			billetera.SMSComprador(ctx, tx, pid, "Mercado Pago confirmó tu pago del pedido "+codigo+".")
 		case (p.Status == "refunded" || p.Status == "charged_back") && estado == "confirmado":
-			return pagos.Cambiar(ctx, tx, pid, pagos.Cambio{Estado: "reembolsado", Detalle: "Mercado Pago informó la devolución del pago.", Referencia: pagoID})
+			return pagos.CambiarPorProveedor(ctx, tx, pid, pagos.Cambio{Estado: "reembolsado", Detalle: "Mercado Pago informó la devolución del pago.", Referencia: pagoID})
 		}
 		return nil // pendiente, rechazado u otro: el pago sigue como estaba y el comprador puede intentar de nuevo
 	})

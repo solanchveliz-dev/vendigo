@@ -117,22 +117,6 @@ func (m *Modulo) desactivarMFA(w http.ResponseWriter, r *http.Request) error {
 
 // ---------- confirmar que es la persona antes de algo delicado ----------
 
-// pedirConfirmacion indica cómo confirmar: con la app (si la activó) o con un SMS que se envía ahora.
-func (m *Modulo) pedirConfirmacion(w http.ResponseWriter, r *http.Request) error {
-	ctx := r.Context()
-	u, _ := httpx.UsuarioDe(ctx)
-	var activo bool
-	var celular string
-	if err := m.app.DB.QueryRowContext(ctx, `SELECT totp_activo, celular FROM usuarios WHERE id=$1`, u.ID).Scan(&activo, &celular); err != nil {
-		return err
-	}
-	if activo {
-		httpx.OK(w, map[string]string{"metodo": "app"})
-		return nil
-	}
-	return m.enviarOTP(w, r, celular, "confirmar", map[string]any{"metodo": "sms", "celular": "••• ••• " + celular[len(celular)-3:]})
-}
-
 // ConfirmarPaso valida el código antes de una acción delicada: el de la app de autenticación
 // (o un código de respaldo) si la tiene activa; si no, el que se le envió por SMS.
 func (m *Modulo) ConfirmarPaso(ctx context.Context, usuarioID, codigo string) error {

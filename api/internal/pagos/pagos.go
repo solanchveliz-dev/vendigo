@@ -81,7 +81,11 @@ var transiciones = map[string]map[string]bool{
 	"informado_tienda":    {"pendiente": true, "comprobante_enviado": true, "paga_al_recibir": true, "no_recibido": true, "adelanto_informado": true},
 	"adelanto_informado":  {"pendiente": true, "comprobante_enviado": true, "no_recibido": true},
 	"no_recibido":         {"pendiente": true, "comprobante_enviado": true, "paga_al_recibir": true},
-	// Solo un proveedor (Mercado Pago) llega a "confirmado" o "reembolsado": lo exige también la base de datos.
+}
+
+// Transiciones que solo hace un proveedor de pagos (Mercado Pago), después de verificar el pago con su API.
+// Están separadas para que ningún flujo del comprador o de la tienda pueda llegar a "confirmado" o "reembolsado".
+var transicionesProveedor = map[string]map[string]bool{
 	"confirmado":  {"pendiente": true},
 	"reembolsado": {"confirmado": true},
 }
@@ -96,6 +100,15 @@ type Cambio struct {
 
 // Cambiar mueve el pago a un nuevo estado validando que la transición tenga sentido.
 func Cambiar(ctx context.Context, tx *sql.Tx, pedidoID string, c Cambio) error {
+	return cambiar(ctx, tx, pedidoID, c, transiciones)
+}
+
+// CambiarPorProveedor es solo para la integración del proveedor (Mercado Pago), tras verificar el pago con su API.
+func CambiarPorProveedor(ctx context.Context, tx *sql.Tx, pedidoID string, c Cambio) error {
+	return cambiar(ctx, tx, pedidoID, c, transicionesProveedor)
+}
+
+func cambiar(ctx context.Context, tx *sql.Tx, pedidoID string, c Cambio, tabla map[string]map[string]bool) error {
 	var id, actual string
 	err := tx.QueryRowContext(ctx, `SELECT id, estado FROM pagos WHERE pedido_id=$1 FOR UPDATE`, pedidoID).Scan(&id, &actual)
 	if core.SinFilas(err) {
@@ -104,7 +117,7 @@ func Cambiar(ctx context.Context, tx *sql.Tx, pedidoID string, c Cambio) error {
 	if err != nil {
 		return err
 	}
-	desde, ok := transiciones[c.Estado]
+	desde, ok := tabla[c.Estado]
 	if !ok || !desde[actual] {
 		return httpx.Conflicto("pago_estado", fmt.Sprintf("El pago está como “%s”: no se puede pasar a “%s”.", Textos[actual], Textos[c.Estado]))
 	}
