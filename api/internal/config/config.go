@@ -59,6 +59,10 @@ func (c Config) MercadoPagoListo() bool { return c.MPClientID != "" && c.MPClien
 
 func (c Config) EsDev() bool { return c.Entorno == "dev" }
 
+// MostrarCodigoDev: en pruebas locales sin SMS la API devuelve el código OTP para completarlo solo.
+// Con OTP_CANAL=sms el código llega únicamente al celular, aunque el entorno sea dev.
+func (c Config) MostrarCodigoDev() bool { return c.EsDev() && c.OTPCanal != "sms" }
+
 // ConSimulador: las rutas /dev que simulan al comprador existen en local o si se activan a propósito en el servidor.
 func (c Config) ConSimulador() bool { return c.EsDev() || c.DemoComprador }
 

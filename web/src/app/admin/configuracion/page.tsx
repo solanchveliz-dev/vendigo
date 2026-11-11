@@ -143,6 +143,8 @@ export default function Configuracion() {
             </Fila>
           </Tarjeta>
 
+          <ServiciosAWS />
+
           <Tarjeta titulo="Seguridad y asistencia IA">
             <Fila titulo="Cierre de sesión por inactividad (admin)" detalle={`Después de ${c.inactividad_min} minutos sin actividad.`}>
               <Link href="/admin/seguridad" className={enlace}>Editar en Seguridad</Link>
@@ -160,5 +162,56 @@ export default function Configuracion() {
         </>
       )}
     </>
+  );
+}
+
+type Sistema = {
+  entorno: string;
+  sms: { real: boolean; pendientes_24h: number; enviados_24h: number; con_error_24h: number };
+  ia: { real: boolean; modelo: string };
+  mercadopago: { configurado: boolean; prueba: boolean };
+};
+
+// Qué servicios están reales y cuáles simulados, y un SMS de prueba para comprobar Amazon SNS en vivo.
+function ServiciosAWS() {
+  const avisar = useAvisar();
+  const { datos: s, recargar } = useApi<Sistema>("/admin/sistema");
+  const [celular, setCelular] = useState("");
+  const [enviando, setEnviando] = useState(false);
+  if (!s) return null;
+  const chip = (ok: boolean, si: string, no: string) => (
+    <span className={`rounded-full px-3 py-1 text-xs font-bold ${ok ? "bg-pino-claro text-pino" : "bg-[#ebe7df] text-tinta"}`}>{ok ? si : no}</span>
+  );
+  async function probar() {
+    setEnviando(true);
+    try {
+      const r = await api.post<{ mensaje: string }>("/admin/sistema/sms-prueba", { celular });
+      avisar(r.mensaje);
+      recargar();
+    } catch (e) {
+      avisar((e as ErrorApi).message, "error");
+    } finally {
+      setEnviando(false);
+    }
+  }
+  return (
+    <Tarjeta titulo="Servicios (AWS y pagos)">
+      <Fila titulo="SMS con Amazon SNS" detalle={`Últimas 24 h: ${s.sms.enviados_24h} enviados · ${s.sms.pendientes_24h} en cola · ${s.sms.con_error_24h} con error`}>
+        {chip(s.sms.real, "Real", "Simulado (consola)")}
+      </Fila>
+      {s.sms.real && (
+        <div className="flex flex-wrap items-center gap-2 border-b border-linea py-4">
+          <Entrada inputMode="numeric" maxLength={9} value={celular} onChange={(e) => setCelular(e.target.value.replace(/\D/g, ""))} placeholder="Celular verificado en SNS" className="max-w-[220px]" />
+          <Boton tamano="sm" cargando={enviando} disabled={celular.length !== 9} onClick={probar}>Enviar SMS de prueba</Boton>
+          <span className="text-xs text-gris">En el sandbox de SNS solo llega a números verificados.</span>
+        </div>
+      )}
+      <Fila titulo="IA con Amazon Bedrock" detalle={s.ia.real ? `Modelo ${s.ia.modelo}` : "Respuestas de ejemplo sin costo"}>
+        {chip(s.ia.real, "Real", "Simulada")}
+      </Fila>
+      <Fila titulo="Mercado Pago (pagos de las tiendas)" detalle={s.mercadopago.configurado ? (s.mercadopago.prueba ? "Configurado en modo prueba" : "Configurado en producción") : "No configurado: la opción no aparece en las tiendas"}>
+        {chip(s.mercadopago.configurado, "Configurado", "Apagado")}
+      </Fila>
+    </Tarjeta>
   );
 }

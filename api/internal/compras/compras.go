@@ -63,7 +63,7 @@ func (m *Modulo) codigo(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	resp := map[string]any{"mensaje": "Te enviamos un código por SMS para confirmar tu pedido."}
-	if m.app.Cfg.EsDev() {
+	if m.app.Cfg.MostrarCodigoDev() {
 		resp["codigo_dev"] = c
 	}
 	httpx.OK(w, resp)

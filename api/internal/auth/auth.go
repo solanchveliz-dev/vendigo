@@ -207,7 +207,7 @@ func (m *Modulo) enviarOTP(w http.ResponseWriter, r *http.Request, celular, prop
 			resp[k] = v
 		}
 	}
-	if m.app.Cfg.EsDev() {
+	if m.app.Cfg.MostrarCodigoDev() {
 		resp["codigo_dev"] = codigo
 	}
 	httpx.OK(w, resp)

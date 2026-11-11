@@ -84,6 +84,8 @@ func (m *Modulo) Rutas(r chi.Router) {
 	r.Method("PUT", "/agencias/{id}", httpx.Handler(m.guardarSede))
 	r.Method("POST", "/agencias/{id}/estado", httpx.Handler(m.activarSede))
 	r.Method("GET", "/configuracion", httpx.Handler(m.configuracion))
+	r.Method("GET", "/sistema", httpx.Handler(m.sistema))
+	r.With(httpx.Limite(10, time.Minute)).Method("POST", "/sistema/sms-prueba", httpx.Handler(m.smsPrueba))
 	r.Method("PUT", "/configuracion", httpx.Handler(m.guardarConfiguracion))
 	r.Method("GET", "/bandeja", httpx.Handler(m.bandeja))
 	r.Method("POST", "/bandeja/leer", httpx.Handler(m.leerAviso))
