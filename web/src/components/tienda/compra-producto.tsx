@@ -5,12 +5,12 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { agregarAlCarrito, guardarSeparacion } from "@/lib/carrito";
-import { Heart, Minus, Plus, ShoppingBag, TrendingUp, Zap } from "lucide-react";
+import { Minus, Plus, ShoppingBag, TrendingUp, Zap } from "lucide-react";
 import { soles } from "@/lib/formato";
 import type { Producto } from "@/lib/tipos";
 
 // Galería de fotos del producto (miniaturas a la izquierda y foto grande).
-export function GaleriaProducto({ producto: p }: { producto: Producto }) {
+export function GaleriaProducto({ producto: p, vista = false }: { producto: Producto; vista?: boolean }) {
   const [foto, setFoto] = useState(0);
 
   return (
@@ -32,6 +32,12 @@ export function GaleriaProducto({ producto: p }: { producto: Producto }) {
       <div className="relative aspect-square min-w-0 flex-1 overflow-hidden rounded-[26px] bg-white shadow-suave">
         {p.imagenes[foto] && <img src={p.imagenes[foto].url} alt={p.nombre} className="size-full object-cover" />}
         {p.oferta && <span className="absolute left-2 top-2 rounded-md bg-coral px-2 py-0.5 text-xs font-bold text-white">-{p.oferta.descuento_pct}%</span>}
+        {/* Corazón sobre la foto, como en el prototipo: guarda el producto en Favoritos. */}
+        {!vista && (
+          <div className="absolute right-4 top-4 z-10">
+            <BotonGuardar productoId={p.id} clase="grid size-11 place-items-center rounded-full bg-white/95 text-coral shadow-suave ring-1 ring-linea/60 transition hover:scale-105" />
+          </div>
+        )}
         {p.vendidos > 0 && (
           <span className="absolute bottom-4 left-4 inline-flex items-center gap-1.5 rounded-full bg-white/90 px-3 py-1 text-sm font-semibold text-tinta">
             <TrendingUp className="size-4" /> {p.vendidos} vendidos
@@ -187,17 +193,6 @@ export function CompraProducto({ producto: p, slug, pausada = false, vista = fal
         >
           <ShoppingBag className="size-5 shrink-0" /> <span className="hidden sm:inline">Agregar</span>
         </button>
-        {vista ? (
-          <button
-            onClick={() => pronto("Vista previa: aquí no se puede comprar.")}
-            className="grid size-[52px] shrink-0 place-items-center rounded-full bg-white text-tinta ring-1 ring-linea transition hover:text-coral"
-            aria-label="Guardar en favoritos"
-          >
-            <Heart className="size-5" />
-          </button>
-        ) : (
-          <BotonGuardar productoId={p.id} clase="grid size-[52px] shrink-0 place-items-center rounded-full bg-white text-coral ring-1 ring-linea transition hover:text-coral" />
-        )}
       </div>
       )}
       {aviso && <p className="mt-2 text-center text-sm font-semibold text-gris">{aviso}</p>}

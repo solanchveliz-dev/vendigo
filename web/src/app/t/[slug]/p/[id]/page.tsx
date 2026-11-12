@@ -95,7 +95,7 @@ export default async function ProductoPublico({ params, searchParams }: Params &
         </nav>
 
         <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-          <GaleriaProducto producto={p} />
+          <GaleriaProducto producto={p} vista={vista} />
 
           <div>
             <Link href={`/t/${t.slug}${vista ? "?vista=1" : ""}`} className="flex items-center gap-3 rounded-2xl bg-white px-4 py-3 ring-1 ring-linea/60 transition hover:ring-pino/30">

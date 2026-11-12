@@ -78,7 +78,7 @@ export function BotonGuardar({ productoId, clase }: { productoId: string; clase?
     <div className="relative">
       <button
         onClick={tocar}
-        className={clase ?? cn("grid size-11 place-items-center rounded-full bg-white ring-1 ring-linea transition", activo ? "text-coral" : "text-tinta hover:text-coral")}
+        className={cn(clase ?? "grid size-11 place-items-center rounded-full bg-white text-tinta ring-1 ring-linea transition hover:text-coral", activo && "!text-coral")}
         aria-pressed={activo}
         aria-label={activo ? "Quitar de favoritos" : "Guardar en favoritos"}
         title={activo ? "Quitar de favoritos" : "Guardar en favoritos"}

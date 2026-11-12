@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { soles } from "@/lib/formato";
 import type { Producto } from "@/lib/tipos";
 import Link from "next/link";
+import { BotonGuardar } from "./seguir";
 
 type Filtro = "todos" | "nuevo" | "vendidos";
 
@@ -69,11 +70,15 @@ export function Catalogo({ productos, slug, vista = false }: { productos: Produc
           >
             <div className="relative aspect-square bg-arena">
               {p.imagenes[0] && <img src={p.imagenes[0].url} alt={p.nombre} className="size-full object-cover" />}
-              {p.oferta && (
-                <span className="absolute left-2.5 top-2.5 rounded-md bg-coral px-2 py-0.5 text-xs font-bold text-white">-{p.oferta.descuento_pct}%</span>
-              )}
-              {p.destacado_hasta && (
-                <span className="absolute right-2.5 top-2.5 rounded-md bg-pino px-2 py-0.5 text-xs font-bold text-white">Destacado</span>
+              <span className="absolute left-2.5 top-2.5 flex flex-col items-start gap-1.5">
+                {p.oferta && <span className="rounded-md bg-coral px-2 py-0.5 text-xs font-bold text-white">-{p.oferta.descuento_pct}%</span>}
+                {p.destacado_hasta && <span className="rounded-md bg-pino px-2 py-0.5 text-xs font-bold text-white">Destacado</span>}
+              </span>
+              {/* Corazón para guardar sin entrar al producto (como en el prototipo). */}
+              {!vista && (
+                <span className="absolute right-2.5 top-2.5 z-10">
+                  <BotonGuardar productoId={p.id} clase="grid size-10 place-items-center rounded-full bg-white/95 text-tinta shadow-suave transition hover:text-coral" />
+                </span>
               )}
             </div>
             <div className="flex items-end justify-between gap-2 p-3.5">
