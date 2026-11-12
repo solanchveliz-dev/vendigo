@@ -4,20 +4,34 @@ import { useEffect, useState } from "react";
 import QRCode from "qrcode";
 import { ShieldCheck, Smartphone } from "lucide-react";
 import { Aviso, Boton, Entrada } from "@/components/ui";
-import { ErrorApi, sesion } from "@/lib/api";
+import { api, ErrorApi, sesion } from "@/lib/api";
 import type { Usuario } from "@/lib/tipos";
+import { formatearRespaldo, respaldoCompleto } from "@/lib/codigo-seguridad";
 
-export type DesafioMFA = { mfa: "configurar" | "codigo"; desafio: string; secreto?: string; otpauth_url?: string; cuenta: string };
+export type DesafioMFA = { mfa: "configurar" | "codigo" | "sms"; desafio: string; secreto?: string; otpauth_url?: string; cuenta: string; celular?: string; codigo_dev?: string };
 
 // Segundo paso del ingreso de administradores: código de la app de autenticación (TOTP).
 export function PasoMFA({ d, alTerminar, alVolver }: { d: DesafioMFA; alTerminar: (u: Usuario) => void; alVolver: () => void }) {
   const [qr, setQr] = useState("");
-  const [codigo, setCodigo] = useState("");
+  const [codigo, setCodigo] = useState(d.codigo_dev ?? "");
+  const [reenviado, setReenviado] = useState("");
   const [respaldo, setRespaldo] = useState(false);
   const [error, setError] = useState("");
   const [cargando, setCargando] = useState(false);
   const [codigos, setCodigos] = useState<{ lista: string[]; usuario: Usuario } | null>(null);
   const configurar = d.mfa === "configurar";
+  const porSMS = d.mfa === "sms";
+
+  async function reenviar() {
+    setError("");
+    try {
+      const r = await api.post<{ codigo_dev?: string }>("/auth/mfa/reenviar", { desafio: d.desafio });
+      if (r.codigo_dev) setCodigo(r.codigo_dev);
+      setReenviado("Te enviamos otro código.");
+    } catch (err) {
+      setError((err as ErrorApi).message);
+    }
+  }
 
   useEffect(() => {
     if (d.otpauth_url) QRCode.toDataURL(d.otpauth_url, { width: 220, margin: 1 }).then(setQr);
@@ -65,7 +79,9 @@ export function PasoMFA({ d, alTerminar, alVolver }: { d: DesafioMFA; alTerminar
             ? "Es obligatoria para administradores. Hazlo una sola vez:"
             : respaldo
               ? "Escribe uno de tus códigos de respaldo (XXXXX-XXXXX)."
-              : "Abre tu app de autenticación y escribe el código de 6 dígitos de VendiGo."}
+              : porSMS
+                ? `Te enviamos un código de 6 dígitos por SMS al ${d.celular ?? "celular de tu cuenta"}.`
+                : "Abre tu app de autenticación y escribe el código de 6 dígitos de VendiGo."}
         </p>
       </div>
 
@@ -95,11 +111,13 @@ export function PasoMFA({ d, alTerminar, alVolver }: { d: DesafioMFA; alTerminar
       )}
 
       {error && <Aviso tono="error">{error}</Aviso>}
+      {porSMS && d.codigo_dev && !respaldo && <Aviso>Modo de prueba: el SMS no se envía y el código se completó solo.</Aviso>}
       <div className="relative">
         {!respaldo && <Smartphone className="pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-gris" />}
         <Entrada
           value={codigo}
-          onChange={(e) => setCodigo(respaldo ? e.target.value.toUpperCase().slice(0, 11) : e.target.value.replace(/\D/g, "").slice(0, 6))}
+          // Según la opción elegida: la app da 6 números; el código de respaldo lleva letras y números.
+          onChange={(e) => setCodigo(respaldo ? formatearRespaldo(e.target.value) : e.target.value.replace(/\D/g, "").slice(0, 6))}
           inputMode={respaldo ? "text" : "numeric"}
           autoComplete="one-time-code"
           autoFocus
@@ -109,14 +127,20 @@ export function PasoMFA({ d, alTerminar, alVolver }: { d: DesafioMFA; alTerminar
           required
         />
       </div>
-      <Boton bloque tamano="lg" cargando={cargando} disabled={respaldo ? codigo.length !== 11 : codigo.length !== 6}>
+      <Boton bloque tamano="lg" cargando={cargando} disabled={respaldo ? !respaldoCompleto(codigo) : codigo.length !== 6}>
         {configurar ? "Activar y entrar" : "Verificar"}
       </Boton>
+      {porSMS && !respaldo && (
+        <p className="text-center text-sm text-gris">
+          {reenviado || "¿No te llegó?"}{" "}
+          <button type="button" onClick={reenviar} className="font-semibold text-pino hover:underline">Enviar otro código</button>
+        </p>
+      )}
       <div className="flex justify-between text-sm">
         <button type="button" onClick={alVolver} className="font-semibold text-gris hover:text-tinta">Volver</button>
         {!configurar && (
           <button type="button" onClick={() => { setRespaldo(!respaldo); setCodigo(""); setError(""); }} className="font-semibold text-pino hover:underline">
-            {respaldo ? "Usar la app" : "Usar un código de respaldo"}
+            {respaldo ? (porSMS ? "Usar el código del SMS" : "Usar la app") : "Usar un código de respaldo"}
           </button>
         )}
       </div>

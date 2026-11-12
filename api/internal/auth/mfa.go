@@ -5,12 +5,12 @@ import (
 	"database/sql"
 	"net/http"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/lib/pq"
 
 	"github.com/solanchveliz-dev/vendigo/api/internal/core"
+	"github.com/solanchveliz-dev/vendigo/api/internal/cuentas"
 	"github.com/solanchveliz-dev/vendigo/api/internal/httpx"
 	"github.com/solanchveliz-dev/vendigo/api/internal/seguridad"
 )
@@ -26,24 +26,41 @@ const (
 )
 
 type respuestaMFA struct {
-	MFA     string `json:"mfa"` // "configurar" (primera vez) o "codigo"
+	MFA     string `json:"mfa"` // "configurar" (primera vez), "codigo" (app) o "sms"
 	Desafio string `json:"desafio"`
 	Secreto string `json:"secreto,omitempty"`
 	URL     string `json:"otpauth_url,omitempty"`
 	Cuenta  string `json:"cuenta"`
+	// Solo con "sms": a qué número llegó (oculto) y, en desarrollo, el código.
+	Celular   string `json:"celular,omitempty"`
+	CodigoDev string `json:"codigo_dev,omitempty"`
 }
 
 func (m *Modulo) desafioMFA(w http.ResponseWriter, r *http.Request, usuarioID string) error {
 	ctx := r.Context()
 	var activo bool
-	var email string
-	if err := m.app.DB.QueryRowContext(ctx, `SELECT totp_activo, COALESCE(email,'') FROM usuarios WHERE id=$1`, usuarioID).Scan(&activo, &email); err != nil {
+	var email, metodo, rol, celular string
+	if err := m.app.DB.QueryRowContext(ctx, `SELECT totp_activo, COALESCE(email,''), mfa_metodo, rol, celular FROM usuarios WHERE id=$1`, usuarioID).
+		Scan(&activo, &email, &metodo, &rol, &celular); err != nil {
 		return err
 	}
 	token := seguridad.TokenAleatorio()
 	res := respuestaMFA{MFA: "codigo", Desafio: token, Cuenta: email}
 	var secretoCifrado any
-	if !activo {
+	if activo && metodo == "sms" && rol != "admin" {
+		// Segundo paso por SMS: se envía el código al celular de la cuenta.
+		codigo, err := m.GenerarOTP(ctx, celular, "ingreso")
+		if e, ok := err.(*httpx.Error); ok && e.Codigo == "espera_codigo" {
+			err = nil // ya se envió uno hace menos de un minuto y sigue sirviendo
+		}
+		if err != nil {
+			return err
+		}
+		res.MFA, res.Celular = "sms", cuentas.Ocultar(celular)
+		if m.app.Cfg.MostrarCodigoDev() {
+			res.CodigoDev = codigo
+		}
+	} else if !activo {
 		// Primera vez: se genera el secreto que se escaneará con la app. Solo se guarda al confirmar un código.
 		sec := seguridad.NuevoSecretoTOTP()
 		c, err := m.app.Cifrador.Cifrar(sec)
@@ -70,7 +87,7 @@ func (m *Modulo) mfa(w http.ResponseWriter, r *http.Request) error {
 	if err := httpx.Leer(r, &in); err != nil {
 		return err
 	}
-	codigo := strings.ToUpper(strings.ReplaceAll(strings.TrimSpace(in.Codigo), " ", ""))
+	codigo := seguridad.NormalizarCodigo(in.Codigo)
 	ctx := r.Context()
 	var uid string
 	var respaldoNuevo []string
@@ -89,10 +106,12 @@ func (m *Modulo) mfa(w http.ResponseWriter, r *http.Request) error {
 		var cifrado *string
 		var ultimo int64
 		var respaldo []string
-		if err := tx.QueryRowContext(ctx, `SELECT totp_secreto_cifrado, totp_ultimo_paso, totp_respaldo FROM usuarios WHERE id=$1 FOR UPDATE`, uid).
-			Scan(&cifrado, &ultimo, pq.Array(&respaldo)); err != nil {
+		var metodo, rol, celular string
+		if err := tx.QueryRowContext(ctx, `SELECT totp_secreto_cifrado, totp_ultimo_paso, totp_respaldo, mfa_metodo, rol, celular FROM usuarios WHERE id=$1 FOR UPDATE`, uid).
+			Scan(&cifrado, &ultimo, pq.Array(&respaldo), &metodo, &rol, &celular); err != nil {
 			return err
 		}
+		porSMS := metodo == "sms" && rol != "admin" && pendiente == nil
 
 		configurando := pendiente != nil
 		fuente := cifrado
@@ -100,7 +119,16 @@ func (m *Modulo) mfa(w http.ResponseWriter, r *http.Request) error {
 			fuente = pendiente
 		}
 		ok, usoRespaldo := false, false
-		if fuente != nil {
+		msgSMS := ""
+		if porSMS && !seguridad.EsRespaldo(codigo) {
+			if err := m.validarOTP(ctx, tx, celular, "ingreso", codigo); err == nil {
+				ok = true
+			} else if e, esErr := err.(*httpx.Error); esErr && e.Mensaje != "El código no es correcto." {
+				msgSMS = e.Mensaje // venció o hay que pedir otro
+			} else if !esErr {
+				return err
+			}
+		} else if fuente != nil && !porSMS {
 			sec, err := m.app.Cifrador.Descifrar(*fuente)
 			if err != nil {
 				return err
@@ -111,7 +139,7 @@ func (m *Modulo) mfa(w http.ResponseWriter, r *http.Request) error {
 			}
 		}
 		// Código de respaldo (solo cuando la app ya estaba configurada).
-		if !ok && !configurando && len(codigo) == 11 {
+		if !ok && !configurando && seguridad.EsRespaldo(codigo) {
 			h := seguridad.HashSHA256(codigo)
 			if i := slices.Index(respaldo, h); i >= 0 {
 				ok, usoRespaldo = true, true
@@ -126,17 +154,19 @@ func (m *Modulo) mfa(w http.ResponseWriter, r *http.Request) error {
 			} else {
 				tx.ExecContext(ctx, `UPDATE mfa_desafios SET intentos=$2 WHERE token_hash=$1`, seguridad.HashSHA256(in.Desafio), intentos)
 				fallo = "El código no es correcto. Revisa que la hora de tu celular esté bien y usa el código actual."
+				if porSMS {
+					fallo = "El código no es correcto. Revisa el último SMS que te llegó."
+					if msgSMS != "" {
+						fallo = msgSMS
+					}
+				}
 			}
 			return nil
 		}
 
 		if configurando {
-			respaldoNuevo = seguridad.CodigosRespaldo(8)
-			respaldo = make([]string, len(respaldoNuevo))
-			for i, c := range respaldoNuevo {
-				respaldo[i] = seguridad.HashSHA256(c)
-			}
-			if _, err := tx.ExecContext(ctx, `UPDATE usuarios SET totp_secreto_cifrado=$2, totp_activo=true WHERE id=$1`, uid, *pendiente); err != nil {
+			respaldoNuevo, respaldo = seguridad.NuevosRespaldos()
+			if _, err := tx.ExecContext(ctx, `UPDATE usuarios SET totp_secreto_cifrado=$2, totp_activo=true, mfa_metodo='app' WHERE id=$1`, uid, *pendiente); err != nil {
 				return err
 			}
 			m.app.Auditar(ctx, tx, uid, "activar_mfa", "usuario", uid, nil)
@@ -167,6 +197,30 @@ func (m *Modulo) mfa(w http.ResponseWriter, r *http.Request) error {
 	s.CodigosRespaldo = respaldoNuevo
 	httpx.OK(w, s)
 	return nil
+}
+
+// reenviarMFA manda otro SMS con el código de ingreso (segundo paso por SMS).
+func (m *Modulo) reenviarMFA(w http.ResponseWriter, r *http.Request) error {
+	var in struct {
+		Desafio string `json:"desafio"`
+	}
+	if err := httpx.Leer(r, &in); err != nil {
+		return err
+	}
+	ctx := r.Context()
+	var celular, metodo string
+	err := m.app.DB.QueryRowContext(ctx, `SELECT u.celular, u.mfa_metodo FROM mfa_desafios d JOIN usuarios u ON u.id=d.usuario_id
+		WHERE d.token_hash=$1 AND d.expira_en > now()`, seguridad.HashSHA256(in.Desafio)).Scan(&celular, &metodo)
+	if core.SinFilas(err) {
+		return httpx.NuevoError(http.StatusUnauthorized, "desafio_vencido", "Pasaron más de 5 minutos. Vuelve a ingresar tu celular y contraseña.")
+	}
+	if err != nil {
+		return err
+	}
+	if metodo != "sms" {
+		return httpx.Invalido("Tu cuenta usa una app de autenticación.")
+	}
+	return m.enviarOTP(w, r, celular, "ingreso", map[string]any{"celular": cuentas.Ocultar(celular)})
 }
 
 // inactividadAdmin: minutos sin uso tras los que se cierra la sesión de un administrador

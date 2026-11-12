@@ -71,7 +71,8 @@ func (m *Modulo) cambiarCelular(w http.ResponseWriter, r *http.Request) error {
 	}
 	var hash string
 	var totp bool
-	if err := m.app.DB.QueryRowContext(ctx, `SELECT password_hash, totp_activo FROM usuarios WHERE id=$1`, u.ID).Scan(&hash, &totp); err != nil {
+	// Con segundo paso por SMS no se pide otro código: el SMS llegaría al número que se está cambiando.
+	if err := m.app.DB.QueryRowContext(ctx, `SELECT password_hash, totp_activo AND mfa_metodo='app' FROM usuarios WHERE id=$1`, u.ID).Scan(&hash, &totp); err != nil {
 		return err
 	}
 	if !seguridad.VerificarPassword(in.Password, hash) {

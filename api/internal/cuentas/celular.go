@@ -54,7 +54,7 @@ func Aplicar(ctx context.Context, tx *sql.Tx, app *core.App, c Cambio) (string, 
 	}
 	dosPasos := ""
 	if c.QuitarDosPasos {
-		dosPasos = `, totp_activo=false, totp_secreto_cifrado=NULL, totp_pendiente_cifrado=NULL, totp_respaldo='{}', totp_ultimo_paso=0`
+		dosPasos = `, totp_activo=false, mfa_metodo='app', totp_secreto_cifrado=NULL, totp_pendiente_cifrado=NULL, totp_respaldo='{}', totp_ultimo_paso=0`
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE usuarios SET celular=$2, celular_verificado=true, intentos_fallidos=0, bloqueado_hasta=NULL`+dosPasos+` WHERE id::text=$1`,
 		c.UsuarioID, c.Nuevo); err != nil {

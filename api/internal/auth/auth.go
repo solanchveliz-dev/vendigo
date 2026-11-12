@@ -32,6 +32,7 @@ func (m *Modulo) RutasPublicas(r chi.Router) {
 	r.Method("POST", "/reenviar", httpx.Handler(m.reenviar))
 	r.Method("POST", "/login", httpx.Handler(m.login))
 	r.Method("POST", "/mfa", httpx.Handler(m.mfa))
+	r.Method("POST", "/mfa/reenviar", httpx.Handler(m.reenviarMFA))
 	r.Method("POST", "/refresh", httpx.Handler(m.refresh))
 	r.Method("POST", "/logout", httpx.Handler(m.logout))
 	r.Method("POST", "/recuperar", httpx.Handler(m.recuperar))
@@ -55,6 +56,9 @@ func (m *Modulo) RutasPrivadas(r chi.Router) {
 	r.Method("POST", "/me/mfa/iniciar", httpx.Handler(m.iniciarMFA))
 	r.Method("POST", "/me/mfa/activar", httpx.Handler(m.activarMFA))
 	r.Method("POST", "/me/mfa/desactivar", httpx.Handler(m.desactivarMFA))
+	r.Method("POST", "/me/mfa/sms", httpx.Handler(m.activarSMS))
+	r.Method("POST", "/me/mfa/respaldo", httpx.Handler(m.nuevosRespaldos))
+	r.Method("POST", "/me/codigo", httpx.Handler(m.codigoConfirmar))
 	r.Method("POST", "/me/acceso-denegado", httpx.Handler(m.accesoDenegado))
 }
 

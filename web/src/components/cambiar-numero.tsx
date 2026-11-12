@@ -3,13 +3,14 @@
 import { useState } from "react";
 import { api, ErrorApi, useApi } from "@/lib/api";
 import type { Usuario } from "@/lib/tipos";
+import { formatearCodigo } from "@/lib/codigo-seguridad";
 import { Aviso, Boton, Campo, Entrada, EntradaClave, Modal, useAvisar } from "@/components/ui";
 
 // Cambiar el número con sesión: código al número nuevo + contraseña (+ app autenticadora si la usa).
 // Si la persona ya no tiene su número anterior no importa: el código llega al nuevo.
 export function CambiarNumero({ Fila }: { Fila: (p: { titulo: string; detalle?: string; children: React.ReactNode }) => React.ReactNode }) {
   const yo = useApi<Usuario>("/me");
-  const mfa = useApi<{ activo: boolean }>("/me/mfa");
+  const mfa = useApi<{ activo: boolean; metodo: "app" | "sms" }>("/me/mfa");
   const avisar = useAvisar();
   const [abierto, setAbierto] = useState(false);
   const [nuevo, setNuevo] = useState("");
@@ -81,9 +82,9 @@ export function CambiarNumero({ Fila }: { Fila: (p: { titulo: string; detalle?: 
               <Campo etiqueta="Tu contraseña">
                 <EntradaClave value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required />
               </Campo>
-              {mfa.datos?.activo && (
+              {mfa.datos?.activo && mfa.datos.metodo === "app" && (
                 <Campo etiqueta="Código de tu app de autenticación" ayuda="O uno de tus códigos de respaldo.">
-                  <Entrada value={dosPasos} onChange={(e) => setDosPasos(e.target.value)} autoComplete="one-time-code" required />
+                  <Entrada value={dosPasos} onChange={(e) => setDosPasos(formatearCodigo(e.target.value))} autoComplete="one-time-code" placeholder="000000 o XXXXX-XXXXX" required />
                 </Campo>
               )}
               <button type="button" onClick={pedirCodigo} className="text-sm font-semibold text-pino hover:underline">Enviar otro código</button>

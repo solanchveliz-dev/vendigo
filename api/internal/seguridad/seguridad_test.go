@@ -91,3 +91,18 @@ func TestTOTP(t *testing.T) {
 		t.Fatal("códigos de respaldo mal formados")
 	}
 }
+
+// El código de respaldo se acepta sin guion, con espacios o en minúsculas.
+func TestNormalizarCodigo(t *testing.T) {
+	casos := map[string]string{
+		"ABCDE-FGH23":   "ABCDE-FGH23",
+		"abcdefgh23":    "ABCDE-FGH23",
+		" abcde fgh23 ": "ABCDE-FGH23",
+		"123 456":       "123456",
+	}
+	for entrada, esperado := range casos {
+		if r := NormalizarCodigo(entrada); r != esperado {
+			t.Errorf("NormalizarCodigo(%q) = %q, se esperaba %q", entrada, r, esperado)
+		}
+	}
+}

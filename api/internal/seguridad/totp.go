@@ -78,3 +78,32 @@ func CodigosRespaldo(n int) []string {
 	}
 	return out
 }
+
+// NormalizarCodigo limpia lo que escribe la persona: mayúsculas, sin espacios ni guiones.
+// Si quedan 10 letras/números es un código de respaldo y se le pone el guion (XXXXX-XXXXX);
+// si son 6 dígitos queda igual (código de la app).
+func NormalizarCodigo(c string) string {
+	var b []byte
+	for _, r := range strings.ToUpper(c) {
+		if (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') {
+			b = append(b, byte(r))
+		}
+	}
+	if len(b) == 10 {
+		return string(b[:5]) + "-" + string(b[5:])
+	}
+	return string(b)
+}
+
+// EsRespaldo dice si un código (ya normalizado) tiene la forma de un código de respaldo.
+func EsRespaldo(c string) bool { return len(c) == 11 && c[5] == '-' }
+
+// NuevosRespaldos genera los códigos de respaldo y sus huellas (lo que se guarda en la base).
+func NuevosRespaldos() (codigos, huellas []string) {
+	codigos = CodigosRespaldo(8)
+	huellas = make([]string, len(codigos))
+	for i, c := range codigos {
+		huellas[i] = HashSHA256(c)
+	}
+	return
+}
