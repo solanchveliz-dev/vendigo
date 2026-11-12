@@ -22,6 +22,8 @@ export type Entrega = {
 
 export type Tienda = {
   id: string;
+  valoracion?: number | null;
+  valoraciones?: number;
   nombre: string;
   slug: string;
   rubro: string;

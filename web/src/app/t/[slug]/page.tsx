@@ -112,7 +112,12 @@ export default async function TiendaPublica({ params, searchParams }: { params: 
           {t.descripcion && <p className="mt-3 max-w-xl leading-relaxed text-tinta/80">{t.descripcion}</p>}
           <p className="mt-3 flex flex-wrap items-center justify-center gap-x-5 gap-y-1 text-sm text-gris">
             <span className="inline-flex items-center gap-1">
-              <Star className="size-4 fill-aviso text-aviso" /> <b className="text-tinta">{reputaciones[t.reputacion]}</b>
+              <Star className="size-4 fill-aviso text-aviso" />{" "}
+              {t.valoracion != null && (t.valoraciones ?? 0) > 0 ? (
+                <><b className="text-tinta">{t.valoracion.toFixed(1)}</b> ({t.valoraciones} {t.valoraciones === 1 ? "valoración" : "valoraciones"})</>
+              ) : (
+                <b className="text-tinta">{reputaciones[t.reputacion]}</b>
+              )}
             </span>
             <span>
               <b className="text-tinta">{ventas}</b> {ventas === 1 ? "venta" : "ventas"}
@@ -123,7 +128,7 @@ export default async function TiendaPublica({ params, searchParams }: { params: 
           </p>
 
           <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
-            <BotonSeguir clase={`${redondo} !bg-coral !text-white !ring-coral`} />
+            <BotonSeguir tiendaId={t.id} clase={`${redondo} !bg-coral !text-white !ring-coral`} />
             {redes.map((r) => (
               <a key={r.nombre} href={r.href} target="_blank" rel="noopener noreferrer" className={redondo} aria-label={r.nombre} title={r.nombre}>
                 {r.icono}

@@ -3,23 +3,27 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { ChevronDown, Home, LogOut, Search, ShoppingBag, Store, User } from "lucide-react";
+import { Bell, ChevronDown, Heart, Home, LogOut, MapPin, Search, ShoppingBag, Store, User } from "lucide-react";
 import { sesion, useApi } from "@/lib/api";
 import type { Usuario } from "@/lib/tipos";
 import { Cargando, cn } from "@/components/ui";
 import { iniciales } from "@/components/comprador/ui";
 import { BotonRiel, margenContenido, PieRiel, Riel, useRiel } from "@/components/panel/riel";
 
-// Menú del comprador (como el prototipo). Favoritos, direcciones y notificaciones se suman en la siguiente fase.
+// Menú del comprador (como el prototipo).
 const menu = [
   { href: "/mi-cuenta", texto: "Inicio", icono: Home },
   { href: "/buscar", texto: "Buscar emprendedores", icono: Search },
+  { href: "/mi-cuenta/favoritos", texto: "Favoritos", icono: Heart },
   { href: "/mi-cuenta/pedidos", texto: "Mis pedidos", icono: ShoppingBag },
+  { href: "/mi-cuenta/notificaciones", texto: "Notificaciones", icono: Bell },
   { href: "/mi-cuenta/perfil", texto: "Perfil", icono: User },
+  { href: "/mi-cuenta/direcciones", texto: "Direcciones", icono: MapPin },
 ];
 const arriba = [
   { href: "/mi-cuenta", texto: "Inicio" },
   { href: "/buscar", texto: "Explorar" },
+  { href: "/mi-cuenta/favoritos", texto: "Favoritos" },
   { href: "/mi-cuenta/pedidos", texto: "Mis pedidos" },
 ];
 
@@ -28,6 +32,9 @@ export default function LayoutComprador({ children }: { children: React.ReactNod
   const router = useRouter();
   const yo = useApi<Usuario>("/me");
   const riel = useRiel();
+  // Se vuelve a pedir al cambiar de página para que el contador de avisos esté al día.
+  const resumen = useApi<{ no_leidas: number; por_valorar: number }>(yo.datos && yo.datos.rol !== "admin" ? `/comprador/resumen?r=${ruta}` : null);
+  const noLeidas = resumen.datos?.no_leidas ?? 0;
   const [menuCuenta, setMenuCuenta] = useState(false);
   const caja = useRef<HTMLDivElement>(null);
 
@@ -57,7 +64,7 @@ export default function LayoutComprador({ children }: { children: React.ReactNod
         abierto={riel.abierto}
         inicio="/mi-cuenta"
         subtitulo="Mi cuenta"
-        items={menu}
+        items={menu.map((m) => ({ ...m, cuenta: m.href === "/mi-cuenta/notificaciones" ? noLeidas : m.href === "/mi-cuenta/pedidos" ? resumen.datos?.por_valorar : 0 }))}
         activo={activo}
         pie={
           vende ? (
@@ -89,7 +96,11 @@ export default function LayoutComprador({ children }: { children: React.ReactNod
             <input name="q" placeholder="¿Qué buscas? Ej. alfajores, joyería, polos…" className="h-[46px] w-full rounded-full bg-[#ece9e2] pl-12 pr-24 text-[15px] outline-none focus:ring-2 focus:ring-pino/30" />
             <button className="absolute right-1.5 top-1/2 h-[34px] -translate-y-1/2 rounded-full bg-pino px-4 text-[13px] font-bold text-white">Buscar</button>
           </form>
-          <div ref={caja} className="relative ml-auto">
+          <Link href="/mi-cuenta/notificaciones" className="relative ml-auto grid size-11 shrink-0 place-items-center rounded-full border border-linea bg-white" aria-label="Notificaciones">
+            <Bell className="size-5 text-pino" />
+            {noLeidas > 0 && <span className="absolute -right-[3px] -top-[3px] grid h-[19px] min-w-[19px] place-items-center rounded-full border-2 border-white bg-coral px-1 text-[11px] font-bold text-white">{noLeidas}</span>}
+          </Link>
+          <div ref={caja} className="relative">
             <button onClick={() => setMenuCuenta(!menuCuenta)} className="flex items-center gap-2 rounded-full border border-linea bg-white py-1 pl-1 pr-3" aria-label="Mi cuenta">
               <span className="grid size-9 place-items-center rounded-full bg-pino text-sm font-bold text-white">{iniciales(u.nombre)}</span>
               <b className="hidden text-sm text-tinta sm:block">{u.nombre.split(" ")[0]}</b>
@@ -99,6 +110,8 @@ export default function LayoutComprador({ children }: { children: React.ReactNod
               <div className="absolute right-0 top-14 w-60 rounded-2xl bg-white p-2 shadow-suave ring-1 ring-linea">
                 <Opcion href="/mi-cuenta/perfil" icono={User}>Mi perfil</Opcion>
                 <Opcion href="/mi-cuenta/pedidos" icono={ShoppingBag}>Mis pedidos</Opcion>
+                <Opcion href="/mi-cuenta/favoritos" icono={Heart}>Favoritos</Opcion>
+                <Opcion href="/mi-cuenta/direcciones" icono={MapPin}>Direcciones</Opcion>
                 <Opcion href={vende ? "/vendedor" : "/vendedor/crear-tienda"} icono={Store} acento>{vende ? "Ir a mi tienda" : "Crear mi tienda"}</Opcion>
                 <button onClick={salir} className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-semibold text-gris hover:bg-crema hover:text-tinta">
                   <LogOut className="size-4" /> Cerrar sesión

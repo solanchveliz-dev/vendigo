@@ -8,6 +8,7 @@ import { api, ErrorApi, usuarioActual } from "@/lib/api";
 import { soles } from "@/lib/formato";
 import { guardarCarrito, guardarSeparacion, leerCarrito, leerSeparacion, type ItemCarrito } from "@/lib/carrito";
 import type { Tienda, Usuario } from "@/lib/tipos";
+import type { Direccion } from "@/components/comprador/ui";
 import { Area, Aviso, Boton, Campo, Entrada, Selector, cn } from "@/components/ui";
 
 type FormaEntrega = "recojo" | "agencia" | "motorizado";
@@ -76,6 +77,7 @@ export function Checkout({ tienda: t, vista = false, live = false, minutosLive =
   const [codigo, setCodigo] = useState("");
   // Con la cuenta de comprador abierta: sus datos ya vienen llenos y su celular ya está verificado.
   const [cuenta, setCuenta] = useState<Usuario | null>(null);
+  const [direcciones, setDirecciones] = useState<Direccion[]>([]);
   const [enviado, setEnviado] = useState(false);
   const [codigoDev, setCodigoDev] = useState("");
   const [error, setError] = useState("");
@@ -89,6 +91,16 @@ export function Checkout({ tienda: t, vista = false, live = false, minutosLive =
       if (!u || u.rol === "admin") return;
       setCuenta(u);
       setF((x) => ({ ...x, nombre: x.nombre || u.nombre, celular: x.celular || u.celular }));
+      // Sus direcciones guardadas: la principal se llena sola para el delivery.
+      fetch("/api/v1/comprador/direcciones", { cache: "no-store" })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d: { direcciones: Direccion[] } | null) => {
+          if (!d?.direcciones.length) return;
+          setDirecciones(d.direcciones);
+          const p = d.direcciones.find((x) => x.principal) ?? d.direcciones[0];
+          setF((x) => (x.direccion ? x : { ...x, direccion: p.direccion, distrito: p.distrito, referencia: p.referencia }));
+        })
+        .catch(() => null);
     });
   }, []);
   const sinCodigo = !!cuenta && f.celular === cuenta.celular;
@@ -322,6 +334,20 @@ export function Checkout({ tienda: t, vista = false, live = false, minutosLive =
                   <Campo etiqueta="Celular" ayuda={sinCodigo ? "Es el celular de tu cuenta: no necesitas código." : cuenta ? "Te enviaremos un código a este número para confirmar." : "Te enviamos un código para confirmar. ¿Tienes cuenta? Ingresa y no te lo pediremos."}><Entrada {...campo("celular")} onChange={(e) => setF({ ...f, celular: e.target.value.replace(/\D/g, "") })} inputMode="numeric" maxLength={9} placeholder="9XXXXXXXX" autoComplete="tel" /></Campo>
                   {entrega === "motorizado" && (
                     <>
+                      {direcciones.length > 0 && (
+                        <div className="flex flex-wrap gap-2 sm:col-span-2">
+                          {direcciones.map((d) => (
+                            <button
+                              key={d.id}
+                              type="button"
+                              onClick={() => setF({ ...f, direccion: d.direccion, distrito: d.distrito, referencia: d.referencia })}
+                              className={cn("inline-flex items-center gap-1.5 rounded-full px-3.5 py-2 text-sm font-semibold ring-1 transition", f.direccion === d.direccion ? "bg-pino text-white ring-pino" : "bg-white text-tinta ring-linea hover:ring-pino")}
+                            >
+                              <MapPin className="size-4" /> {d.etiqueta}
+                            </button>
+                          ))}
+                        </div>
+                      )}
                       <Campo etiqueta="Dirección"><Entrada {...campo("direccion")} maxLength={200} autoComplete="street-address" /></Campo>
                       <Campo etiqueta="Distrito"><Entrada {...campo("distrito")} maxLength={80} /></Campo>
                       <Campo etiqueta="Referencia (opcional)"><Entrada {...campo("referencia")} maxLength={200} /></Campo>

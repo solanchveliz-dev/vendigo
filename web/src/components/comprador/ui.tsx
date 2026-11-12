@@ -1,6 +1,7 @@
 import Link from "next/link";
-import { Bike, ChevronRight, Package, ShoppingBag, Store } from "lucide-react";
+import { Bike, ChevronRight, Heart, Package, ShoppingBag, Star, Store } from "lucide-react";
 import { fecha, soles } from "@/lib/formato";
+import { rubros } from "@/lib/catalogos";
 import { cn } from "@/components/ui";
 
 export type PedidoComprador = {
@@ -20,6 +21,7 @@ export type PedidoComprador = {
   imagen_url: string;
   creado_en: string;
   grupo: "curso" | "entregado" | "cancelado";
+  valorado: boolean;
 };
 
 export const iniciales = (n: string) => n.split(" ").filter(Boolean).slice(0, 2).map((p) => p[0]).join("").toUpperCase();
@@ -68,11 +70,26 @@ export function Miniatura({ p, className }: { p: PedidoComprador; className?: st
   );
 }
 
-// Fila de "Mis pedidos": abre el seguimiento del pedido.
+// Fila de "Mis pedidos": abre el seguimiento del pedido. Si ya lo recibió y no lo valoró, ofrece valorarlo.
 export function FilaPedido({ p }: { p: PedidoComprador }) {
+  const valorar = p.grupo === "entregado" && !p.valorado;
+  return (
+    <div className="overflow-hidden rounded-[22px] bg-white shadow-suave ring-1 ring-linea/60 transition hover:ring-pino/40">
+      <Fila p={p} />
+      {valorar && (
+        <Link href={`/mi-cuenta/valorar/${p.codigo}`} className="flex items-center justify-between gap-3 border-t border-linea bg-aviso-claro/50 px-5 py-3 text-sm">
+          <span className="text-tinta">¿Qué tal tu compra? Tu opinión ayuda a otros compradores.</span>
+          <span className="inline-flex shrink-0 items-center gap-1.5 font-bold text-coral"><Star className="size-4 fill-current" /> Valorar</span>
+        </Link>
+      )}
+    </div>
+  );
+}
+
+function Fila({ p }: { p: PedidoComprador }) {
   const E = ENTREGA[p.entrega] ?? ENTREGA.recojo;
   return (
-    <Link href={`/seguimiento/${p.token}`} className="flex items-center gap-4 rounded-[22px] bg-white p-4 shadow-suave ring-1 ring-linea/60 transition hover:ring-pino/40 sm:p-5">
+    <Link href={`/seguimiento/${p.token}`} className="flex items-center gap-4 p-4 sm:p-5">
       <Miniatura p={p} className="size-16 shrink-0" />
       <div className="min-w-0 flex-1 space-y-2">
         <div className="flex flex-wrap items-center gap-2">
@@ -100,6 +117,33 @@ export function Vacio({ titulo, texto, children }: { titulo: string; texto: stri
       <h2 className="mt-4 text-xl font-extrabold text-tinta">{titulo}</h2>
       <p className="mx-auto mt-1 max-w-md text-sm text-gris">{texto}</p>
       {children && <div className="mt-5 flex justify-center gap-2">{children}</div>}
+    </div>
+  );
+}
+
+export type Direccion = { id: string; etiqueta: string; direccion: string; distrito: string; ciudad: string; referencia: string; principal: boolean };
+
+export type TiendaFav = { id: string; nombre: string; slug: string; rubro: string; lugar: string; logo_url: string };
+
+// Tarjeta de un emprendedor que sigue (favoritos y Mi inicio).
+export function TarjetaTienda({ t, alQuitar }: { t: TiendaFav; alQuitar?: () => void }) {
+  return (
+    <div className="flex items-center gap-4 rounded-[22px] bg-white p-5 shadow-suave ring-1 ring-linea/60">
+      {t.logo_url ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={t.logo_url} alt="" className="size-14 shrink-0 rounded-2xl object-cover" />
+      ) : (
+        <span className="grid size-14 shrink-0 place-items-center rounded-2xl bg-pino-claro text-pino"><Store className="size-6" /></span>
+      )}
+      <Link href={`/t/${t.slug}`} className="min-w-0 flex-1">
+        <b className="block truncate text-tinta">{t.nombre}</b>
+        <span className="block truncate text-sm text-gris">{rubros[t.rubro] ?? t.rubro}{t.lugar ? ` · ${t.lugar}` : ""}</span>
+      </Link>
+      {alQuitar && (
+        <button onClick={alQuitar} className="grid size-10 shrink-0 place-items-center rounded-full text-coral ring-1 ring-linea" aria-label="Dejar de seguir" title="Dejar de seguir">
+          <Heart className="size-[18px] fill-current" />
+        </button>
+      )}
     </div>
   );
 }

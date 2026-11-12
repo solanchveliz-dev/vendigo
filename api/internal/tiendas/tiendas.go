@@ -99,11 +99,14 @@ type Tienda struct {
 	TemaFuente  string  `json:"tema_fuente"`
 	Prefijo     string  `json:"prefijo_pedido"`
 	DestacadoID *string `json:"destacado_id"`
-	Aviso       string  `json:"aviso"`
-	Historia    string  `json:"historia"`
-	HistoriaKey *string `json:"historia_foto_key"`
-	HistoriaURL string  `json:"historia_foto_url"`
-	VendeDesde  *int    `json:"vende_desde"`
+	// Valoraciones de sus compradores (solo en la página pública).
+	Valoracion   *float64 `json:"valoracion,omitempty"`
+	Valoraciones int      `json:"valoraciones"`
+	Aviso        string   `json:"aviso"`
+	Historia     string   `json:"historia"`
+	HistoriaKey  *string  `json:"historia_foto_key"`
+	HistoriaURL  string   `json:"historia_foto_url"`
+	VendeDesde   *int     `json:"vende_desde"`
 	// Pago directo a la tienda (VendiGo no recibe el dinero)
 	YapeNumero    string   `json:"yape_numero"`
 	PlinNumero    string   `json:"plin_numero"`
@@ -561,6 +564,7 @@ func (m *Modulo) publica(w http.ResponseWriter, r *http.Request) error {
 	if !t.IdentidadVerificada && !m.EsDuena(r, t.usuarioID) {
 		return httpx.ErrNoEncontrado
 	}
+	m.app.DB.QueryRowContext(r.Context(), `SELECT avg(estrellas_tienda), count(*) FROM valoraciones WHERE tienda_id=$1`, t.ID).Scan(&t.Valoracion, &t.Valoraciones)
 	t.ReclamoPedidoID = "" // dato interno de la tienda
 	// El WhatsApp y el correo son solo para que VendiGo avise a la tienda: no se muestran a los compradores.
 	// Los datos de Yape/Plin se muestran recién en el seguimiento del pedido, al momento de pagar.

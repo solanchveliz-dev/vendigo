@@ -48,6 +48,12 @@ func (m *Modulo) inicio(w http.ResponseWriter, r *http.Request) error {
 	db.QueryRowContext(ctx, `SELECT avg(extract(epoch FROM q.respondida_en - q.creado_en)/60) FROM preguntas q JOIN productos p ON p.id=q.producto_id
 		WHERE p.tienda_id=$1 AND q.respondida_en > now() - interval '30 days'`, tid).Scan(&respuesta)
 	rend := map[string]any{"visitas_30d": visitas, "pedidos_30d": pedidos30, "conversion_pct": nil, "respuesta_min": nil, "valoracion": nil}
+	// Promedio de estrellas que le dieron sus compradores (todas las valoraciones).
+	var valoracion sql.NullFloat64
+	db.QueryRowContext(ctx, `SELECT avg(estrellas_tienda) FROM valoraciones WHERE tienda_id=$1`, tid).Scan(&valoracion)
+	if valoracion.Valid {
+		rend["valoracion"] = valoracion.Float64
+	}
 	// Solo se muestra si hay datos suficientes (los pedidos no pueden superar a las visitas).
 	if visitas >= 20 && visitas >= pedidos30 {
 		rend["conversion_pct"] = float64(pedidos30) * 100 / float64(visitas)

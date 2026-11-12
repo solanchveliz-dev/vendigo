@@ -2,6 +2,7 @@ import { estiloTema } from "@/lib/tema";
 import { PieLegal } from "@/components/legal/pie";
 import type { Metadata } from "next";
 import { ContarVisita } from "@/components/tienda/contar-visita";
+import { BotonGuardar } from "@/components/tienda/seguir";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Bike, Check, ChevronRight, CircleHelp, MessageCircle, Package, RefreshCw, ShieldCheck, Store } from "lucide-react";
@@ -107,7 +108,10 @@ export default async function ProductoPublico({ params, searchParams }: Params &
               <ChevronRight className="size-5 text-tinta" />
             </Link>
 
-            <h1 className="mt-5 text-[40px] font-extrabold leading-tight text-tinta">{p.nombre}</h1>
+            <div className="mt-5 flex items-start justify-between gap-3">
+              <h1 className="text-[40px] font-extrabold leading-tight text-tinta">{p.nombre}</h1>
+              {!vista && <BotonGuardar productoId={p.id} />}
+            </div>
             <p className="mt-2 text-sm text-gris">
               {p.vendidos > 0 ? `${p.vendidos} vendidos` : "Recién publicado"}
               {preguntas.length > 0 && (

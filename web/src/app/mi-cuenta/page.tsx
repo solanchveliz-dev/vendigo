@@ -1,14 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { ChevronRight, Search, Store } from "lucide-react";
+import { ChevronRight, Search, Star, Store } from "lucide-react";
 import { useApi } from "@/lib/api";
 import { soles } from "@/lib/formato";
 import { rubros } from "@/lib/catalogos";
 import { Cargando } from "@/components/ui";
-import { ENTREGA, EstadoPedido, Miniatura, Progreso, type PedidoComprador } from "@/components/comprador/ui";
+import { ENTREGA, EstadoPedido, Miniatura, Progreso, TarjetaTienda, type PedidoComprador, type TiendaFav } from "@/components/comprador/ui";
 
-type Resumen = { nombre: string; pedidos: number; en_curso: number; pedidos_en_curso: PedidoComprador[] };
+type Resumen = { nombre: string; pedidos: number; en_curso: number; pedidos_en_curso: PedidoComprador[]; por_valorar: number; tiendas_seguidas: TiendaFav[] };
 type TiendaR = { id: string; nombre: string; slug: string; rubro: string; lugar: string; logo_url: string; descripcion: string };
 
 function Seccion({ titulo, enlace, texto, children }: { titulo: string; enlace?: string; texto?: string; children: React.ReactNode }) {
@@ -72,6 +72,22 @@ export default function MiInicio() {
           </div>
         </Seccion>
       )}
+
+      {datos.por_valorar > 0 && (
+        <Link href="/mi-cuenta/pedidos" className="flex items-center gap-3 rounded-2xl bg-aviso-claro/60 px-5 py-4 text-sm text-tinta ring-1 ring-aviso/20">
+          <Star className="size-5 shrink-0 fill-aviso text-aviso" />
+          <span className="flex-1">Tienes {datos.por_valorar} {datos.por_valorar === 1 ? "pedido entregado" : "pedidos entregados"} por valorar. Tu opinión ayuda a otros compradores.</span>
+          <ChevronRight className="size-5 text-gris" />
+        </Link>
+      )}
+
+      <Seccion titulo="Emprendedores que sigues" enlace="/mi-cuenta/favoritos" texto="Ver todos">
+        {datos.tiendas_seguidas.length ? (
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{datos.tiendas_seguidas.map((t) => <TarjetaTienda key={t.id} t={t} />)}</div>
+        ) : (
+          <p className="text-sm text-gris">Aún no sigues a nadie. Toca el corazón en un emprendedor para verlo aquí.</p>
+        )}
+      </Seccion>
 
       {datos.pedidos === 0 && (
         <p className="rounded-2xl bg-white px-5 py-4 text-sm text-gris ring-1 ring-linea/60">
