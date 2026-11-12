@@ -83,10 +83,15 @@ func (t infoTienda) textoEnvios() string {
 
 // NuevaPregunta guarda la pregunta de un comprador. Si la tienda tiene activas las respuestas
 // automáticas y la respuesta está en su información, se responde sola (sin IA). Si no, avisa a la tienda.
-func NuevaPregunta(ctx context.Context, app *core.App, productoID, autor, texto string) error {
+// usuarioID es quien pregunta (vacío en la demo): cuando la tienda responda, le llega un aviso.
+func NuevaPregunta(ctx context.Context, app *core.App, productoID, usuarioID, autor, texto string) error {
 	texto = strings.TrimSpace(texto)
 	if n := len([]rune(texto)); n < 3 || n > 300 {
 		return httpx.Invalido("La pregunta debe tener entre 3 y 300 caracteres.")
+	}
+	var usuario any
+	if usuarioID != "" {
+		usuario = usuarioID
 	}
 	return app.EnTransaccion(ctx, func(tx *sql.Tx) error {
 		var tid, nombre string
@@ -104,11 +109,11 @@ func NuevaPregunta(ctx context.Context, app *core.App, productoID, autor, texto 
 			respuesta = respuestaAutomatica(ctx, tx, tid, productoID, texto)
 		}
 		if respuesta != "" {
-			_, err = tx.ExecContext(ctx, `INSERT INTO preguntas (producto_id, autor_nombre, pregunta, respuesta, respondida_en, automatica)
-				VALUES ($1,$2,$3,$4,now(),true)`, productoID, autor, texto, respuesta)
+			_, err = tx.ExecContext(ctx, `INSERT INTO preguntas (producto_id, usuario_id, autor_nombre, pregunta, respuesta, respondida_en, automatica)
+				VALUES ($1,$2,$3,$4,$5,now(),true)`, productoID, usuario, autor, texto, respuesta)
 			return err
 		}
-		if _, err = tx.ExecContext(ctx, `INSERT INTO preguntas (producto_id, autor_nombre, pregunta) VALUES ($1,$2,$3)`, productoID, autor, texto); err != nil {
+		if _, err = tx.ExecContext(ctx, `INSERT INTO preguntas (producto_id, usuario_id, autor_nombre, pregunta) VALUES ($1,$2,$3,$4)`, productoID, usuario, autor, texto); err != nil {
 			return err
 		}
 		primero := strings.Fields(autor + " Cliente")[0]

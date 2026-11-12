@@ -30,6 +30,7 @@ func (m *Modulo) rutasFase2(r chi.Router) {
 	r.Method("GET", "/notificaciones", httpx.Handler(m.notificaciones))
 	r.Method("POST", "/notificaciones/leer", httpx.Handler(m.leerNotificaciones))
 
+	r.Method("POST", "/productos/{id}/preguntas", httpx.Handler(m.preguntar))
 	r.Method("GET", "/pedidos/{codigo}/valorar", httpx.Handler(m.paraValorar))
 	r.Method("POST", "/pedidos/{codigo}/valorar", httpx.Handler(m.valorar))
 }
@@ -502,4 +503,47 @@ func recortar(s string) string {
 		return string(r[:120]) + "…"
 	}
 	return s
+}
+
+// ---------- preguntas a la tienda ----------
+
+const maxPreguntasDia = 20
+
+// preguntar publica la pregunta del comprador en el producto. Si la tienda la responde, le llega un aviso.
+func (m *Modulo) preguntar(w http.ResponseWriter, r *http.Request) error {
+	var in struct {
+		Pregunta string `json:"pregunta"`
+	}
+	if err := httpx.Leer(r, &in); err != nil {
+		return err
+	}
+	ctx := r.Context()
+	uid := usuario(r)
+	pid := chi.URLParam(r, "id")
+	var nombre string
+	var propia bool
+	err := m.app.DB.QueryRowContext(ctx, `SELECT u.nombre, t.usuario_id=u.id FROM productos p JOIN tiendas t ON t.id=p.tienda_id, usuarios u
+		WHERE p.id::text=$1 AND u.id=$2 AND p.activo AND NOT p.eliminado AND `+visible, pid, uid).Scan(&nombre, &propia)
+	if core.SinFilas(err) {
+		return httpx.ErrNoEncontrado
+	}
+	if err != nil {
+		return err
+	}
+	if propia {
+		return httpx.Invalido("No puedes preguntar en tu propia tienda.")
+	}
+	var hoy int
+	if err := m.app.DB.QueryRowContext(ctx, `SELECT count(*) FROM preguntas WHERE usuario_id=$1 AND creado_en > now() - interval '1 day'`, uid).Scan(&hoy); err != nil {
+		return err
+	}
+	if hoy >= maxPreguntasDia {
+		return httpx.NuevoError(http.StatusTooManyRequests, "muchas_preguntas", "Hiciste muchas preguntas hoy. Vuelve a intentarlo mañana.")
+	}
+	// En la página se muestra solo el primer nombre de quien pregunta.
+	if err := productos.NuevaPregunta(ctx, m.app, pid, uid, strings.Fields(nombre + " Cliente")[0], in.Pregunta); err != nil {
+		return err
+	}
+	httpx.JSON(w, http.StatusCreated, map[string]string{"mensaje": "Publicamos tu pregunta. Te avisaremos cuando la tienda responda."})
+	return nil
 }

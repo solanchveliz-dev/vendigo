@@ -2,10 +2,10 @@ import { estiloTema } from "@/lib/tema";
 import { PieLegal } from "@/components/legal/pie";
 import type { Metadata } from "next";
 import { ContarVisita } from "@/components/tienda/contar-visita";
-import { BotonGuardar } from "@/components/tienda/seguir";
+import { RegistrarVisto } from "@/components/tienda/registrar-visto";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Bike, Check, ChevronRight, CircleHelp, MessageCircle, Package, RefreshCw, ShieldCheck, Store } from "lucide-react";
+import { Bike, Check, ChevronRight, CircleHelp, MessageCircle, Package, RefreshCw, ShieldCheck, Star, Store } from "lucide-react";
 import { API_URL, cabeceraSesion } from "@/lib/servidor/sesion";
 import { InsigniasTienda } from "@/components/tienda/insignias";
 import { hace, soles } from "@/lib/formato";
@@ -15,6 +15,7 @@ import { CabeceraPublica } from "@/components/tienda/cabecera";
 import { CompraProducto, GaleriaProducto } from "@/components/tienda/compra-producto";
 import { BotonPregunta } from "@/components/tienda/pregunta";
 
+type Opinion = { autor: string; estrellas: number; comentario: string; creado_en: string };
 type Pregunta = { pregunta: string; respuesta: string | null; respondida_en: string | null; creado_en: string; automatica?: boolean };
 
 // Página pública de un producto. Se genera en el servidor para que Google pueda leerla.
@@ -25,7 +26,7 @@ async function cargar(slug: string, id: string) {
     fetch(`${API_URL}/api/v1/tiendas/${encodeURIComponent(slug)}/productos/${encodeURIComponent(id)}`, { cache: "no-store", headers }),
   ]);
   if (!t.ok || !p.ok) return null;
-  const d = (await p.json()) as { producto: Producto; preguntas: Pregunta[] };
+  const d = (await p.json()) as { producto: Producto; preguntas: Pregunta[]; opiniones?: Opinion[] };
   return { tienda: (await t.json()) as Tienda, ...d };
 }
 
@@ -52,6 +53,7 @@ export default async function ProductoPublico({ params, searchParams }: Params &
   const d = await cargar(slug, id).catch(() => null);
   if (!d) notFound();
   const { tienda: t, producto: p, preguntas } = d;
+  const opiniones = d.opiniones ?? [];
   const lugar = t.distrito || t.ciudad;
 
   const confianza = [
@@ -75,7 +77,13 @@ export default async function ProductoPublico({ params, searchParams }: Params &
 
   return (
     <div className="min-h-screen bg-crema">
-      {!vista && <><CabeceraPublica /><ContarVisita slug={slug} productoId={p.id} /></>}
+      {!vista && (
+        <>
+          <CabeceraPublica />
+          <ContarVisita slug={slug} productoId={p.id} />
+          <RegistrarVisto id={p.id} nombre={p.nombre} slug={t.slug} tienda={t.nombre} imagen={p.imagenes[0]?.url ?? ""} precio={p.oferta?.precio_final_centimos ?? p.precio_centimos} />
+        </>
+      )}
 
       <main className="mx-auto max-w-[1400px] px-5 pb-16 sm:px-10" style={estiloTema(t)}>
         <nav className="flex items-center gap-1.5 py-6 text-sm text-gris">
@@ -108,10 +116,7 @@ export default async function ProductoPublico({ params, searchParams }: Params &
               <ChevronRight className="size-5 text-tinta" />
             </Link>
 
-            <div className="mt-5 flex items-start justify-between gap-3">
-              <h1 className="text-[40px] font-extrabold leading-tight text-tinta">{p.nombre}</h1>
-              {!vista && <BotonGuardar productoId={p.id} />}
-            </div>
+            <h1 className="mt-5 text-[40px] font-extrabold leading-tight text-tinta">{p.nombre}</h1>
             <p className="mt-2 text-sm text-gris">
               {p.vendidos > 0 ? `${p.vendidos} vendidos` : "Recién publicado"}
               {preguntas.length > 0 && (
@@ -236,12 +241,33 @@ export default async function ProductoPublico({ params, searchParams }: Params &
                 <p className="mt-1 text-sm text-gris">Sé el primero en preguntar.</p>
               </div>
             )}
-            <BotonPregunta />
+            {!vista && <BotonPregunta productoId={p.id} />}
           </section>
         </div>
 
         <section className="mt-5 rounded-[22px] bg-white p-6 ring-1 ring-linea/50">
           <h2 className="text-xl font-extrabold text-tinta">Opiniones de compras reales</h2>
+          {opiniones.length > 0 ? (
+            <>
+              <p className="mt-1 flex items-center gap-1.5 text-sm text-gris">
+                <Star className="size-4 fill-aviso text-aviso" />
+                <b className="text-tinta">{(opiniones.reduce((a, o) => a + o.estrellas, 0) / opiniones.length).toFixed(1)}</b>
+                · {opiniones.length} {opiniones.length === 1 ? "opinión" : "opiniones"} de quienes lo compraron y recibieron
+              </p>
+              <ul className="mt-4 divide-y divide-linea/70">
+                {opiniones.map((o, i) => (
+                  <li key={i} className="py-4">
+                    <div className="flex items-center gap-2">
+                      <span className="flex">{[1, 2, 3, 4, 5].map((n) => <Star key={n} className={n <= o.estrellas ? "size-4 fill-aviso text-aviso" : "size-4 text-linea"} />)}</span>
+                      <b className="text-sm text-tinta">{o.autor || "Comprador"}</b>
+                      <span className="text-xs text-gris">· {hace(o.creado_en)}</span>
+                    </div>
+                    {o.comentario && <p className="mt-1.5 text-sm text-tinta/85">{o.comentario}</p>}
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : (
           <div className="grid place-items-center py-10 text-center">
             <span className="grid size-14 place-items-center rounded-full bg-arena text-pino">
               <MessageCircle className="size-6" />
@@ -249,6 +275,7 @@ export default async function ProductoPublico({ params, searchParams }: Params &
             <p className="mt-3 font-bold text-tinta">Aún no hay opiniones</p>
             <p className="mt-1 max-w-sm text-sm text-gris">Solo opinan quienes compraron. Aparecen cuando reciben su pedido.</p>
           </div>
+          )}
         </section>
         <PieLegal className="mt-14 border-t border-linea pt-6" />
       </main>

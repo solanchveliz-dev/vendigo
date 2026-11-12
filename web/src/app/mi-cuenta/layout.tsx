@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { Bell, ChevronDown, Heart, Home, LogOut, MapPin, Search, ShoppingBag, Store, User } from "lucide-react";
+import { Bell, ChevronDown, Heart, History, Home, LogOut, MapPin, Search, ShoppingBag, Store, User } from "lucide-react";
 import { sesion, useApi } from "@/lib/api";
 import type { Usuario } from "@/lib/tipos";
 import { Cargando, cn } from "@/components/ui";
@@ -19,6 +19,7 @@ const menu = [
   { href: "/mi-cuenta/notificaciones", texto: "Notificaciones", icono: Bell },
   { href: "/mi-cuenta/perfil", texto: "Perfil", icono: User },
   { href: "/mi-cuenta/direcciones", texto: "Direcciones", icono: MapPin },
+  { href: "/mi-cuenta/vistos", texto: "Vistos recientemente", icono: History },
 ];
 const arriba = [
   { href: "/mi-cuenta", texto: "Inicio" },
@@ -112,6 +113,7 @@ export default function LayoutComprador({ children }: { children: React.ReactNod
                 <Opcion href="/mi-cuenta/pedidos" icono={ShoppingBag}>Mis pedidos</Opcion>
                 <Opcion href="/mi-cuenta/favoritos" icono={Heart}>Favoritos</Opcion>
                 <Opcion href="/mi-cuenta/direcciones" icono={MapPin}>Direcciones</Opcion>
+                <Opcion href="/mi-cuenta/vistos" icono={History}>Vistos recientemente</Opcion>
                 <Opcion href={vende ? "/vendedor" : "/vendedor/crear-tienda"} icono={Store} acento>{vende ? "Ir a mi tienda" : "Crear mi tienda"}</Opcion>
                 <button onClick={salir} className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-semibold text-gris hover:bg-crema hover:text-tinta">
                   <LogOut className="size-4" /> Cerrar sesión

@@ -1,5 +1,6 @@
 "use client";
 
+import { BotonGuardar } from "@/components/tienda/seguir";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -186,13 +187,17 @@ export function CompraProducto({ producto: p, slug, pausada = false, vista = fal
         >
           <ShoppingBag className="size-5 shrink-0" /> <span className="hidden sm:inline">Agregar</span>
         </button>
-        <button
-          onClick={() => pronto(vista ? "Vista previa: aquí no se puede comprar." : "Pronto podrás guardar favoritos con tu cuenta.")}
-          className="grid size-[52px] shrink-0 place-items-center rounded-full bg-white text-tinta ring-1 ring-linea transition hover:text-coral"
-          aria-label="Guardar en favoritos"
-        >
-          <Heart className="size-5" />
-        </button>
+        {vista ? (
+          <button
+            onClick={() => pronto("Vista previa: aquí no se puede comprar.")}
+            className="grid size-[52px] shrink-0 place-items-center rounded-full bg-white text-tinta ring-1 ring-linea transition hover:text-coral"
+            aria-label="Guardar en favoritos"
+          >
+            <Heart className="size-5" />
+          </button>
+        ) : (
+          <BotonGuardar productoId={p.id} clase="grid size-[52px] shrink-0 place-items-center rounded-full bg-white text-coral ring-1 ring-linea transition hover:text-coral" />
+        )}
       </div>
       )}
       {aviso && <p className="mt-2 text-center text-sm font-semibold text-gris">{aviso}</p>}

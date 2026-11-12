@@ -176,7 +176,7 @@ func (m *Modulo) pregunta(w http.ResponseWriter, r *http.Request) error {
 	if pid == "" {
 		return httpx.Invalido("Primero publica al menos un producto.")
 	}
-	if err := productos.NuevaPregunta(ctx, m.app, pid, nombres[rand.IntN(len(nombres))], preguntas[rand.IntN(len(preguntas))]); err != nil {
+	if err := productos.NuevaPregunta(ctx, m.app, pid, "", nombres[rand.IntN(len(nombres))], preguntas[rand.IntN(len(preguntas))]); err != nil {
 		return err
 	}
 	httpx.OK(w, map[string]string{"mensaje": "Llegó una pregunta nueva."})

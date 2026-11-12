@@ -597,13 +597,22 @@ func (m *Modulo) responder(w http.ResponseWriter, r *http.Request) error {
 	if n := len([]rune(in.Respuesta)); n < 2 || n > 500 {
 		return httpx.Invalido("La respuesta debe tener entre 2 y 500 caracteres.")
 	}
-	res, err := m.app.DB.ExecContext(ctx, `UPDATE preguntas q SET respuesta=$3, respondida_en=now(), automatica=false
-		FROM productos p WHERE q.id::text=$1 AND p.id=q.producto_id AND p.tienda_id=$2`, chi.URLParam(r, "id"), tid, in.Respuesta)
+	// Si quien preguntó tiene cuenta, le llega un aviso con el enlace al producto.
+	var pid, producto, slug string
+	var autor sql.NullString
+	err = m.app.DB.QueryRowContext(ctx, `UPDATE preguntas q SET respuesta=$3, respondida_en=now(), automatica=false
+		FROM productos p JOIN tiendas t ON t.id=p.tienda_id
+		WHERE q.id::text=$1 AND p.id=q.producto_id AND p.tienda_id=$2
+		RETURNING q.usuario_id, p.id, p.nombre, t.slug`, chi.URLParam(r, "id"), tid, in.Respuesta).Scan(&autor, &pid, &producto, &slug)
+	if core.SinFilas(err) {
+		return httpx.ErrNoEncontrado
+	}
 	if err != nil {
 		return err
 	}
-	if n, _ := res.RowsAffected(); n == 0 {
-		return httpx.ErrNoEncontrado
+	if autor.Valid {
+		m.app.DB.ExecContext(ctx, `INSERT INTO notificaciones (usuario_id, titulo, cuerpo, enlace, tipo) VALUES ($1,$2,$3,$4,'consultas')`,
+			autor.String, "Respondieron tu pregunta sobre "+producto, in.Respuesta, "/t/"+slug+"/p/"+pid)
 	}
 	httpx.OK(w, map[string]string{"mensaje": "Respuesta publicada."})
 	return nil
@@ -654,7 +663,36 @@ type PreguntaPublica struct {
 	Automatica   bool       `json:"automatica"`
 }
 
-// productoPublico devuelve un producto publicado de la tienda y sus preguntas.
+// Opinion es la valoración de alguien que compró el producto y lo recibió.
+type Opinion struct {
+	Autor      string    `json:"autor"`
+	Estrellas  int       `json:"estrellas"`
+	Comentario string    `json:"comentario"`
+	CreadoEn   time.Time `json:"creado_en"`
+}
+
+// opiniones del producto: solo de compras entregadas (las valoraciones no se pueden dar de otra forma).
+func (m *Modulo) opiniones(ctx context.Context, productoID string) ([]Opinion, error) {
+	rows, err := m.app.DB.QueryContext(ctx, `SELECT split_part(COALESCE(u.nombre, d.comprador_nombre), ' ', 1), vp.estrellas, v.comentario, v.creado_en
+		FROM valoraciones_productos vp JOIN valoraciones v ON v.id=vp.valoracion_id JOIN pedidos d ON d.id=v.pedido_id
+		LEFT JOIN usuarios u ON u.id=v.usuario_id
+		WHERE vp.producto_id=$1 ORDER BY v.creado_en DESC LIMIT 30`, productoID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []Opinion{}
+	for rows.Next() {
+		var o Opinion
+		if err := rows.Scan(&o.Autor, &o.Estrellas, &o.Comentario, &o.CreadoEn); err != nil {
+			return nil, err
+		}
+		out = append(out, o)
+	}
+	return out, rows.Err()
+}
+
+// productoPublico devuelve un producto publicado de la tienda, sus preguntas y sus opiniones.
 func (m *Modulo) productoPublico(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	var tid string
@@ -694,7 +732,11 @@ func (m *Modulo) productoPublico(w http.ResponseWriter, r *http.Request) error {
 		}
 		preguntas = append(preguntas, q)
 	}
-	httpx.OK(w, map[string]any{"producto": l[0], "preguntas": preguntas})
+	ops, err := m.opiniones(ctx, l[0].ID)
+	if err != nil {
+		return err
+	}
+	httpx.OK(w, map[string]any{"producto": l[0], "preguntas": preguntas, "opiniones": ops})
 	return nil
 }
 

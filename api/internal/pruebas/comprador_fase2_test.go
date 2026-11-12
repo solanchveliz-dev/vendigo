@@ -10,6 +10,7 @@ import (
 
 	"github.com/solanchveliz-dev/vendigo/api/internal/comprador"
 	"github.com/solanchveliz-dev/vendigo/api/internal/httpx"
+	"github.com/solanchveliz-dev/vendigo/api/internal/productos"
 )
 
 // llamarComprador hace una petición a las rutas del comprador con la sesión de uid.
@@ -113,5 +114,44 @@ func TestDireccionesGuardadas(t *testing.T) {
 	}
 	if d := texto(t, `SELECT direccion FROM direcciones WHERE usuario_id=$1 AND principal`, uid); d != "Jr. Cusco 456" {
 		t.Fatalf("la otra debía pasar a principal, es %s", d)
+	}
+}
+
+// El comprador pregunta en un producto; cuando la tienda responde, le llega un aviso que lo lleva al producto.
+// En su propia tienda no puede preguntar.
+func TestPreguntaDelCompradorYAvisoAlResponder(t *testing.T) {
+	necesitaBase(t)
+	tid := crearTienda(t)
+	verificar(t, tid, "identidad")
+	duena := texto(t, `SELECT usuario_id::text FROM tiendas WHERE id=$1`, tid)
+	var pid string
+	if err := base.QueryRow(`INSERT INTO productos (tienda_id, nombre, precio_centimos, stock) VALUES ($1, 'Aretes de plata', 3500, 5) RETURNING id::text`, tid).Scan(&pid); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := base.Exec(`UPDATE tiendas SET respuestas_automaticas=false WHERE id=$1`, tid); err != nil {
+		t.Fatal(err)
+	}
+	uid := crearUsuario(t, "comprador")
+	ruta := "/productos/" + pid + "/preguntas"
+	if c := llamarComprador(t, duena, "POST", ruta, `{"pregunta":"¿Tienen en dorado?"}`); c != http.StatusBadRequest {
+		t.Fatalf("la dueña no puede preguntar en su tienda (respondió %d)", c)
+	}
+	if c := llamarComprador(t, uid, "POST", ruta, `{"pregunta":"¿Tienen en dorado?"}`); c != http.StatusCreated {
+		t.Fatalf("no se publicó la pregunta (respondió %d)", c)
+	}
+	qid := texto(t, `SELECT id::text FROM preguntas WHERE producto_id=$1 AND usuario_id=$2`, pid, uid)
+
+	rt := chi.NewRouter()
+	productos.Nuevo(app).RutasVendedor(rt)
+	req := httptest.NewRequest("POST", "/preguntas/"+qid+"/responder", strings.NewReader(`{"respuesta":"Sí, también en dorado."}`))
+	req.Header.Set("Content-Type", "application/json")
+	req = req.WithContext(httpx.ConUsuario(req.Context(), httpx.Usuario{ID: duena, Rol: "vendedor"}))
+	rec := httptest.NewRecorder()
+	rt.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("no se respondió (respondió %d)", rec.Code)
+	}
+	if n := numero(t, `SELECT count(*) FROM notificaciones WHERE usuario_id=$1 AND enlace = '/t/' || (SELECT slug FROM tiendas WHERE id=$3) || '/p/' || $2::text`, uid, pid, tid); n != 1 {
+		t.Fatalf("debía llegar 1 aviso al comprador, llegaron %d", n)
 	}
 }
