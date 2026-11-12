@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { use, useEffect, useRef, useState } from "react";
 import { Check, ChevronRight, Copy, CreditCard, ExternalLink, Flag, ImagePlus, KeyRound, MessageCircle, ShieldCheck } from "lucide-react";
-import { api, ErrorApi, useApi } from "@/lib/api";
+import { api, ErrorApi, useApi, usuarioActual } from "@/lib/api";
 import { fecha, soles } from "@/lib/formato";
 import type { PedidoDetalle, Reclamo } from "@/lib/tipos";
 import { Area, Aviso, Boton, Campo, Cargando, Entrada, Modal, Selector, useAvisar } from "@/components/ui";
@@ -130,6 +130,11 @@ export default function Seguimiento({ params }: { params: Promise<{ token: strin
     setNuevo(marca || new URLSearchParams(window.location.search).get("nuevo") === "1");
   }, [token]);
   const { datos, error, recargar } = useApi<Datos>(`/seguimiento/${token}`);
+  // Sin sesión se le ofrece crear su cuenta (opcional) para ver todas sus compras juntas.
+  const [conCuenta, setConCuenta] = useState<boolean | null>(null);
+  useEffect(() => {
+    usuarioActual().then((u) => setConCuenta(!!u));
+  }, []);
   const avisar = useAvisar();
   // Volvió de Mercado Pago (?payment_id=…): se pide revisar el pago en la API sin esperar el aviso (webhook).
   useEffect(() => {
@@ -240,6 +245,28 @@ export default function Seguimiento({ params }: { params: Promise<{ token: strin
               </div>
             </section>
           </>
+        )}
+
+        {conCuenta === false && (
+          <section className="flex flex-wrap items-center gap-4 rounded-[22px] bg-pino p-5 text-white">
+            <div className="min-w-0 flex-1">
+              <b className="block text-lg">Crea tu cuenta y ten todas tus compras en un solo lugar</b>
+              <p className="text-sm text-white/80">Es opcional. Usa este mismo celular y verás este pedido y los siguientes en «Mis pedidos», sin guardar enlaces.</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Link href={`/registro?${new URLSearchParams({ tipo: "comprar", nombre: p.comprador, celular: p.comprador_celular ?? "", siguiente: "/mi-cuenta/pedidos" })}`} className="inline-flex h-11 items-center rounded-full bg-coral px-5 text-sm font-bold text-white">
+                Crear mi cuenta
+              </Link>
+              <Link href={`/ingresar?siguiente=${encodeURIComponent("/mi-cuenta/pedidos")}`} className="inline-flex h-11 items-center rounded-full bg-white/10 px-5 text-sm font-bold text-white ring-1 ring-white/30">
+                Ya tengo cuenta
+              </Link>
+            </div>
+          </section>
+        )}
+        {conCuenta && (
+          <Link href="/mi-cuenta/pedidos" className="inline-flex items-center gap-1 text-sm font-bold text-pino hover:underline">
+            <ChevronRight className="size-4 rotate-180" /> Mis pedidos
+          </Link>
         )}
 
         <div id="seguimiento" className="flex flex-wrap items-end justify-between gap-3 pt-2">

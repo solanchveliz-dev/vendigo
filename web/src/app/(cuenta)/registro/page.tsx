@@ -24,7 +24,8 @@ function Formulario() {
   const router = useRouter();
   const params = useSearchParams();
   const [rol, setRol] = useState<"vendedor" | "comprador">(params.get("tipo") === "comprar" ? "comprador" : "vendedor");
-  const [f, setF] = useState({ nombre: "", email: "", celular: "", password: "" });
+  // Desde el seguimiento de un pedido llegan el nombre y el celular con los que compró.
+  const [f, setF] = useState({ nombre: params.get("nombre") ?? "", email: "", celular: params.get("celular") ?? "", password: "" });
   const [rubro, setRubro] = useState("");
   const [acepto, setAcepto] = useState(false);
   const [error, setError] = useState("");
@@ -43,6 +44,8 @@ function Formulario() {
       const q = new URLSearchParams({ celular: r.celular });
       if (r.codigo_dev) q.set("dev", r.codigo_dev);
       if (vende && rubro) q.set("rubro", rubro);
+      const siguiente = params.get("siguiente");
+      if (!vende && siguiente?.startsWith("/") && !siguiente.startsWith("//")) q.set("siguiente", siguiente);
       router.push(`/verificar?${q}`);
     } catch (err) {
       setError((err as ErrorApi).message);

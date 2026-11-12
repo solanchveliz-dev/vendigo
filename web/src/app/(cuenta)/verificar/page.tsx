@@ -45,7 +45,8 @@ function Formulario() {
     setCargando(true);
     try {
       const r = await sesion<{ usuario: Usuario }>("verificar", { celular, codigo });
-      if (r.usuario.rol === "comprador") router.replace("/");
+      const siguiente = params.get("siguiente") ?? "";
+      if (r.usuario.rol === "comprador") router.replace(siguiente.startsWith("/") && !siguiente.startsWith("//") ? siguiente : "/mi-cuenta");
       else router.replace(r.usuario.tienda_id ? "/vendedor" : `/vendedor/crear-tienda${rubro ? `?rubro=${rubro}` : ""}`);
     } catch (err) {
       setError((err as ErrorApi).message);

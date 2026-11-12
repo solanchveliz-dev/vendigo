@@ -70,6 +70,18 @@ func (m *Modulo) codigo(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
+// cuenta devuelve el comprador con sesión y su celular verificado (vacíos si compra sin cuenta).
+func (m *Modulo) cuenta(r *http.Request) (id, celular string) {
+	u, ok := httpx.UsuarioOpcional(r, m.app.Cfg.JWTSecreto)
+	if !ok || (u.Rol != "comprador" && u.Rol != "vendedor") {
+		return "", ""
+	}
+	if err := m.app.DB.QueryRowContext(r.Context(), `SELECT celular FROM usuarios WHERE id=$1 AND activo AND celular_verificado`, u.ID).Scan(&celular); err != nil {
+		return "", ""
+	}
+	return u.ID, celular
+}
+
 var errPropiaTienda = httpx.Conflicto("propia_tienda", "No puedes comprar en tu propia tienda con el celular de tu cuenta.")
 
 // esSuTienda: el celular que compra es el de la dueña de la tienda.
@@ -138,11 +150,16 @@ func (m *Modulo) comprar(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 	}
+	// Con la cuenta de comprador abierta, su celular ya está verificado: no se le pide otro código.
+	// Si compra para otro número, ese sí se verifica. En los dos casos el pedido queda en "Mis pedidos".
+	compradorID, celularCuenta := m.cuenta(r)
 	var pid, codigo, token string
 	var plazo time.Duration // solo en el Modo live
 	err := m.app.EnTransaccion(ctx, func(tx *sql.Tx) error {
-		if err := m.ValidarOTP(ctx, tx, in.Celular, "compra", in.Codigo); err != nil {
-			return err
+		if celularCuenta == "" || celularCuenta != in.Celular {
+			if err := m.ValidarOTP(ctx, tx, in.Celular, "compra", in.Codigo); err != nil {
+				return err
+			}
 		}
 		if in.Live {
 			ids := make([]string, len(in.Items))
@@ -157,7 +174,7 @@ func (m *Modulo) comprar(w http.ResponseWriter, r *http.Request) error {
 		}
 		var err error
 		pid, codigo, err = pedidos.Crear(ctx, m.app, tx, pedidos.PedidoNuevo{
-			TiendaID: tid, Nombre: in.Nombre, Celular: in.Celular, DNI: strings.TrimSpace(in.DNI), Entrega: in.Entrega,
+			TiendaID: tid, CompradorID: compradorID, Nombre: in.Nombre, Celular: in.Celular, DNI: strings.TrimSpace(in.DNI), Entrega: in.Entrega,
 			Direccion: strings.TrimSpace(in.Direccion), Distrito: strings.TrimSpace(in.Distrito), Ciudad: strings.TrimSpace(in.Ciudad),
 			Referencia: strings.TrimSpace(in.Referencia), Agencia: strings.TrimSpace(in.Agencia), AgenciaSede: strings.TrimSpace(in.AgenciaSede),
 			MetodoPago: in.MetodoPago, Nota: strings.TrimSpace(in.Nota), Items: in.Items,

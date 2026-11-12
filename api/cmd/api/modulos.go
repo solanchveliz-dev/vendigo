@@ -12,6 +12,7 @@ import (
 	"github.com/solanchveliz-dev/vendigo/api/internal/admin"
 	"github.com/solanchveliz-dev/vendigo/api/internal/auth"
 	"github.com/solanchveliz-dev/vendigo/api/internal/billetera"
+	"github.com/solanchveliz-dev/vendigo/api/internal/comprador"
 	"github.com/solanchveliz-dev/vendigo/api/internal/compras"
 	"github.com/solanchveliz-dev/vendigo/api/internal/core"
 	"github.com/solanchveliz-dev/vendigo/api/internal/demo"
@@ -92,6 +93,12 @@ func registrarModulos(app *core.App, api chi.Router) {
 			mIA.RutasVendedor(v)
 			mLive.RutasVendedor(v)
 			mMP.RutasVendedor(v)
+		})
+
+		// Cuenta del comprador (opcional): sus compras en un solo lugar. Una vendedora también puede comprar.
+		r.Route("/comprador", func(c chi.Router) {
+			c.Use(httpx.Rol("comprador", "vendedor"))
+			comprador.Nuevo(app).Rutas(c)
 		})
 
 		// Panel del administrador: solo cuentas con rol admin (no se pueden crear desde el registro).

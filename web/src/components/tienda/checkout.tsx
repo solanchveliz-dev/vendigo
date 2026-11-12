@@ -4,10 +4,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { Bike, Check, ChevronRight, CreditCard, Landmark, Lock, MapPin, Minus, Package, Plus, Smartphone, Store, Trash2 } from "lucide-react";
-import { api, ErrorApi } from "@/lib/api";
+import { api, ErrorApi, usuarioActual } from "@/lib/api";
 import { soles } from "@/lib/formato";
 import { guardarCarrito, guardarSeparacion, leerCarrito, leerSeparacion, type ItemCarrito } from "@/lib/carrito";
-import type { Tienda } from "@/lib/tipos";
+import type { Tienda, Usuario } from "@/lib/tipos";
 import { Area, Aviso, Boton, Campo, Entrada, Selector, cn } from "@/components/ui";
 
 type FormaEntrega = "recojo" | "agencia" | "motorizado";
@@ -74,6 +74,8 @@ export function Checkout({ tienda: t, vista = false, live = false, minutosLive =
   const [metodo, setMetodo] = useState<Metodo | "">("");
   const [f, setF] = useState({ nombre: "", celular: "", dni: "", direccion: "", distrito: "", ciudad: "", referencia: "", agencia: "", sede: "", nota: "" });
   const [codigo, setCodigo] = useState("");
+  // Con la cuenta de comprador abierta: sus datos ya vienen llenos y su celular ya está verificado.
+  const [cuenta, setCuenta] = useState<Usuario | null>(null);
   const [enviado, setEnviado] = useState(false);
   const [codigoDev, setCodigoDev] = useState("");
   const [error, setError] = useState("");
@@ -82,6 +84,14 @@ export function Checkout({ tienda: t, vista = false, live = false, minutosLive =
   useEffect(() => {
     setItems(live ? leerSeparacion(t.slug) : leerCarrito(t.slug));
   }, [t.slug, live]);
+  useEffect(() => {
+    usuarioActual().then((u) => {
+      if (!u || u.rol === "admin") return;
+      setCuenta(u);
+      setF((x) => ({ ...x, nombre: x.nombre || u.nombre, celular: x.celular || u.celular }));
+    });
+  }, []);
+  const sinCodigo = !!cuenta && f.celular === cuenta.celular;
   useEffect(() => {
     window.scrollTo({ top: 0 });
   }, [paso]);
@@ -153,6 +163,7 @@ export function Checkout({ tienda: t, vista = false, live = false, minutosLive =
   async function pedirCodigo() {
     setError("");
     if (!metodo) return setError("Elige cómo vas a pagar.");
+    if (sinCodigo) return void confirmar();
     setCargando(true);
     try {
       const r = await api.post<{ mensaje: string; codigo_dev?: string }>("/compras/codigo", { celular: f.celular, slug: t.slug });
@@ -308,7 +319,7 @@ export function Checkout({ tienda: t, vista = false, live = false, minutosLive =
               <Tarjeta titulo="Tus datos">
                 <div className="grid gap-4 sm:grid-cols-2">
                   <Campo etiqueta="Nombre y apellido"><Entrada {...campo("nombre")} maxLength={80} autoComplete="name" /></Campo>
-                  <Campo etiqueta="Celular" ayuda="Te enviamos un código para confirmar."><Entrada {...campo("celular")} onChange={(e) => setF({ ...f, celular: e.target.value.replace(/\D/g, "") })} inputMode="numeric" maxLength={9} placeholder="9XXXXXXXX" autoComplete="tel" /></Campo>
+                  <Campo etiqueta="Celular" ayuda={sinCodigo ? "Es el celular de tu cuenta: no necesitas código." : cuenta ? "Te enviaremos un código a este número para confirmar." : "Te enviamos un código para confirmar. ¿Tienes cuenta? Ingresa y no te lo pediremos."}><Entrada {...campo("celular")} onChange={(e) => setF({ ...f, celular: e.target.value.replace(/\D/g, "") })} inputMode="numeric" maxLength={9} placeholder="9XXXXXXXX" autoComplete="tel" /></Campo>
                   {entrega === "motorizado" && (
                     <>
                       <Campo etiqueta="Dirección"><Entrada {...campo("direccion")} maxLength={200} autoComplete="street-address" /></Campo>
@@ -417,7 +428,7 @@ export function Checkout({ tienda: t, vista = false, live = false, minutosLive =
             </Boton>
           ) : !enviado ? (
             <Boton bloque tamano="lg" variante="acento" onClick={pedirCodigo} cargando={cargando} disabled={!metodos.length}>
-              Confirmar pedido
+              {sinCodigo ? <><Lock className="size-4" /> Confirmar y ver cómo pagar</> : "Confirmar pedido"}
             </Boton>
           ) : (
             <Boton bloque tamano="lg" variante="acento" onClick={confirmar} cargando={cargando} disabled={codigo.length < 6}>

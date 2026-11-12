@@ -117,3 +117,14 @@ export function useApi<T>(ruta: string | null) {
 
   return { datos, error, cargando, recargar, setDatos };
 }
+
+// usuarioActual: quién tiene la sesión abierta en las páginas públicas (tienda, checkout, seguimiento).
+// A diferencia de api.get, sin sesión no manda al ingreso: devuelve null.
+export async function usuarioActual(): Promise<import("./tipos").Usuario | null> {
+  try {
+    const r = await fetch("/api/v1/me", { cache: "no-store" });
+    return r.ok ? await r.json() : null;
+  } catch {
+    return null;
+  }
+}

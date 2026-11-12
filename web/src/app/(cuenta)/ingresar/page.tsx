@@ -23,7 +23,12 @@ function Formulario() {
 
   function entrar(u: Usuario) {
     if (u.rol === "admin") router.replace(siguiente.startsWith("/admin") ? siguiente : "/admin");
-    else if (u.rol === "comprador") router.replace("/");
+    // El comprador vuelve a donde estaba (por ejemplo, el seguimiento de su pedido) o a su cuenta.
+    else if (u.rol === "comprador") {
+      const s = params.get("siguiente") ?? "";
+      const valido = s.startsWith("/") && !s.startsWith("//") && !s.startsWith("/vendedor") && !s.startsWith("/admin");
+      router.replace(valido ? s : "/mi-cuenta");
+    }
     else router.replace(u.tienda_id ? siguiente : "/vendedor/crear-tienda");
   }
 

@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { Search, ShieldCheck } from "lucide-react";
+import { CuentaPublica } from "./cuenta-publica";
 
 // Barra superior de las páginas públicas (tienda y producto).
 export function CabeceraPublica({ q = "" }: { q?: string }) {
@@ -19,10 +20,11 @@ export function CabeceraPublica({ q = "" }: { q?: string }) {
           <button className="h-9 rounded-full bg-coral px-4 text-sm font-bold text-white hover:brightness-95">Buscar</button>
         </form>
         <div className="flex items-center gap-3">
-          <span className="hidden items-center gap-1.5 text-sm font-semibold text-ok sm:inline-flex">
+          <span className="hidden items-center gap-1.5 text-sm font-semibold text-ok xl:inline-flex">
             <ShieldCheck className="size-4" /> Pedido con seguimiento
           </span>
-          <Link href="/registro" className="rounded-full bg-pino px-5 py-2.5 text-sm font-bold text-white transition hover:bg-pino-2">
+          <CuentaPublica />
+          <Link href="/registro" className="hidden rounded-full bg-pino px-5 py-2.5 text-sm font-bold text-white transition hover:bg-pino-2 sm:inline-block">
             Crea tu tienda
           </Link>
         </div>
