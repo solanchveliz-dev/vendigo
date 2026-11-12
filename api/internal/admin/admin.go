@@ -42,6 +42,10 @@ func (m *Modulo) Rutas(r chi.Router) {
 	r.Method("GET", "/verificaciones/{id}", httpx.Handler(m.verificacion))
 	r.Method("POST", "/verificaciones/{id}/aprobar", httpx.Handler(m.aprobar))
 	r.Method("POST", "/verificaciones/{id}/rechazar", httpx.Handler(m.rechazar))
+	r.Method("GET", "/cambios-numero", httpx.Handler(m.cambiosCelular))
+	r.Method("GET", "/cambios-numero/{id}", httpx.Handler(m.cambioCelular))
+	r.Method("POST", "/cambios-numero/{id}/aprobar", httpx.Handler(m.aprobarCambioCelular))
+	r.Method("POST", "/cambios-numero/{id}/rechazar", httpx.Handler(m.rechazarCambioCelular))
 	r.Method("GET", "/reclamos", httpx.Handler(m.reclamos))
 	r.Method("POST", "/reclamos/{id}/resolver", httpx.Handler(m.resolverReclamo))
 	r.Method("GET", "/auditoria", httpx.Handler(m.auditoria))
@@ -134,6 +138,7 @@ func (m *Modulo) resumen(w http.ResponseWriter, r *http.Request) error {
 		Reclamos       int `json:"reclamos_abiertos"`
 		Bloqueos       int `json:"cuentas_bloqueadas"`
 		Incidencias    int `json:"incidencias_abiertas"`
+		CambiosNumero  int `json:"cambios_numero_pendientes"`
 	}
 	err := m.app.DB.QueryRowContext(r.Context(), `SELECT
 		(SELECT count(*) FROM usuarios WHERE rol='vendedor'),
@@ -143,8 +148,9 @@ func (m *Modulo) resumen(w http.ResponseWriter, r *http.Request) error {
 		(SELECT count(*) FROM pagos_plan WHERE estado='pendiente' AND referencia_tienda LIKE 'chr\_%'), -- cobrados por Culqi sin activar
 		(SELECT count(*) FROM reclamos WHERE estado IN ('abierto','en_revision')),
 		(SELECT count(*) FROM usuarios WHERE bloqueado_hasta > now()),
-		(SELECT count(*) FROM incidencias WHERE estado<>'resuelta')`).
-		Scan(&d.Vendedoras, &d.Suspendidas, &d.NuevasSemana, &d.Verificaciones, &d.PagosPlan, &d.Reclamos, &d.Bloqueos, &d.Incidencias)
+		(SELECT count(*) FROM incidencias WHERE estado<>'resuelta'),
+		(SELECT count(*) FROM solicitudes_celular WHERE estado='pendiente')`).
+		Scan(&d.Vendedoras, &d.Suspendidas, &d.NuevasSemana, &d.Verificaciones, &d.PagosPlan, &d.Reclamos, &d.Bloqueos, &d.Incidencias, &d.CambiosNumero)
 	if err != nil {
 		return err
 	}

@@ -7,6 +7,7 @@ import { api, ErrorApi, sesion, useApi } from "@/lib/api";
 import type { Usuario } from "@/lib/tipos";
 import { MedidorClave, claveValida } from "@/components/medidor-clave";
 import { DosPasos } from "@/components/dos-pasos";
+import { CambiarNumero } from "@/components/cambiar-numero";
 import { Boton, Campo, Cargando, Entrada, Modal, cn, useAvisar } from "@/components/ui";
 
 type Ajustes = { ruc: string; pausada: boolean; avisos: { pedidos: boolean; consultas: boolean; inventario: boolean } };
@@ -104,7 +105,7 @@ function Cuenta({ ajustes, alGuardar }: { ajustes: Ajustes; alGuardar: () => voi
         <Campo etiqueta="RUC (opcional)" ayuda="Para tus comprobantes">
           <Entrada value={ruc} onChange={(e) => setRuc(e.target.value.replace(/\D/g, "").slice(0, 11))} inputMode="numeric" placeholder="11 dígitos" />
         </Campo>
-        <Campo etiqueta="Celular" ayuda="Con este número entras a VendiGo. Para cambiarlo escríbenos a ayuda@vendigo.pe.">
+        <Campo etiqueta="Celular" ayuda="Con este número entras a VendiGo. Cámbialo en la pestaña Seguridad.">
           <Entrada value={yo.datos.celular} disabled className="bg-crema text-gris" />
         </Campo>
       </div>
@@ -181,6 +182,7 @@ function Seguridad() {
       <Fila titulo="Contraseña" detalle={`Cambiada ${haceCuanto(datos.password_cambiado_en)}`}>
         <Boton variante="secundario" tamano="sm" onClick={() => { setError(""); setModal(true); }}>Cambiar</Boton>
       </Fila>
+      <CambiarNumero Fila={Fila} />
       <DosPasos Fila={Fila} />
       <Fila
         titulo="Equipos con tu cuenta abierta"

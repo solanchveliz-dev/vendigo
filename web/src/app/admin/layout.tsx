@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { Bell, Download, Flag, Home, LogOut, Search, ShieldCheck, Briefcase, Users, Store, Package, ShoppingBag, CreditCard, Crown, BarChart3, AlertTriangle, MapPin, Settings, BookOpen, LifeBuoy } from "lucide-react";
+import { Bell, Download, Flag, Home, LogOut, Search, ShieldCheck, Briefcase, Users, Store, Package, ShoppingBag, CreditCard, Crown, BarChart3, AlertTriangle, MapPin, Settings, BookOpen, LifeBuoy, Smartphone } from "lucide-react";
 import { api, sesion, useApi } from "@/lib/api";
 import type { Usuario } from "@/lib/tipos";
 import { Cargando, cn } from "@/components/ui";
@@ -11,7 +11,7 @@ import { fechaHora } from "@/lib/admin";
 import { ErrorCarga } from "@/components/error-carga";
 import { BotonRiel, margenContenido, PieRiel, Riel, useRiel } from "@/components/panel/riel";
 
-type Resumen = { verificaciones_pendientes: number; pagos_plan_pendientes: number; reclamos_abiertos: number; incidencias_abiertas: number };
+type Resumen = { verificaciones_pendientes: number; pagos_plan_pendientes: number; reclamos_abiertos: number; incidencias_abiertas: number; cambios_numero_pendientes: number };
 type Aviso = { id: string; titulo: string; cuerpo: string; enlace: string; leida: boolean; creado_en: string };
 
 // Menú del panel admin (mismo orden e íconos del prototipo). Las secciones restantes se suman en las siguientes fases.
@@ -30,6 +30,7 @@ const menu = [
   { href: "/admin/reclamos", texto: "Reclamos", icono: Flag, cuenta: "reclamos_abiertos" as const },
   { href: "/admin/fondo", texto: "Fondo de emergencia", icono: LifeBuoy },
   { href: "/admin/libro", texto: "Libro de Reclamaciones", icono: BookOpen },
+  { href: "/admin/cambios-numero", texto: "Cambios de número", icono: Smartphone, cuenta: "cambios_numero_pendientes" as const },
   { href: "/admin/seguridad", texto: "Seguridad", icono: ShieldCheck },
   { href: "/admin/configuracion", texto: "Configuración", icono: Settings },
 ];

@@ -20,10 +20,11 @@ async function reducir(archivo: File, maximo = 1600): Promise<Blob> {
 }
 
 // subirImagen pide una URL firmada a la API y sube la foto directo a S3.
-export async function subirImagen(archivo: File, tipo: TipoArchivo) {
+// `ruta` cambia el endpoint que firma la subida (por ejemplo, el de recuperar la cuenta, que no tiene sesión).
+export async function subirImagen(archivo: File, tipo: TipoArchivo | "frente" | "selfie", ruta = "/vendedor/archivos") {
   const blob = await reducir(archivo);
   const contentType = blob.type || "image/jpeg";
-  const s = await api.post<Subida>("/vendedor/archivos", { tipo, content_type: contentType, tamano: blob.size });
+  const s = await api.post<Subida>(ruta, { tipo, content_type: contentType, tamano: blob.size });
   const r = await fetch(s.url_subida, { method: "PUT", headers: { "Content-Type": contentType }, body: blob });
   if (!r.ok) throw new Error("No se pudo subir la imagen. Revisa tu conexión e inténtalo de nuevo.");
   return { key: s.key, url: s.url_publica ?? URL.createObjectURL(blob) };

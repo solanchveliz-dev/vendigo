@@ -9,7 +9,7 @@ async function reenviar(req: NextRequest, ruta: string[]) {
   const { acceso, refresh, recordar } = await tokens();
   // Cambiar la contraseña o cerrar las otras sesiones necesita saber cuál es la sesión de este equipo,
   // para no cerrarla. El refresh token vive en una cookie que el navegador no puede leer, así que se agrega aquí.
-  const conSesion = ruta.join("/") === "me/password" || ruta.join("/") === "me/cerrar-sesiones";
+  const conSesion = ["me/password", "me/cerrar-sesiones", "me/celular"].includes(ruta.join("/"));
   const cuerpoCon = (r?: string) => {
     if (!conSesion) return cuerpo;
     let d: Record<string, unknown> = {};

@@ -36,6 +36,9 @@ func (m *Modulo) RutasPublicas(r chi.Router) {
 	r.Method("POST", "/logout", httpx.Handler(m.logout))
 	r.Method("POST", "/recuperar", httpx.Handler(m.recuperar))
 	r.Method("POST", "/restablecer", httpx.Handler(m.restablecer))
+	r.Method("POST", "/recuperar-cuenta/codigo", httpx.Handler(m.codigoRecuperarCuenta))
+	r.Method("POST", "/recuperar-cuenta/archivo", httpx.Handler(m.archivoRecuperarCuenta))
+	r.Method("POST", "/recuperar-cuenta", httpx.Handler(m.solicitarRecuperarCuenta))
 }
 
 // RutasPrivadas requieren sesión.
@@ -45,6 +48,8 @@ func (m *Modulo) RutasPrivadas(r chi.Router) {
 	r.Method("PUT", "/me/password", httpx.Handler(m.cambiarPassword))
 	r.Method("POST", "/me/cerrar-sesiones", httpx.Handler(m.cerrarSesiones))
 	r.Method("GET", "/me/sesiones", httpx.Handler(m.sesiones))
+	r.Method("POST", "/me/celular/codigo", httpx.Handler(m.codigoCelularNuevo))
+	r.Method("POST", "/me/celular", httpx.Handler(m.cambiarCelular))
 	r.Method("GET", "/me/accesos", httpx.Handler(m.accesos))
 	r.Method("GET", "/me/mfa", httpx.Handler(m.estadoMFA))
 	r.Method("POST", "/me/mfa/iniciar", httpx.Handler(m.iniciarMFA))

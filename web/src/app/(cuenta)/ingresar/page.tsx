@@ -86,6 +86,12 @@ function Formulario() {
           Créala en 1 minuto
         </Link>
       </p>
+      <p className="text-center text-sm text-gris">
+        ¿Perdiste tu número de celular?{" "}
+        <Link href="/recuperar-cuenta" className="font-bold text-pino hover:underline">
+          Recupera tu cuenta
+        </Link>
+      </p>
     </form>
   );
 }
