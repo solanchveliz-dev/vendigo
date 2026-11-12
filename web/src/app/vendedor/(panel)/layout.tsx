@@ -6,11 +6,12 @@ import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { BarChart3, Bell, ClipboardList, Crown, Home, LogOut, MessageCircleQuestion, Package, Radio, ShieldCheck, Sparkles, Store, Wallet, Smartphone, Search, Share2, Plus, Users, Settings } from "lucide-react";
 import { api, sesion, useApi } from "@/lib/api";
-import type { Usuario } from "@/lib/tipos";
+import type { Tienda, Usuario, UsoPlan } from "@/lib/tipos";
 import { cn, Cargando } from "@/components/ui";
 import { PanelCtx, type Resumen } from "@/components/panel/contexto";
 import { PanelDemo } from "@/components/panel/demo";
 import { ErrorCarga } from "@/components/error-carga";
+import { BotonRiel, margenContenido, PieRiel, Riel, useRiel } from "@/components/panel/riel";
 
 const menu = [
   { href: "/vendedor", texto: "Inicio", icono: Home },
@@ -40,6 +41,10 @@ export default function LayoutPanel({ children }: { children: React.ReactNode })
   const yo = useApi<Usuario>("/me");
   const [resumen, setResumen] = useState<Resumen | null>(null);
   const [menuCuenta, setMenuCuenta] = useState(false);
+  const riel = useRiel();
+  const conTienda = !!yo.datos?.tienda_id;
+  const tienda = useApi<Tienda>(conTienda ? "/vendedor/tienda" : null);
+  const plan = useApi<UsoPlan>(conTienda ? "/vendedor/plan" : null);
 
   const recargarResumen = useCallback(() => {
     api.get<Resumen>("/vendedor/resumen").then(setResumen).catch(() => null);
@@ -77,38 +82,29 @@ export default function LayoutPanel({ children }: { children: React.ReactNode })
 
   return (
     <PanelCtx.Provider value={{ usuario: yo.datos, resumen, recargarResumen }}>
-      {/* Barra lateral de íconos (escritorio). El nombre aparece encima del contenido al pasar el mouse. */}
-      <aside className="no-imprimir fixed inset-y-3 left-3 z-[200] hidden w-[72px] flex-col items-center rounded-2xl bg-white py-4 shadow-suave ring-1 ring-linea/60 md:flex">
-        <Link href="/vendedor" className="mb-5">
-          <Image src="/logo.png" alt="VendiGo" width={40} height={40} />
-        </Link>
-        <nav className={`flex flex-1 flex-col gap-1.5 ${sinTienda ? "pointer-events-none opacity-40" : ""}`} aria-disabled={sinTienda}>
-          {menu.map((m) => (
-            <Link
-              key={m.href}
-              href={m.href}
-              className={cn(
-                "group relative grid size-11 place-items-center rounded-xl transition",
-                activo(m.href) ? "bg-coral text-white" : "text-gris hover:bg-pino-claro hover:text-pino",
-              )}
-              aria-label={m.texto}
-            >
-              <m.icono className="size-5" />
-              {m.cuenta && cuentas[m.cuenta] > 0 && (
-                <span className="absolute -right-0.5 -top-0.5 grid min-w-5 place-items-center rounded-full bg-pino px-1 text-[11px] font-bold text-white ring-2 ring-white">
-                  {cuentas[m.cuenta]}
-                </span>
-              )}
-              <span className="pointer-events-none absolute left-full ml-3 whitespace-nowrap rounded-lg bg-pino px-3 py-1.5 text-sm font-semibold text-white opacity-0 shadow-lg transition group-hover:opacity-100">
-                {m.texto}
-              </span>
-            </Link>
-          ))}
-        </nav>
-      </aside>
+      <Riel
+        abierto={riel.abierto}
+        inicio="/vendedor"
+        subtitulo="Panel del emprendedor"
+        items={menu.map((m) => ({ href: m.href, texto: m.texto, icono: m.icono, cuenta: m.cuenta ? cuentas[m.cuenta] : 0 }))}
+        activo={activo}
+        deshabilitado={sinTienda}
+        pie={
+          !sinTienda && (
+            <PieRiel
+              abierto={riel.abierto}
+              imagen={tienda.datos?.logo_url || undefined}
+              iniciales={iniciales(tienda.datos?.nombre || yo.datos.nombre)}
+              titulo={tienda.datos?.nombre || yo.datos.nombre}
+              linea={plan.datos ? `Plan ${plan.datos.plan.nombre}` : "Tu tienda"}
+            />
+          )
+        }
+      />
 
-      <div className="md:pl-[96px]">
-        <header className="no-imprimir sticky top-0 z-[150] flex h-16 items-center justify-between gap-3 bg-crema/90 px-4 backdrop-blur md:px-6">
+      <div className={cn("transition-[padding] duration-300", margenContenido(riel.abierto))}>
+        <header className="no-imprimir sticky top-0 z-[150] flex h-16 items-center justify-between gap-3 border-b border-linea bg-white/90 px-4 backdrop-blur md:h-[74px] md:justify-start md:gap-4 md:py-3.5 md:pl-6 md:pr-7 xl:pr-9">
+          <BotonRiel onClick={riel.alternar} />
           <Link href="/vendedor" className="flex items-center gap-2 md:hidden">
             <Image src="/logo.png" alt="" width={32} height={32} />
             <span className="font-display text-lg font-extrabold text-pino">VendiGo</span>
@@ -119,29 +115,29 @@ export default function LayoutPanel({ children }: { children: React.ReactNode })
               const q = new FormData(e.currentTarget).get("q")?.toString().trim() ?? "";
               router.push(`/vendedor/pedidos?q=${encodeURIComponent(q)}`);
             }}
-            className="relative hidden w-full max-w-sm md:block"
+            className="relative hidden min-w-0 flex-1 md:block md:max-w-[560px]"
           >
-            <Search className="absolute left-3.5 top-3 size-4 text-gris" />
-            <input name="q" placeholder="Buscar pedidos, productos o clientes…" className="h-10 w-full rounded-full bg-white pl-10 pr-4 text-sm outline-none ring-1 ring-linea focus:ring-pino/40" />
+            <Search className="absolute left-4 top-1/2 size-5 -translate-y-1/2 text-tinta" />
+            <input name="q" placeholder="Buscar pedidos, productos o clientes…" className="h-[46px] w-full rounded-full bg-[#ece9e2] pl-12 pr-4 text-[15px] outline-none focus:ring-2 focus:ring-pino/30" />
           </form>
-          <div className={`flex items-center gap-2 ${sinTienda ? "invisible" : ""}`}>
-            <Link href="/vendedor/tienda/compartir" className="hidden h-10 items-center gap-2 rounded-full bg-white px-4 text-sm font-semibold text-pino ring-1 ring-linea lg:inline-flex">
+          <div className={`flex items-center gap-2 md:ml-auto md:gap-3 ${sinTienda ? "invisible" : ""}`}>
+            <Link href="/vendedor/tienda/compartir" className="hidden h-9 items-center gap-2 rounded-full border border-linea bg-white px-3.5 text-[13.5px] font-bold text-tinta lg:inline-flex">
               <Share2 className="size-4" /> Compartir tienda
             </Link>
-            <Link href="/vendedor/productos/nuevo" className={`hidden h-10 items-center gap-1 rounded-full bg-coral px-4 text-sm font-semibold text-white ${ruta === "/vendedor/productos" ? "" : "sm:inline-flex"}`}>
+            <Link href="/vendedor/productos/nuevo" className={`hidden h-9 items-center gap-2 rounded-full bg-coral px-3.5 text-[13.5px] font-bold text-white ${ruta === "/vendedor/productos" ? "" : "sm:inline-flex"}`}>
               <Plus className="size-4" /> Nuevo producto
             </Link>
-            <Link href="/vendedor/notificaciones" className="relative grid size-10 place-items-center rounded-full bg-white ring-1 ring-linea" aria-label="Notificaciones">
+            <Link href="/vendedor/notificaciones" className="relative grid size-10 place-items-center rounded-full border border-linea bg-white md:size-11" aria-label="Notificaciones">
               <Bell className="size-5 text-pino" />
               {(resumen?.notificaciones_no_leidas ?? 0) > 0 && (
-                <span className="absolute -right-0.5 -top-0.5 grid min-w-5 place-items-center rounded-full bg-coral px-1 text-[11px] font-bold text-white">
+                <span className="absolute -right-[3px] -top-[3px] grid h-[19px] min-w-[19px] place-items-center rounded-full border-2 border-white bg-coral px-1 text-[11px] font-bold text-white">
                   {resumen?.notificaciones_no_leidas}
                 </span>
               )}
             </Link>
             <div className="relative">
-              <button onClick={() => setMenuCuenta(!menuCuenta)} className="grid size-10 place-items-center rounded-full bg-pino text-sm font-bold text-white">
-                {iniciales(yo.datos.nombre)}
+              <button onClick={() => setMenuCuenta(!menuCuenta)} className="grid size-10 place-items-center rounded-full border border-linea bg-white md:size-11" aria-label="Mi cuenta">
+                <span className="grid size-8 place-items-center rounded-full bg-pino text-xs font-bold text-white">{iniciales(yo.datos.nombre)}</span>
               </button>
               {menuCuenta && (
                 <div className="absolute right-0 top-12 w-64 rounded-xl bg-white p-2 shadow-suave ring-1 ring-linea" onClick={() => setMenuCuenta(false)}>
@@ -166,7 +162,7 @@ export default function LayoutPanel({ children }: { children: React.ReactNode })
             </div>
           </div>
         </header>
-        <main className="mx-auto max-w-6xl px-4 pb-28 pt-2 md:px-6 md:pb-12">
+        <main className="px-4 pb-28 pt-4 md:px-10 md:pb-16 md:pt-7">
           <div className="mb-4 empty:mb-0"><ErrorCarga /></div>
           {children}
         </main>

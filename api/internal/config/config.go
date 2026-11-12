@@ -22,6 +22,7 @@ type Config struct {
 	LlaveCifrado string
 
 	S3Region       string
+	SMSRegion      string // región de Amazon SNS (puede ser distinta a la de S3)
 	S3Endpoint     string // vacío en AWS; http://localhost:9000 con MinIO
 	S3AccessKey    string
 	S3SecretKey    string
@@ -79,6 +80,7 @@ func Carga() Config {
 		RefreshDias:     envInt("JWT_REFRESH_DIAS", 30),
 		LlaveCifrado:    env("ENCRYPTION_KEY", "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="),
 		S3Region:        env("S3_REGION", "us-east-1"),
+		SMSRegion:       env("SMS_REGION", env("AWS_REGION", "us-east-1")),
 		S3Endpoint:      env("S3_ENDPOINT", ""),
 		S3AccessKey:     env("S3_ACCESS_KEY", ""),
 		S3SecretKey:     env("S3_SECRET_KEY", ""),

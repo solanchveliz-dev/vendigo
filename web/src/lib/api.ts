@@ -33,6 +33,7 @@ async function llamar<T>(metodo: string, ruta: string, cuerpo?: unknown): Promis
     }
     // Si el administrador suspendió la cuenta, se cierra la sesión y se explica en el ingreso.
     if (r.status === 403 && datos?.codigo === "cuenta_suspendida" && typeof window !== "undefined") {
+      limpiarRecientes();
       await fetch("/api/sesion/salir", { method: "POST" }).catch(() => null);
       window.location.href = "/ingresar?suspendida=1";
     }
@@ -50,7 +51,15 @@ export const api = {
   del: <T,>(ruta: string) => llamar<T>("DELETE", ruta),
 };
 
+// Última respuesta de cada GET, solo en la memoria de esta pestaña: al volver a una página se muestra al instante
+// y se actualiza por detrás. Se vacía al iniciar o cerrar sesión para no mezclar datos entre cuentas.
+const recientes = new Map<string, unknown>();
+export function limpiarRecientes() {
+  recientes.clear();
+}
+
 export async function sesion<T>(accion: "ingresar" | "verificar" | "mfa" | "renovar" | "salir", cuerpo: unknown = {}): Promise<T> {
+  if (accion !== "renovar") limpiarRecientes();
   const r = await fetch(`/api/sesion/${accion}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -68,9 +77,9 @@ function avisarCarga(evento: string, detalle: object) {
 // useApi carga datos de una ruta y permite recargarlos después de una acción.
 // Si falla, avisa con el evento "vg:error-carga" (lo muestra <ErrorCarga /> en los paneles).
 export function useApi<T>(ruta: string | null) {
-  const [datos, setDatos] = useState<T | null>(null);
+  const [datos, setDatos] = useState<T | null>(() => (ruta && recientes.has(ruta) ? (recientes.get(ruta) as T) : null));
   const [error, setError] = useState<ErrorApi | null>(null);
-  const [cargando, setCargando] = useState(true);
+  const [cargando, setCargando] = useState(() => !(ruta && recientes.has(ruta)));
   const actual = useRef(ruta);
   actual.current = ruta;
 
@@ -79,6 +88,7 @@ export function useApi<T>(ruta: string | null) {
     const r = actual.current;
     try {
       const d = await api.get<T>(r);
+      recientes.set(r, d);
       if (actual.current === r) {
         setDatos(d);
         setError(null);
@@ -95,7 +105,13 @@ export function useApi<T>(ruta: string | null) {
   }, []);
 
   useEffect(() => {
-    setCargando(true);
+    // Si ya se vio esta página, se muestra lo último que se cargó mientras llega lo nuevo (sin "Cargando…").
+    if (ruta && recientes.has(ruta)) {
+      setDatos(recientes.get(ruta) as T);
+      setCargando(false);
+    } else {
+      setCargando(true);
+    }
     recargar();
   }, [ruta, recargar]);
 

@@ -1,15 +1,15 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { Bell, Download, Flag, Home, LayoutGrid, LogOut, Search, ShieldCheck, Briefcase, Users, Store, Package, ShoppingBag, CreditCard, Crown, BarChart3, AlertTriangle, MapPin, Settings, BookOpen, LifeBuoy } from "lucide-react";
+import { Bell, Download, Flag, Home, LogOut, Search, ShieldCheck, Briefcase, Users, Store, Package, ShoppingBag, CreditCard, Crown, BarChart3, AlertTriangle, MapPin, Settings, BookOpen, LifeBuoy } from "lucide-react";
 import { api, sesion, useApi } from "@/lib/api";
 import type { Usuario } from "@/lib/tipos";
 import { Cargando, cn } from "@/components/ui";
 import { fechaHora } from "@/lib/admin";
 import { ErrorCarga } from "@/components/error-carga";
+import { BotonRiel, margenContenido, PieRiel, Riel, useRiel } from "@/components/panel/riel";
 
 type Resumen = { verificaciones_pendientes: number; pagos_plan_pendientes: number; reclamos_abiertos: number; incidencias_abiertas: number };
 type Aviso = { id: string; titulo: string; cuerpo: string; enlace: string; leida: boolean; creado_en: string };
@@ -40,10 +40,8 @@ export default function LayoutAdmin({ children }: { children: React.ReactNode })
   const yo = useApi<Usuario>("/me");
   const esAdmin = yo.datos?.rol === "admin";
   const { datos: r } = useApi<Resumen>(esAdmin ? `/admin/resumen?${ruta}` : null);
-  const [abierto, setAbierto] = useState(false);
+  const riel = useRiel();
   const [campana, setCampana] = useState(false);
-  // Etiqueta del menú cerrado: se dibuja fija, por encima de todo, para que el desplazamiento del menú no la corte.
-  const [etiqueta, setEtiqueta] = useState<{ texto: string; top: number } | null>(null);
   const avisos = useApi<{ notificaciones: Aviso[] }>(esAdmin ? `/admin/notificaciones?r=${campana}` : null);
   const noLeidas = avisos.datos?.notificaciones.filter((a) => !a.leida).length ?? 0;
 
@@ -91,74 +89,37 @@ export default function LayoutAdmin({ children }: { children: React.ReactNode })
 
   return (
     <div className="min-h-screen bg-crema">
-      {/* Barra lateral de íconos, como el panel del vendedor y el prototipo */}
-      <aside className={cn("fixed inset-y-3 left-3 z-[200] hidden flex-col rounded-2xl bg-white py-4 shadow-suave ring-1 ring-linea/60 transition-all md:flex", abierto ? "w-60 px-3" : "w-[72px] items-center")}>
-        <Link href="/admin" className={cn("mb-3 flex shrink-0 items-center gap-2", abierto && "px-2")}>
-          <Image src="/logo.png" alt="VendiGo" width={40} height={40} />
-          {abierto && <span className="text-sm font-bold leading-tight text-pino">Panel de<br />administración</span>}
-        </Link>
-        <nav className={cn("-mx-1 flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto overscroll-contain px-1 py-1 [scrollbar-width:thin]", !abierto && "items-center")} onScroll={() => setEtiqueta(null)}>
-          {menu.map((m) => (
-            <Link
-              key={m.href}
-              href={m.href}
-              aria-label={m.texto}
-              onMouseEnter={(e) => {
-                if (abierto) return;
-                const r = e.currentTarget.getBoundingClientRect();
-                setEtiqueta({ texto: m.texto, top: r.top + r.height / 2 });
-              }}
-              onMouseLeave={() => setEtiqueta(null)}
-              onClick={() => setEtiqueta(null)}
-              className={cn(
-                "relative flex h-10 shrink-0 items-center gap-3 rounded-xl transition",
-                abierto ? "px-3" : "w-10 justify-center",
-                activo(m.href) ? "bg-coral text-white" : "text-gris hover:bg-pino-claro hover:text-pino",
-              )}
-            >
-              <m.icono className="size-5 shrink-0" />
-              {abierto && <span className="text-sm font-semibold">{m.texto}</span>}
-              {m.cuenta && r && r[m.cuenta] > 0 && (
-                <span className={cn("grid min-w-5 place-items-center rounded-full bg-pino px-1 text-[11px] font-bold text-white ring-2 ring-white", abierto ? "ml-auto" : "absolute -right-1 -top-1")}>{r[m.cuenta]}</span>
-              )}
-            </Link>
-          ))}
-        </nav>
-        {etiqueta && !abierto && (
-          <span className="pointer-events-none fixed left-[92px] z-[300] -translate-y-1/2 whitespace-nowrap rounded-lg bg-pino px-3 py-1.5 text-sm font-semibold text-white shadow-lg" style={{ top: etiqueta.top }}>
-            {etiqueta.texto}
-          </span>
-        )}
-        <div className={cn("mt-3 flex shrink-0 items-center gap-2", abierto && "px-2")} title={yo.datos!.nombre}>
-          <span className="grid size-9 place-items-center rounded-full bg-coral-claro text-xs font-bold text-tinta">{iniciales}</span>
-          {abierto && <span className="text-xs leading-tight"><b className="block text-tinta">{yo.datos!.nombre}</b><span className="text-gris">Administrador</span></span>}
-        </div>
-      </aside>
+      <Riel
+        abierto={riel.abierto}
+        inicio="/admin"
+        subtitulo="Panel de administración"
+        items={menu.map((m) => ({ href: m.href, texto: m.texto, icono: m.icono, cuenta: m.cuenta && r ? r[m.cuenta] : 0 }))}
+        activo={activo}
+        pie={<PieRiel abierto={riel.abierto} iniciales={iniciales} titulo={yo.datos!.nombre} linea="Administrador" />}
+      />
 
-      <div className={cn("transition-all", abierto ? "md:pl-[264px]" : "md:pl-[96px]")}>
-        <header className="sticky top-0 z-[150] flex h-[74px] items-center gap-3 border-b border-linea/70 bg-crema/95 px-4 backdrop-blur md:px-6">
-          <button onClick={() => setAbierto(!abierto)} className="hidden size-11 place-items-center rounded-full bg-white ring-1 ring-linea md:grid" aria-label="Mostrar u ocultar el menú">
-            <LayoutGrid className="size-5 text-pino" />
-          </button>
+      <div className={cn("transition-[padding] duration-300", margenContenido(riel.abierto))}>
+        <header className="sticky top-0 z-[150] flex h-[74px] items-center gap-4 border-b border-linea bg-white/90 px-4 py-3.5 backdrop-blur md:pl-6 md:pr-7 xl:pr-9">
+          <BotonRiel onClick={riel.alternar} />
           <form
             onSubmit={(e) => {
               e.preventDefault();
               const q = new FormData(e.currentTarget).get("q")?.toString().trim() ?? "";
               router.push(`/admin/usuarios?q=${encodeURIComponent(q)}`);
             }}
-            className="relative w-full max-w-[490px]"
+            className="relative min-w-0 flex-1 md:max-w-[560px]"
           >
             <Search className="absolute left-4 top-1/2 size-5 -translate-y-1/2 text-tinta" />
-            <input name="q" placeholder="Buscar usuarios, tiendas, pedidos o transacciones…" className="h-11 w-full rounded-full bg-[#ece9e2] pl-12 pr-4 text-sm outline-none focus:ring-2 focus:ring-pino/30" />
+            <input name="q" placeholder="Buscar usuarios, tiendas, pedidos o transacciones…" className="h-[46px] w-full rounded-full bg-[#ece9e2] pl-12 pr-4 text-[15px] outline-none focus:ring-2 focus:ring-pino/30" />
           </form>
           <div className="ml-auto flex items-center gap-3">
-            <button onClick={() => window.dispatchEvent(new Event("vg:exportar"))} className="hidden h-9 items-center gap-2 rounded-full bg-white px-4 text-sm font-semibold text-pino ring-1 ring-linea sm:inline-flex">
+            <button onClick={() => window.dispatchEvent(new Event("vg:exportar"))} className="hidden h-9 items-center gap-2 rounded-full border border-linea bg-white px-3.5 text-[13.5px] font-bold text-tinta sm:inline-flex">
               <Download className="size-4" /> Exportar
             </button>
             <div className="relative">
-              <button onClick={abrirCampana} className="relative grid size-11 place-items-center rounded-full bg-white ring-1 ring-linea" aria-label="Notificaciones">
+              <button onClick={abrirCampana} className="relative grid size-11 place-items-center rounded-full border border-linea bg-white" aria-label="Notificaciones">
                 <Bell className="size-5 text-pino" />
-                {noLeidas > 0 && <span className="absolute -right-0.5 -top-0.5 grid min-w-5 place-items-center rounded-full bg-coral px-1 text-[11px] font-bold text-white">{noLeidas}</span>}
+                {noLeidas > 0 && <span className="absolute -right-[3px] -top-[3px] grid h-[19px] min-w-[19px] place-items-center rounded-full border-2 border-white bg-coral px-1 text-[11px] font-bold text-white">{noLeidas}</span>}
               </button>
               {campana && (
                 <div className="absolute right-0 top-14 w-80 rounded-2xl bg-white p-2 shadow-suave ring-1 ring-linea">
@@ -177,7 +138,7 @@ export default function LayoutAdmin({ children }: { children: React.ReactNode })
                 </div>
               )}
             </div>
-            <button onClick={salir} className="grid size-11 place-items-center rounded-full bg-white ring-1 ring-linea" aria-label="Cerrar sesión">
+            <button onClick={salir} className="grid size-11 place-items-center rounded-full border border-linea bg-white" aria-label="Cerrar sesión">
               <LogOut className="size-5 text-pino" />
             </button>
           </div>
@@ -190,7 +151,7 @@ export default function LayoutAdmin({ children }: { children: React.ReactNode })
           ))}
         </nav>
 
-        <main className="mx-auto max-w-[1280px] space-y-6 px-4 py-8 md:px-10">
+        <main className="space-y-6 px-4 pb-16 pt-7 md:px-10">
           <ErrorCarga />
           {children}
         </main>

@@ -259,7 +259,24 @@ function MercadoPago() {
   const avisar = useAvisar();
   const { datos, recargar } = useApi<EstadoMP>("/vendedor/mercadopago");
   const [ocupado, setOcupado] = useState(false);
-  if (!datos || !datos.disponible) return null;
+  if (!datos) return null;
+  // Mientras Mercado Pago no esté habilitado en VendiGo, la tienda ve que viene pronto (sin botón).
+  if (!datos.disponible)
+    return (
+      <div className="rounded-[22px] bg-white p-5 shadow-suave ring-1 ring-linea/60">
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-crema text-gris"><CreditCard className="size-5" /></span>
+          <div className="min-w-0 flex-1">
+            <b className="flex flex-wrap items-center gap-2 text-tinta">
+              Mercado Pago <span className="rounded-full bg-coral-claro px-2.5 py-0.5 text-xs font-bold text-coral">Muy pronto</span>
+            </b>
+            <span className="text-sm text-gris">
+              Pronto podrás vincular tu cuenta para cobrar con tarjeta y que el pago se confirme solo, sin revisar capturas. El dinero irá directo a tu cuenta; VendiGo no cobra comisión.
+            </span>
+          </div>
+        </div>
+      </div>
+    );
   async function desvincular() {
     setOcupado(true);
     try {

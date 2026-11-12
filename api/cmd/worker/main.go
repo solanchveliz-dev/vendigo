@@ -37,7 +37,7 @@ func main() {
 	defer conexion.Close()
 	var notificador core.Notificador = core.NotificadorConsola{}
 	if cfg.OTPCanal == "sms" {
-		if notificador, err = avisos.NuevoSNS(ctx, cfg.S3Region); err != nil {
+		if notificador, err = avisos.NuevoSNS(ctx, cfg.SMSRegion); err != nil {
 			slog.Error("sms", "err", err)
 			os.Exit(1)
 		}
