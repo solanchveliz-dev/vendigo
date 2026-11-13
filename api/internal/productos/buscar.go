@@ -104,24 +104,33 @@ func (m *Modulo) buscar(w http.ResponseWriter, r *http.Request) error {
 	type prod struct {
 		ID        string `json:"id"`
 		Nombre    string `json:"nombre"`
+		Precio    int    `json:"precio_centimos"`
 		Final     int    `json:"precio_final_centimos"`
 		Descuento int    `json:"descuento_pct"`
 		Imagen    string `json:"imagen_url"`
 		Destacado bool   `json:"destacado"`
 	}
 	type tienda struct {
-		ID          string   `json:"id"`
-		Nombre      string   `json:"nombre"`
-		Slug        string   `json:"slug"`
-		Rubro       string   `json:"rubro"`
-		Descripcion string   `json:"descripcion"`
-		Lugar       string   `json:"lugar"`
-		Logo        string   `json:"logo_url"`
-		Reputacion  string   `json:"reputacion"`
-		Ventas      int      `json:"ventas"`
-		Entregas    []string `json:"entregas"`
-		Productos   []prod   `json:"productos"`
-		Coinciden   int      `json:"coinciden"`
+		ID          string `json:"id"`
+		Nombre      string `json:"nombre"`
+		Slug        string `json:"slug"`
+		Rubro       string `json:"rubro"`
+		Descripcion string `json:"descripcion"`
+		Lugar       string `json:"lugar"`
+		Logo        string `json:"logo_url"`
+		Reputacion  string `json:"reputacion"`
+		Ventas      int    `json:"ventas"`
+		// Promedio de estrellas de sus compradores y cuántas valoraciones tiene (nil si aún no tiene).
+		Valoracion   *float64 `json:"valoracion"`
+		Valoraciones int      `json:"valoraciones"`
+		Entregas     []string `json:"entregas"`
+		Productos    []prod   `json:"productos"`
+		Coinciden    int      `json:"coinciden"`
+	}
+	// ?ids=a,b,c: solo esas tiendas (por ejemplo, las que sigue el comprador, para mostrarlas con sus productos).
+	ids := qs.Get("ids")
+	if len(ids) > 2000 {
+		ids = ids[:2000]
 	}
 	ord := `coinciden DESC, ventas DESC`
 	switch orden {
@@ -132,6 +141,7 @@ func (m *Modulo) buscar(w http.ResponseWriter, r *http.Request) error {
 	}
 	rows, err := m.app.DB.QueryContext(ctx, `SELECT t.id, t.nombre, t.slug, t.rubro, t.descripcion, coalesce(nullif(t.distrito,''), t.ciudad), t.logo_key, t.reputacion,
 		(SELECT count(*) FROM pedidos pe WHERE pe.tienda_id=t.id AND pe.estado='entregado') AS ventas,
+		(SELECT avg(v.estrellas_tienda)::float8 FROM valoraciones v WHERE v.tienda_id=t.id), (SELECT count(*) FROM valoraciones v WHERE v.tienda_id=t.id),
 		t.entrega_recojo, t.entrega_agencia, t.entrega_motorizado,
 		(SELECT count(*) FROM productos p WHERE p.tienda_id=t.id AND p.activo AND NOT p.eliminado AND `+coincide()+`) AS coinciden
 		FROM tiendas t
@@ -141,7 +151,8 @@ func (m *Modulo) buscar(w http.ResponseWriter, r *http.Request) error {
 		AND ($3 = '' OR `+sinTildes("t.ciudad")+` = `+sinTildes("$3")+` OR `+sinTildes("t.distrito")+` = `+sinTildes("$3")+`)
 		AND ($4 = '' OR ($4 = 'recojo' AND t.entrega_recojo) OR ($4 = 'agencia' AND t.entrega_agencia) OR ($4 = 'motorizado' AND t.entrega_motorizado))
 		AND EXISTS (SELECT 1 FROM productos p WHERE p.tienda_id=t.id AND p.activo AND NOT p.eliminado AND `+coincide()+`)
-		ORDER BY `+ord+` LIMIT 30`, pq.Array(ws), rubro, ciudad, entrega)
+		AND ($5 = '' OR t.id::text = ANY(string_to_array($5, ',')))
+		ORDER BY `+ord+` LIMIT 30`, pq.Array(ws), rubro, ciudad, entrega, ids)
 	if err != nil {
 		return err
 	}
@@ -150,7 +161,7 @@ func (m *Modulo) buscar(w http.ResponseWriter, r *http.Request) error {
 		var t tienda
 		var logo sql.NullString
 		var rec, age, moto bool
-		if err := rows.Scan(&t.ID, &t.Nombre, &t.Slug, &t.Rubro, &t.Descripcion, &t.Lugar, &logo, &t.Reputacion, &t.Ventas, &rec, &age, &moto, &t.Coinciden); err != nil {
+		if err := rows.Scan(&t.ID, &t.Nombre, &t.Slug, &t.Rubro, &t.Descripcion, &t.Lugar, &logo, &t.Reputacion, &t.Ventas, &t.Valoracion, &t.Valoraciones, &rec, &age, &moto, &t.Coinciden); err != nil {
 			rows.Close()
 			return err
 		}
@@ -188,7 +199,7 @@ func (m *Modulo) buscar(w http.ResponseWriter, r *http.Request) error {
 				pr.Close()
 				return err
 			}
-			x.Final = precio
+			x.Precio, x.Final = precio, precio
 			if pct.Valid {
 				x.Descuento = int(pct.Int64)
 				x.Final = PrecioConOferta(precio, x.Descuento)
@@ -200,9 +211,13 @@ func (m *Modulo) buscar(w http.ResponseWriter, r *http.Request) error {
 		}
 		pr.Close()
 	}
-	destacados, err := m.impulsados(ctx, q, 4)
-	if err != nil {
-		return err
+	// ?impulsos=0: la misma página ya pidió los destacados en otra consulta (así no se cuentan dos impresiones).
+	destacados := []Impulsado{}
+	if qs.Get("impulsos") != "0" {
+		var err error
+		if destacados, err = m.impulsados(ctx, q, 4); err != nil {
+			return err
+		}
 	}
 	httpx.OK(w, map[string]any{"q": q, "destacados": destacados, "tiendas": tiendas})
 	return nil

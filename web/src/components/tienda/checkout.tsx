@@ -257,7 +257,7 @@ export function Checkout({ tienda: t, vista = false, live = false, minutosLive =
               <Tarjeta titulo="Productos">
                 {items.map((i, n) => (
                   <div key={i.producto_id + i.variante_id} className="flex items-center gap-3 border-b border-linea py-3 last:border-0">
-                    {i.imagen_url ? <img src={i.imagen_url} alt="" className="size-12 rounded-xl object-cover" /> : <span className="size-12 rounded-xl bg-crema" />}
+                    {i.imagen_url ? <span className="casilla-producto block size-12 shrink-0 overflow-hidden rounded-xl"><img src={i.imagen_url} alt="" className="foto-producto" /></span> : <span className="size-12 rounded-xl bg-crema" />}
                     <span className="min-w-0 flex-1 text-sm">
                       <b className="block truncate text-tinta">{i.nombre}</b>
                       <span className="text-xs text-gris">{i.variante ? `${i.variante} · ` : ""}x{i.cantidad}</span>
@@ -433,7 +433,7 @@ export function Checkout({ tienda: t, vista = false, live = false, minutosLive =
           <div className="space-y-2 border-b border-linea pb-3">
             {items.map((i) => (
               <div key={i.producto_id + i.variante_id} className="flex items-center gap-2 text-sm">
-                {i.imagen_url ? <img src={i.imagen_url} alt="" className="size-9 rounded-lg object-cover" /> : <span className="size-9 rounded-lg bg-crema" />}
+                {i.imagen_url ? <span className="casilla-producto block size-9 shrink-0 overflow-hidden rounded-lg"><img src={i.imagen_url} alt="" className="foto-producto" /></span> : <span className="size-9 rounded-lg bg-crema" />}
                 <span className="min-w-0 flex-1"><b className="block truncate text-xs text-tinta">{i.nombre}</b><span className="text-xs text-gris">x{i.cantidad}{i.variante ? ` · ${i.variante}` : ""}</span></span>
                 <span className="text-xs font-semibold">{soles(i.precio_centimos * i.cantidad)}</span>
               </div>

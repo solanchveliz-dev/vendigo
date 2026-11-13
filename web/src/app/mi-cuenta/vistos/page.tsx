@@ -31,7 +31,7 @@ export default function Vistos() {
             <Link key={v.id} href={`/t/${v.slug}/p/${v.id}`} className="overflow-hidden rounded-[22px] bg-white shadow-suave ring-1 ring-linea/60 transition hover:ring-pino/40">
               {v.imagen ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={v.imagen} alt="" className="aspect-square w-full object-cover" />
+                <span className="casilla-producto block aspect-square"><img src={v.imagen} alt="" className="foto-producto" /></span>
               ) : (
                 <span className="block aspect-square w-full bg-crema" />
               )}

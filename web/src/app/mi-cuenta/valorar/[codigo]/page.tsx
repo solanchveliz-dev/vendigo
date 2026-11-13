@@ -64,7 +64,7 @@ export default function Valorar({ params }: { params: Promise<{ codigo: string }
         <div key={p.producto_id} className="flex flex-wrap items-center gap-4 rounded-[22px] bg-white p-5 shadow-suave ring-1 ring-linea/60">
           {p.imagen_url ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={p.imagen_url} alt="" className="size-16 shrink-0 rounded-xl object-cover" />
+            <span className="casilla-producto block size-16 shrink-0 overflow-hidden rounded-xl"><img src={p.imagen_url} alt="" className="foto-producto" /></span>
           ) : (
             <span className="grid size-16 shrink-0 place-items-center rounded-xl bg-crema text-gris"><ShoppingBag className="size-6" /></span>
           )}

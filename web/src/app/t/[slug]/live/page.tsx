@@ -81,8 +81,8 @@ export default function LivePublico({ params }: { params: Promise<{ slug: string
             <ul className="mt-5 space-y-3">
               {lista.map((p) => (
                 <li key={p.id} className="flex items-center gap-4 rounded-[22px] bg-white p-3 shadow-suave ring-1 ring-linea/60">
-                  <span className="relative size-20 shrink-0 overflow-hidden rounded-2xl bg-arena">
-                    {p.imagen_url && <img src={p.imagen_url} alt="" className="size-full object-cover" />}
+                  <span className="casilla-producto relative size-20 shrink-0 overflow-hidden rounded-2xl">
+                    {p.imagen_url && <img src={p.imagen_url} alt="" className="foto-producto" />}
                     <span className="absolute left-1.5 top-1.5 rounded-md bg-pino px-1.5 py-0.5 text-xs font-bold text-white">{p.codigo}</span>
                   </span>
                   <span className="min-w-0 flex-1">

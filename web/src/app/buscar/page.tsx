@@ -94,8 +94,8 @@ export default async function Buscar({ searchParams }: { searchParams: Promise<B
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
               {r.destacados.map((p) => (
                 <Link key={p.id} href={`/t/${p.tienda_slug}/p/${p.id}`} className="overflow-hidden rounded-2xl bg-white shadow-suave ring-1 ring-linea/60 transition hover:-translate-y-0.5">
-                  <div className="relative aspect-square bg-arena">
-                    {p.imagen_url && <img src={p.imagen_url} alt={p.nombre} className="size-full object-cover" />}
+                  <div className="casilla-producto relative aspect-square">
+                    {p.imagen_url && <img src={p.imagen_url} alt={p.nombre} className="foto-producto" />}
                     <span className="absolute right-2.5 top-2.5 rounded-md bg-pino px-2 py-0.5 text-xs font-bold text-white">Destacado</span>
                   </div>
                   <div className="p-3.5">
@@ -133,8 +133,8 @@ export default async function Buscar({ searchParams }: { searchParams: Promise<B
                 </p>
                 <div className="mt-3 flex gap-2">
                   {t.productos.map((p) => (
-                    <Link key={p.id} href={`/t/${t.slug}/p/${p.id}`} className="relative size-24 overflow-hidden rounded-xl bg-arena">
-                      {p.imagen_url && <img src={p.imagen_url} alt={p.nombre} className="size-full object-cover" />}
+                    <Link key={p.id} href={`/t/${t.slug}/p/${p.id}`} className="casilla-producto relative size-24 overflow-hidden rounded-xl">
+                      {p.imagen_url && <img src={p.imagen_url} alt={p.nombre} className="foto-producto" />}
                       {p.descuento_pct > 0 && <span className="absolute left-1.5 top-1.5 rounded bg-coral px-1.5 text-[10px] font-bold text-white">-{p.descuento_pct}%</span>}
                       {p.destacado && <span className="absolute right-1.5 top-1.5 rounded bg-pino px-1.5 text-[10px] font-bold text-white">Destacado</span>}
                       <span className="absolute bottom-1.5 left-1.5 rounded bg-tinta/80 px-1.5 text-[10px] font-bold text-white">{soles(p.precio_final_centimos)}</span>

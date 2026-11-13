@@ -406,7 +406,7 @@ export default function Seguimiento({ params }: { params: Promise<{ token: strin
             <Seccion titulo="Resumen">
               {p.items_detalle.map((i, n) => (
                 <div key={n} className="flex items-center gap-3 py-2 text-sm">
-                  {i.imagen_url ? <img src={i.imagen_url} alt="" className="size-11 rounded-lg object-cover" /> : <span className="size-11 rounded-lg bg-crema" />}
+                  {i.imagen_url ? <span className="casilla-producto block size-11 shrink-0 overflow-hidden rounded-lg"><img src={i.imagen_url} alt="" className="foto-producto" /></span> : <span className="size-11 rounded-lg bg-crema" />}
                   <span className="min-w-0 flex-1"><b className="block truncate text-tinta">{i.nombre}</b>{i.variante && <span className="text-xs text-gris">{i.variante} · </span>}<span className="text-xs text-gris">x{i.cantidad}</span></span>
                   <span>{soles(i.precio_centimos * i.cantidad)}</span>
                 </div>

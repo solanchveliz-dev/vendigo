@@ -64,7 +64,7 @@ export function EstadoPedido({ p }: { p: PedidoComprador }) {
 export function Miniatura({ p, className }: { p: PedidoComprador; className?: string }) {
   return p.imagen_url ? (
     // eslint-disable-next-line @next/next/no-img-element
-    <img src={p.imagen_url} alt="" className={cn("rounded-xl object-cover ring-1 ring-linea", className)} />
+    <span className={cn("casilla-producto block overflow-hidden rounded-xl ring-1 ring-linea", className)}><img src={p.imagen_url} alt="" className="foto-producto" /></span>
   ) : (
     <span className={cn("grid place-items-center rounded-xl bg-crema text-gris ring-1 ring-linea", className)}><ShoppingBag className="size-5" /></span>
   );

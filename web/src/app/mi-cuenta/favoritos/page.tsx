@@ -59,7 +59,7 @@ export default function Favoritos() {
                     <Link href={`/t/${p.tienda_slug}/p/${p.id}`} className="block">
                       {p.imagen_url ? (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img src={p.imagen_url} alt="" className="aspect-square w-full object-cover" />
+                        <span className="casilla-producto block aspect-square"><img src={p.imagen_url} alt="" className="foto-producto" /></span>
                       ) : (
                         <span className="block aspect-square w-full bg-crema" />
                       )}

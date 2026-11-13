@@ -18,8 +18,8 @@ export function Destacado({ producto: p, slug, etiqueta, texto, vista = false }:
           <ShoppingBag className="size-4" /> Ver producto <ChevronRight className="size-4" />
         </Link>
       </div>
-      <Link href={href} className="relative aspect-[4/3] overflow-hidden rounded-[22px] bg-white sm:aspect-auto sm:min-h-[340px]" aria-label={`Ver ${p.nombre}`}>
-        {p.imagenes[0] && <img src={p.imagenes[0].url} alt={p.nombre} className="absolute inset-0 size-full object-cover transition duration-500 hover:scale-105" />}
+      <Link href={href} className="casilla-producto relative aspect-[4/3] overflow-hidden rounded-[22px] sm:aspect-auto sm:min-h-[340px]" aria-label={`Ver ${p.nombre}`}>
+        {p.imagenes[0] && <img src={p.imagenes[0].url} alt={p.nombre} className="foto-producto absolute inset-0 transition duration-500 hover:scale-105" />}
       </Link>
     </section>
   );

@@ -68,8 +68,8 @@ export function Catalogo({ productos, slug, vista = false }: { productos: Produc
             href={`/t/${slug}/p/${p.id}${vista ? "?vista=1" : ""}`}
             className="group overflow-hidden rounded-2xl bg-white shadow-suave ring-1 ring-linea/50 transition hover:-translate-y-0.5"
           >
-            <div className="relative aspect-square bg-arena">
-              {p.imagenes[0] && <img src={p.imagenes[0].url} alt={p.nombre} className="size-full object-cover" />}
+            <div className="casilla-producto relative aspect-square">
+              {p.imagenes[0] && <img src={p.imagenes[0].url} alt={p.nombre} className="foto-producto" />}
               <span className="absolute left-2.5 top-2.5 flex flex-col items-start gap-1.5">
                 {p.oferta && <span className="rounded-md bg-coral px-2 py-0.5 text-xs font-bold text-white">-{p.oferta.descuento_pct}%</span>}
                 {p.destacado_hasta && <span className="rounded-md bg-pino px-2 py-0.5 text-xs font-bold text-white">Destacado</span>}

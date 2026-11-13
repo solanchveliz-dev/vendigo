@@ -22,15 +22,15 @@ export function GaleriaProducto({ producto: p, vista = false }: { producto: Prod
             <button
               key={img.key}
               onClick={() => setFoto(i)}
-              className={`relative size-[84px] shrink-0 overflow-hidden rounded-2xl bg-white ring-2 transition ${i === foto ? "ring-pino" : "ring-transparent"}`}
+              className={`casilla-producto relative size-[84px] shrink-0 overflow-hidden rounded-2xl ring-2 transition ${i === foto ? "ring-pino" : "ring-transparent"}`}
             >
-              <img src={img.url} alt="" className="size-full object-cover" />
+              <img src={img.url} alt="" className="foto-producto" />
             </button>
           ))}
         </div>
       )}
-      <div className="relative aspect-square min-w-0 flex-1 overflow-hidden rounded-[26px] bg-white shadow-suave">
-        {p.imagenes[foto] && <img src={p.imagenes[foto].url} alt={p.nombre} className="size-full object-cover" />}
+      <div className="casilla-producto relative aspect-square min-w-0 flex-1 overflow-hidden rounded-[26px] shadow-suave">
+        {p.imagenes[foto] && <img src={p.imagenes[foto].url} alt={p.nombre} className="foto-producto" />}
         {p.oferta && <span className="absolute left-2 top-2 rounded-md bg-coral px-2 py-0.5 text-xs font-bold text-white">-{p.oferta.descuento_pct}%</span>}
         {/* Corazón sobre la foto, como en el prototipo: guarda el producto en Favoritos. */}
         {!vista && (

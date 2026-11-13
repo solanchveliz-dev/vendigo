@@ -71,7 +71,7 @@ export function BotonSeguir({ clase, tiendaId }: { clase: string; tiendaId: stri
   const { activo, aviso, tocar } = useFavorito("tiendas", tiendaId);
   return (
     <div className="relative">
-      <button onClick={tocar} className={clase} aria-pressed={activo} aria-label={activo ? "Dejar de seguir" : "Seguir tienda"} title={activo ? "Dejar de seguir" : "Seguir tienda"}>
+      <button onClick={tocar} className={cn(clase, activo && "!border-[#f6c9c9] !bg-[#fdecec] !text-[#e5484d]")} aria-pressed={activo} aria-label={activo ? "Dejar de seguir" : "Seguir tienda"} title={activo ? "Dejar de seguir" : "Seguir tienda"}>
         <Heart className={cn("size-5", activo && "fill-current")} />
       </button>
       <Globo texto={aviso} />
@@ -86,7 +86,7 @@ export function BotonGuardar({ productoId, clase }: { productoId: string; clase?
     <div className="relative">
       <button
         onClick={tocar}
-        className={cn(clase ?? "grid size-11 place-items-center rounded-full bg-white text-tinta ring-1 ring-linea transition hover:text-coral", activo && "!text-coral")}
+        className={cn(clase ?? "grid size-11 place-items-center rounded-full bg-white text-tinta ring-1 ring-linea transition hover:text-coral", activo && "!text-[#e5484d]")}
         aria-pressed={activo}
         aria-label={activo ? "Quitar de favoritos" : "Guardar en favoritos"}
         title={activo ? "Quitar de favoritos" : "Guardar en favoritos"}
