@@ -52,9 +52,17 @@ function useFavorito(tipo: "tiendas" | "productos", id: string) {
   return { activo, aviso, tocar };
 }
 
-function Globo({ texto }: { texto: string }) {
+// Aviso corto debajo del corazón. En las fotos (esquina derecha) se alinea a la derecha para que no lo corte el borde.
+function Globo({ texto, derecha }: { texto: string; derecha?: boolean }) {
   return texto ? (
-    <span className="pointer-events-none absolute left-1/2 top-full z-10 mt-2 w-max -translate-x-1/2 rounded-full bg-tinta px-3 py-1.5 text-xs font-semibold text-white shadow-suave">{texto}</span>
+    <span
+      className={cn(
+        "pointer-events-none absolute top-full z-10 mt-2 w-max max-w-[220px] rounded-full bg-tinta px-3 py-1.5 text-xs font-semibold text-white shadow-suave",
+        derecha ? "right-0" : "left-1/2 -translate-x-1/2",
+      )}
+    >
+      {texto}
+    </span>
   ) : null;
 }
 
@@ -85,7 +93,7 @@ export function BotonGuardar({ productoId, clase }: { productoId: string; clase?
       >
         <Heart className={cn("size-5", activo && "fill-current")} />
       </button>
-      <Globo texto={aviso} />
+      <Globo texto={aviso} derecha />
     </div>
   );
 }
