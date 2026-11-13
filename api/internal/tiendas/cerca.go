@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"math"
 	"net/http"
 	"net/url"
@@ -16,7 +17,8 @@ import (
 	"github.com/solanchveliz-dev/vendigo/api/internal/httpx"
 )
 
-// Agencias reales cerca del comprador, buscadas en vivo en OpenStreetMap (servicio Overpass, gratuito y sin clave).
+// Agencias reales cerca del comprador, buscadas en vivo en OpenStreetMap: primero con su buscador (Nominatim),
+// que responde en menos de un segundo, y si no responde con Overpass. Ambos son gratuitos y sin clave.
 // Shalom, Olva y Marvisur no tienen una API pública: OpenStreetMap es un mapa abierto que mantiene la comunidad,
 // así que puede no tener todas las agencias. Por eso el checkout ofrece además abrir Google Maps (enlace, sin costo).
 //
@@ -27,8 +29,13 @@ import (
 //   - como mucho una consulta por segundo.
 // Privacidad: la ubicación del comprador se redondea (~1 km) antes de usarla y no se guarda en la base de datos.
 
-// URLOverpass se puede cambiar en las pruebas por un servidor falso.
+// URLBuscador (Nominatim) y URLOverpass se pueden cambiar en las pruebas por un servidor falso.
+var URLBuscador = "https://nominatim.openstreetmap.org/search"
+
 var URLOverpass = "https://overpass-api.de/api/interpreter"
+
+// Servidores públicos de respaldo, por si el principal está saturado (se prueban en orden, uno por vez).
+var OverpassRespaldo = []string{"https://overpass.private.coffee/api/interpreter"}
 
 const (
 	agenteOverpass = "VendiGo/1.0 (proyecto de tesis Tecsup; https://github.com/solanchveliz-dev/vendigo)"
@@ -59,7 +66,7 @@ var cerca = struct {
 	ultima time.Time
 }{cache: map[string]guardado{}}
 
-var clienteOverpass = &http.Client{Timeout: 20 * time.Second}
+var clienteOverpass = &http.Client{Timeout: 9 * time.Second} // dos intentos caben en los 20 s que espera la web
 
 // Palabra que identifica a cada agencia en los nombres del mapa ("Olva Courier" → "olva").
 var marcas = map[string]string{"Shalom": "shalom", "Olva Courier": "olva", "Marvisur": "marvisur", "Flores": "flores"}
@@ -86,10 +93,15 @@ func (m *Modulo) agenciasCerca(w http.ResponseWriter, r *http.Request) error {
 	// Redondeo a 2 decimales (~1 km): suficiente para buscar en 8 km y no se usa la ubicación exacta.
 	lat, lng = math.Round(lat*100)/100, math.Round(lng*100)/100
 	lista, disponible, err := buscarCerca(r.Context(), marca, lat, lng)
+	motivo := ""
 	if err != nil {
-		disponible = false // el mapa no respondió: el checkout ofrece Google Maps y escribir la sede
+		// El mapa no respondió: el checkout ofrece Google Maps y escribir la sede. Queda en el registro de la API.
+		slog.Warn("agencias cercanas: openstreetmap no respondió", "err", err)
+		disponible, motivo, lista = false, "sin_respuesta", []AgenciaCerca{}
+	} else if !disponible {
+		motivo = "tope_diario"
 	}
-	httpx.OK(w, map[string]any{"agencias": lista, "disponible": disponible, "fuente": "© OpenStreetMap"})
+	httpx.OK(w, map[string]any{"agencias": lista, "disponible": disponible, "motivo": motivo, "fuente": "© OpenStreetMap"})
 	return nil
 }
 
@@ -113,31 +125,17 @@ func buscarCerca(ctx context.Context, marca string, lat, lng float64) ([]Agencia
 	cerca.usadas++
 	cerca.ultima = time.Now()
 
-	consulta := fmt.Sprintf(`[out:json][timeout:15];(nwr["name"~"%s",i](around:%d,%f,%f);nwr["brand"~"%s",i](around:%d,%f,%f););out center 60;`,
-		marca, radioMetros, lat, lng, marca, radioMetros, lat, lng)
-	req, err := http.NewRequestWithContext(ctx, "POST", URLOverpass, strings.NewReader("data="+url.QueryEscape(consulta)))
+	d, err := consultarBuscador(ctx, marca, lat, lng)
 	if err != nil {
-		return nil, false, err
+		consulta := fmt.Sprintf(`[out:json][timeout:8];nwr["name"~"%s",i](%f,%f,%f,%f);out center 40;`,
+			marca, lat-0.07, lng-0.07, lat+0.07, lng+0.07)
+		for _, servidor := range append([]string{URLOverpass}, OverpassRespaldo...) {
+			if d, err = consultarOverpass(ctx, servidor, consulta); err == nil {
+				break
+			}
+		}
 	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("User-Agent", agenteOverpass)
-	res, err := clienteOverpass.Do(req)
 	if err != nil {
-		return nil, false, err
-	}
-	defer res.Body.Close()
-	if res.StatusCode != http.StatusOK {
-		return nil, false, fmt.Errorf("overpass respondió %d", res.StatusCode)
-	}
-	var d struct {
-		Elements []struct {
-			Lat    float64           `json:"lat"`
-			Lon    float64           `json:"lon"`
-			Center *struct{ Lat, Lon float64 } `json:"center"`
-			Tags   map[string]string `json:"tags"`
-		} `json:"elements"`
-	}
-	if err := json.NewDecoder(res.Body).Decode(&d); err != nil {
 		return nil, false, err
 	}
 	lista := []AgenciaCerca{}
@@ -157,6 +155,10 @@ func buscarCerca(ctx context.Context, marca string, lat, lng float64) ([]Agencia
 		nombre := strings.TrimSpace(t["name"])
 		if nombre == "" {
 			nombre = t["brand"]
+		}
+		// El nombre tiene que ser de la agencia (no una calle "Pasaje Shalom" ni un lugar cuya dirección la menciona).
+		if !strings.Contains(strings.ToLower(nombre), marca) || t["highway"] != "" || t["place"] != "" || t["boundary"] != "" {
+			continue
 		}
 		calle := strings.TrimSpace(strings.TrimSpace(t["addr:street"]) + " " + t["addr:housenumber"])
 		zona := firstNonEmpty(t["addr:district"], t["addr:suburb"], t["addr:subdistrict"])
@@ -181,6 +183,98 @@ func buscarCerca(ctx context.Context, marca string, lat, lng float64) ([]Agencia
 	}
 	cerca.cache[clave] = guardado{lista: lista, hasta: time.Now().Add(24 * time.Hour)}
 	return lista, true, nil
+}
+
+type respuestaOverpass struct {
+	Elements []struct {
+		Lat    float64                     `json:"lat"`
+		Lon    float64                     `json:"lon"`
+		Center *struct{ Lat, Lon float64 } `json:"center"`
+		Tags   map[string]string           `json:"tags"`
+	} `json:"elements"`
+}
+
+// consultarBuscador: Nominatim busca el nombre dentro de un recuadro de ~8 km alrededor del comprador
+// (con índice, por eso es rápido). La respuesta se pasa al mismo formato que Overpass.
+func consultarBuscador(ctx context.Context, marca string, lat, lng float64) (respuestaOverpass, error) {
+	var d respuestaOverpass
+	q := url.Values{}
+	q.Set("q", marca)
+	q.Set("format", "jsonv2")
+	q.Set("addressdetails", "1")
+	q.Set("extratags", "1")
+	q.Set("limit", "30")
+	q.Set("countrycodes", "pe")
+	q.Set("bounded", "1")
+	q.Set("viewbox", fmt.Sprintf("%f,%f,%f,%f", lng-0.08, lat+0.08, lng+0.08, lat-0.08))
+	req, err := http.NewRequestWithContext(ctx, "GET", URLBuscador+"?"+q.Encode(), nil)
+	if err != nil {
+		return d, err
+	}
+	req.Header.Set("User-Agent", agenteOverpass)
+	req.Header.Set("Accept-Language", "es")
+	res, err := clienteOverpass.Do(req)
+	if err != nil {
+		return d, err
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		return d, fmt.Errorf("nominatim respondió %d", res.StatusCode)
+	}
+	var lugares []struct {
+		Lat      string            `json:"lat"`
+		Lon      string            `json:"lon"`
+		Name     string            `json:"name"`
+		Category string            `json:"category"`
+		Type     string            `json:"type"`
+		Address  map[string]string `json:"address"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&lugares); err != nil {
+		return d, err
+	}
+	for _, l := range lugares {
+		la, e1 := strconv.ParseFloat(l.Lat, 64)
+		lo, e2 := strconv.ParseFloat(l.Lon, 64)
+		if e1 != nil || e2 != nil {
+			continue
+		}
+		a := l.Address
+		tags := map[string]string{
+			"name": l.Name, l.Category: l.Type,
+			"addr:street": a["road"], "addr:housenumber": a["house_number"],
+			"addr:district": firstNonEmpty(a["suburb"], a["city_district"], a["neighbourhood"]),
+			"addr:city":     firstNonEmpty(a["city"], a["town"], a["state"]),
+		}
+		e := d.Elements
+		e = append(e, struct {
+			Lat    float64                     `json:"lat"`
+			Lon    float64                     `json:"lon"`
+			Center *struct{ Lat, Lon float64 } `json:"center"`
+			Tags   map[string]string           `json:"tags"`
+		}{Lat: la, Lon: lo, Tags: tags})
+		d.Elements = e
+	}
+	return d, nil
+}
+
+func consultarOverpass(ctx context.Context, servidor, consulta string) (respuestaOverpass, error) {
+	var d respuestaOverpass
+	req, err := http.NewRequestWithContext(ctx, "POST", servidor, strings.NewReader("data="+url.QueryEscape(consulta)))
+	if err != nil {
+		return d, err
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("User-Agent", agenteOverpass)
+	res, err := clienteOverpass.Do(req)
+	if err != nil {
+		return d, err
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		return d, fmt.Errorf("%s respondió %d", servidor, res.StatusCode)
+	}
+	err = json.NewDecoder(res.Body).Decode(&d)
+	return d, err
 }
 
 func firstNonEmpty(v ...string) string {

@@ -46,7 +46,7 @@ export function ElegirSede({ agencias, valor, cambiar }: { agencias: string[]; v
 
   async function buscarCerca(p: Punto) {
     const r = await fetch(`/api/v1/agencias/cerca?agencia=${encodeURIComponent(agencia)}&lat=${p.lat}&lng=${p.lng}`, { cache: "no-store" }).catch(() => null);
-    const d = r?.ok ? ((await r.json()) as { agencias: Lugar[]; disponible: boolean }) : null;
+    const d = r?.ok ? ((await r.json()) as { agencias: Lugar[]; disponible: boolean; motivo?: string }) : null;
     // Se suman las sedes confirmadas por VendiGo que tengan ubicación, por si el mapa abierto no las tiene.
     const propias = sedes
       .filter((s) => s.lat != null && s.lng != null)
@@ -56,7 +56,11 @@ export function ElegirSede({ agencias, valor, cambiar }: { agencias: string[]; v
       .filter((s, i, arr) => arr.findIndex((x) => plano(x.nombre) === plano(s.nombre)) === i)
       .sort((a, b) => (a.km ?? 99) - (b.km ?? 99));
     setCercanas(todas);
-    if (!d?.disponible) setAviso(`Ahora no pudimos consultar el mapa de agencias. Búscala en Google Maps y escríbela abajo.`);
+    // Cada causa con su mensaje: así se sabe si falta reiniciar la API, si el mapa no respondió o si se llegó al tope del día.
+    if (!r || r.status === 404) setAviso("VendiGo no pudo hacer la búsqueda (el servidor necesita actualizarse). Búscala en Google Maps y escríbela abajo.");
+    else if (!d) setAviso("No pudimos conectar con VendiGo para buscar agencias. Búscala en Google Maps y escríbela abajo.");
+    else if (d.motivo === "tope_diario") setAviso("La búsqueda de agencias cercanas llegó a su límite de hoy. Búscala en Google Maps y escríbela abajo.");
+    else if (!d.disponible) setAviso("El mapa de agencias no respondió a tiempo. Vuelve a intentarlo en un momento o búscala en Google Maps.");
     else if (!todas.length) setAviso(`No encontramos agencias ${agencia} registradas en el mapa abierto cerca de ti. Búscala en Google Maps y escríbela abajo.`);
     if (todas[0]) cambiar({ agencia, ciudad: todas[0].ciudad, sede: textoSede(todas[0]) });
   }
