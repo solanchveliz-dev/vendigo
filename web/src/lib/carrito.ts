@@ -16,6 +16,27 @@ const clave = (slug: string) => `vendigo:pedido:${slug}`;
 // La separación del Modo live va aparte del carrito normal: un solo producto y no se mezcla con lo que ya tenías.
 const claveLive = (slug: string) => `vendigo:live:${slug}`;
 
+// "Comprar ahora": solo ese producto, aparte del pedido que la persona va armando (no lo toca ni lo suma).
+const claveAhora = (slug: string) => `vendigo:ahora:${slug}`;
+
+export function leerCompraDirecta(slug: string): ItemCarrito[] {
+  try {
+    const v = JSON.parse(sessionStorage.getItem(claveAhora(slug)) ?? "[]");
+    return Array.isArray(v) ? v : [];
+  } catch {
+    return [];
+  }
+}
+
+export function guardarCompraDirecta(slug: string, items: ItemCarrito[]) {
+  try {
+    if (items.length) sessionStorage.setItem(claveAhora(slug), JSON.stringify(items));
+    else sessionStorage.removeItem(claveAhora(slug));
+  } catch {
+    // Sin almacenamiento: la compra sigue en la página actual.
+  }
+}
+
 export function leerSeparacion(slug: string): ItemCarrito[] {
   try {
     const v = JSON.parse(sessionStorage.getItem(claveLive(slug)) ?? "[]");

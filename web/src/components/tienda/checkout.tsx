@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Bike, Check, ChevronRight, CreditCard, Landmark, Lock, MapPin, Minus, Package, Plus, Smartphone, Store, Trash2 } from "lucide-react";
 import { api, ErrorApi, usuarioActual } from "@/lib/api";
 import { soles } from "@/lib/formato";
-import { guardarCarrito, guardarSeparacion, leerCarrito, leerSeparacion, type ItemCarrito } from "@/lib/carrito";
+import { guardarCarrito, guardarCompraDirecta, guardarSeparacion, leerCarrito, leerCompraDirecta, leerSeparacion, type ItemCarrito } from "@/lib/carrito";
 import type { Tienda, Usuario } from "@/lib/tipos";
 import type { Direccion } from "@/components/comprador/ui";
 import { Area, Aviso, Boton, Campo, Entrada, Selector, cn } from "@/components/ui";
@@ -64,7 +64,10 @@ function Tarjeta({ titulo, children, className }: { titulo?: React.ReactNode; ch
 // Compra sin cuenta, en 3 pasos como el prototipo: Tu pedido → Entrega → Pago → Listo (seguimiento).
 // El comprador le paga directo a la tienda; VendiGo solo registra el pedido y da seguimiento.
 // live: separación desde el Modo live (un producto, plazo de pago de minutos y siempre se paga antes).
-export function Checkout({ tienda: t, vista = false, live = false, minutosLive = 0 }: { tienda: Tienda; vista?: boolean; live?: boolean; minutosLive?: number }) {
+const CORTO: Record<string, string> = { recojo: "Recojo", agencia: "Agencia", motorizado: "Delivery", otra: "Otra" };
+
+// ahora: "Comprar ahora" de un producto; no toca el pedido que la persona va armando en la tienda.
+export function Checkout({ tienda: t, vista = false, live = false, ahora: directa = false, minutosLive = 0 }: { tienda: Tienda; vista?: boolean; live?: boolean; ahora?: boolean; minutosLive?: number }) {
   const router = useRouter();
   const [paso, setPaso] = useState<Paso>(1);
   const [items, setItems] = useState<ItemCarrito[] | null>(null);
@@ -84,8 +87,8 @@ export function Checkout({ tienda: t, vista = false, live = false, minutosLive =
   const [cargando, setCargando] = useState(false);
 
   useEffect(() => {
-    setItems(live ? leerSeparacion(t.slug) : leerCarrito(t.slug));
-  }, [t.slug, live]);
+    setItems(live ? leerSeparacion(t.slug) : directa ? leerCompraDirecta(t.slug) : leerCarrito(t.slug));
+  }, [t.slug, live, directa]);
   useEffect(() => {
     usuarioActual().then((u) => {
       if (!u || u.rol === "admin") return;
@@ -146,6 +149,7 @@ export function Checkout({ tienda: t, vista = false, live = false, minutosLive =
   function cambiarItems(nuevos: ItemCarrito[]) {
     setItems(nuevos);
     if (live) guardarSeparacion(t.slug, nuevos);
+    else if (directa) guardarCompraDirecta(t.slug, nuevos);
     else guardarCarrito(t.slug, nuevos);
   }
   const campo = (k: keyof typeof f) => ({ value: f[k], onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => setF({ ...f, [k]: e.target.value }) });
@@ -210,7 +214,9 @@ export function Checkout({ tienda: t, vista = false, live = false, minutosLive =
         nota: f.nota.trim(),
         live,
       });
+      // Solo se vacía lo que se compró: con "Comprar ahora" el pedido guardado sigue intacto.
       if (live) guardarSeparacion(t.slug, []);
+      else if (directa) guardarCompraDirecta(t.slug, []);
       else guardarCarrito(t.slug, []);
       try {
         sessionStorage.setItem(`vendigo:nuevo:${r.token}`, "1");
@@ -250,7 +256,7 @@ export function Checkout({ tienda: t, vista = false, live = false, minutosLive =
         </p>
       )}
 
-      <div className="grid items-start gap-5 lg:grid-cols-[1fr_360px]">
+      <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="space-y-4">
           {paso === 1 && (
             <>
@@ -278,7 +284,11 @@ export function Checkout({ tienda: t, vista = false, live = false, minutosLive =
                 ))}
                 <div className="mt-2 flex flex-wrap gap-4 text-sm">
                   <button onClick={() => setEditar(!editar)} className="font-semibold text-pino underline underline-offset-2">{editar ? "Listo" : "Cambiar cantidades"}</button>
-                  <Link href={`/t/${t.slug}`} className="font-semibold text-pino underline underline-offset-2">Agregar más de esta tienda</Link>
+                  {directa ? (
+                    <span className="text-gris">Compras solo este producto. Lo que tenías en tu pedido de esta tienda sigue guardado.</span>
+                  ) : (
+                    <Link href={`/t/${t.slug}`} className="font-semibold text-pino underline underline-offset-2">Agregar más de esta tienda</Link>
+                  )}
                 </div>
               </Tarjeta>
               <Tarjeta>
@@ -427,7 +437,7 @@ export function Checkout({ tienda: t, vista = false, live = false, minutosLive =
 
         <aside className="space-y-3 rounded-[22px] bg-white p-5 shadow-suave ring-1 ring-linea/60 lg:sticky lg:top-24">
           <div className="flex items-center gap-3">
-            {t.logo_url ? <img src={t.logo_url} alt="" className="size-10 rounded-full object-cover" /> : <span className="size-10 rounded-full bg-crema" />}
+            {t.logo_url ? <img src={t.logo_url} alt="" className="size-10 rounded-full object-cover" /> : <span className="grid size-10 shrink-0 place-items-center rounded-full bg-pino text-xs font-bold text-white">{t.nombre.split(" ").filter(Boolean).slice(0, 2).map((x) => x[0]).join("").toUpperCase()}</span>}
             <span><b className="block text-sm text-tinta">Pedido a {t.nombre}</b><span className="text-xs text-gris">{t.pago_titular || t.distrito || t.ciudad}</span></span>
           </div>
           <div className="space-y-2 border-b border-linea pb-3">
@@ -441,7 +451,7 @@ export function Checkout({ tienda: t, vista = false, live = false, minutosLive =
           </div>
           <div className="space-y-1.5 text-sm">
             <div className="flex justify-between"><span className="text-gris">Subtotal</span><span>{soles(subtotal)}</span></div>
-            <div className="flex justify-between"><span className="text-gris">Entrega{entrega ? ` · ${ENTREGAS[entrega].t.split(" ")[0]}` : ""}</span><span>{!entrega ? "—" : moto ? `${soles(moto)} al motorizado` : envio ? soles(envio) : "Gratis"}</span></div>
+            <div className="flex justify-between"><span className="text-gris">Entrega{entrega ? ` · ${CORTO[entrega] ?? ""}` : ""}</span><span>{!entrega ? "—" : moto ? `${soles(moto)} al motorizado` : envio ? soles(envio) : entrega === "agencia" ? "Se paga en la agencia" : entrega === "recojo" ? "Gratis" : "A coordinar"}</span></div>
             <div className="flex justify-between border-t border-linea pt-2 text-lg font-extrabold"><span>Total</span><span>{soles(total)}</span></div>
             {adelanto > 0 && paso >= 2 && <div className="flex justify-between text-xs text-gris"><span>Adelanto · resto al recibir</span><span>{soles(adelanto)} · {soles(total - adelanto)}</span></div>}
           </div>

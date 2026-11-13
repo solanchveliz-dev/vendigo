@@ -4,7 +4,7 @@ import { BotonGuardar } from "@/components/tienda/seguir";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { agregarAlCarrito, guardarSeparacion } from "@/lib/carrito";
+import { agregarAlCarrito, guardarCompraDirecta, guardarSeparacion, type ItemCarrito } from "@/lib/carrito";
 import { Minus, Plus, ShoppingBag, TrendingUp, Zap } from "lucide-react";
 import { soles } from "@/lib/formato";
 import type { Producto } from "@/lib/tipos";
@@ -75,17 +75,26 @@ export function CompraProducto({ producto: p, slug, pausada = false, vista = fal
     router.push(`/t/${slug}/comprar?live=1${minutosLive ? `&min=${minutosLive}` : ""}`);
   }
 
+  const item = (): ItemCarrito => ({
+    producto_id: p.id,
+    variante_id: variante?.id ?? "",
+    cantidad,
+    nombre: p.nombre,
+    variante: variante?.nombre ?? "",
+    precio_centimos: precio,
+    imagen_url: p.imagenes[0]?.url ?? "",
+    stock,
+  });
+
+  // "Agregar" suma al pedido que se va armando en esta tienda.
   function agregar() {
-    agregarAlCarrito(slug, {
-      producto_id: p.id,
-      variante_id: variante?.id ?? "",
-      cantidad,
-      nombre: p.nombre,
-      variante: variante?.nombre ?? "",
-      precio_centimos: precio,
-      imagen_url: p.imagenes[0]?.url ?? "",
-      stock,
-    });
+    agregarAlCarrito(slug, item());
+  }
+
+  // "Comprar ahora" compra solo este producto: el pedido guardado no se toca.
+  function comprarAhora() {
+    guardarCompraDirecta(slug, [item()]);
+    router.push(`/t/${slug}/comprar?ahora=1`);
   }
 
   function pronto(texto: string) {
@@ -173,8 +182,7 @@ export function CompraProducto({ producto: p, slug, pausada = false, vista = fal
         <button
           onClick={() => {
             if (vista) return pronto("Vista previa: así ven el botón tus clientes. Aquí no se puede comprar.");
-            agregar();
-            router.push(`/t/${slug}/comprar`);
+            comprarAhora();
           }}
           disabled={stock === 0 || pausada}
           className="inline-flex h-[52px] min-w-0 flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-full bg-pino px-4 font-bold text-white transition hover:bg-pino-2 disabled:opacity-50"
