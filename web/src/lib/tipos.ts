@@ -134,6 +134,7 @@ export type PedidoDetalle = PedidoResumen & {
   referencia: string;
   agencia: string;
   agencia_sede: string;
+  dia_recojo: string | null; // AAAA-MM-DD: día en que el cliente pasará a recoger (solo recojo en tienda)
   nota_comprador: string;
   subtotal_centimos: number;
   envio_centimos: number;

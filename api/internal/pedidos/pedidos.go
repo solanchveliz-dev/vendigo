@@ -223,6 +223,7 @@ type Detalle struct {
 	Referencia    string   `json:"referencia"`
 	Agencia       string   `json:"agencia"`
 	AgenciaSede   string   `json:"agencia_sede"`
+	DiaRecojo     *string  `json:"dia_recojo"` // AAAA-MM-DD: día en que el cliente pasará a recoger
 	Nota          string   `json:"nota_comprador"`
 	Subtotal      int      `json:"subtotal_centimos"`
 	EnvioCosto    int      `json:"envio_centimos"`
@@ -293,12 +294,13 @@ func (m *Modulo) cargar(ctx context.Context, tid, pid string) (*Detalle, error) 
 		metodo_pago, subtotal_centimos, envio_centimos, total_centimos,
 		direccion, distrito, ciudad, referencia, agencia, agencia_sede, nota_comprador, motivo_cancelacion, confirmado_por,
 		creado_en, aceptado_en, enviado_en, entregado_en, pago_vence_en, del_live,
-		(SELECT count(*) FROM pedidos x WHERE x.tienda_id=pedidos.tienda_id AND x.comprador_celular=pedidos.comprador_celular)
+		(SELECT count(*) FROM pedidos x WHERE x.tienda_id=pedidos.tienda_id AND x.comprador_celular=pedidos.comprador_celular),
+		to_char(dia_recojo, 'YYYY-MM-DD')
 		FROM pedidos WHERE id::text=$1 AND tienda_id=$2`, pid, tid).Scan(
 		&d.ID, &d.Codigo, &d.Comprador, &d.Celular, &dni, &d.Entrega, &d.Estado, &d.MetodoPago,
 		&d.Subtotal, &d.EnvioCosto, &d.Total, &d.Direccion, &d.Distrito, &d.Ciudad, &d.Referencia,
 		&d.Agencia, &d.AgenciaSede, &d.Nota, &d.Motivo, &d.ConfirmadoPor, &d.CreadoEn,
-		&d.AceptadoEn, &d.EnviadoEn, &d.EntregadoEn, &d.PagoVenceEn, &d.DelLive, &d.PedidosCliente)
+		&d.AceptadoEn, &d.EnviadoEn, &d.EntregadoEn, &d.PagoVenceEn, &d.DelLive, &d.PedidosCliente, &d.DiaRecojo)
 	if core.SinFilas(err) {
 		return nil, httpx.ErrNoEncontrado
 	}

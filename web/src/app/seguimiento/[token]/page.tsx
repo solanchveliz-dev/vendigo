@@ -5,6 +5,7 @@ import { use, useEffect, useRef, useState } from "react";
 import { Check, ChevronRight, Copy, CreditCard, ExternalLink, Flag, ImagePlus, KeyRound, MessageCircle, ShieldCheck } from "lucide-react";
 import { api, ErrorApi, useApi, usuarioActual } from "@/lib/api";
 import { fecha, soles } from "@/lib/formato";
+import { textoDiaRecojo } from "@/lib/dias-recojo";
 import type { PedidoDetalle, Reclamo } from "@/lib/tipos";
 import { Area, Aviso, Boton, Campo, Cargando, Entrada, Modal, Selector, useAvisar } from "@/components/ui";
 import { LineaTiempo } from "@/components/pedidos/pasos";
@@ -276,7 +277,7 @@ export default function Seguimiento({ params }: { params: Promise<{ token: strin
             </nav>
             <div className="mb-2 h-1 w-8 rounded-full bg-coral" />
             <h1 className="text-[34px] font-extrabold leading-tight text-pino">Seguimiento de {p.codigo}</h1>
-            <p className="text-sm text-gris">{ENTREGA[p.entrega] ?? p.entrega} · {t.nombre} · {fecha(p.creado_en, true)}</p>
+            <p className="text-sm text-gris">{ENTREGA[p.entrega] ?? p.entrega}{p.entrega === "recojo" && p.dia_recojo ? ` el ${textoDiaRecojo(p.dia_recojo)}` : ""} · {t.nombre} · {fecha(p.creado_en, true)}</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <span className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-xs font-bold text-tinta ring-1 ring-linea"><span className="size-1.5 rounded-full bg-pino" /> {p.estado_texto}</span>

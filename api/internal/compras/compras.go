@@ -108,6 +108,7 @@ type compraReq struct {
 	Referencia  string              `json:"referencia"`
 	Agencia     string              `json:"agencia"`
 	AgenciaSede string              `json:"agencia_sede"`
+	DiaRecojo   string              `json:"dia_recojo"` // AAAA-MM-DD, obligatorio en recojo en tienda
 	MetodoPago  string              `json:"metodo_pago"`
 	Nota        string              `json:"nota"`
 	// Live: la compra viene del Modo live (separar). Plazo de pago en minutos y siempre se paga antes.
@@ -140,6 +141,13 @@ func (m *Modulo) comprar(w http.ResponseWriter, r *http.Request) error {
 	var tid string
 	if err := m.app.DB.QueryRowContext(ctx, `SELECT id FROM tiendas WHERE slug=$1 AND activa AND tienda_identidad_verificada(id)`, in.Slug).Scan(&tid); err != nil {
 		return httpx.ErrNoEncontrado
+	}
+	if in.Entrega == "recojo" {
+		if err := m.validarDiaRecojo(ctx, tid, in.DiaRecojo, time.Now()); err != nil {
+			return err
+		}
+	} else {
+		in.DiaRecojo = ""
 	}
 	// Una vendedora no puede comprar en su propia tienda (inflaría sus ventas y su reputación).
 	if m.esSuTienda(r, in.Slug, in.Celular) {
@@ -178,7 +186,7 @@ func (m *Modulo) comprar(w http.ResponseWriter, r *http.Request) error {
 		pid, codigo, err = pedidos.Crear(ctx, m.app, tx, pedidos.PedidoNuevo{
 			TiendaID: tid, CompradorID: compradorID, Nombre: in.Nombre, Celular: in.Celular, DNI: strings.TrimSpace(in.DNI), Entrega: in.Entrega,
 			Direccion: strings.TrimSpace(in.Direccion), Distrito: strings.TrimSpace(in.Distrito), Ciudad: strings.TrimSpace(in.Ciudad),
-			Referencia: strings.TrimSpace(in.Referencia), Agencia: strings.TrimSpace(in.Agencia), AgenciaSede: strings.TrimSpace(in.AgenciaSede),
+			Referencia: strings.TrimSpace(in.Referencia), Agencia: strings.TrimSpace(in.Agencia), AgenciaSede: strings.TrimSpace(in.AgenciaSede), DiaRecojo: in.DiaRecojo,
 			MetodoPago: in.MetodoPago, Nota: strings.TrimSpace(in.Nota), Items: in.Items,
 			PlazoPago: plazo, PagoAntes: in.Live,
 		})

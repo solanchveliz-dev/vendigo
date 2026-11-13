@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Bike, Check, ChevronRight, CreditCard, Landmark, Lock, MapPin, Minus, Package, Plus, Smartphone, Store, Trash2 } from "lucide-react";
 import { api, ErrorApi, usuarioActual } from "@/lib/api";
 import { soles } from "@/lib/formato";
+import { diasParaRecoger } from "@/lib/dias-recojo";
 import { guardarCarrito, guardarCompraDirecta, guardarSeparacion, leerCarrito, leerCompraDirecta, leerSeparacion, type ItemCarrito } from "@/lib/carrito";
 import type { Tienda, Usuario } from "@/lib/tipos";
 import type { Direccion } from "@/components/comprador/ui";
@@ -78,6 +79,9 @@ export function Checkout({ tienda: t, vista = false, live = false, ahora: direct
   const [entrega, setEntrega] = useState<FormaEntrega | "">("");
   const [metodo, setMetodo] = useState<Metodo | "">("");
   const [f, setF] = useState({ nombre: "", celular: "", dni: "", direccion: "", distrito: "", ciudad: "", referencia: "", agencia: "", sede: "", nota: "" });
+  // Recojo en tienda: el día en que pasará el cliente (como una reserva).
+  const [diaRecojo, setDiaRecojo] = useState("");
+  const diasRecojo = useMemo(() => diasParaRecoger(t.entrega.dias_recojo), [t.entrega.dias_recojo]);
   const cambiarSede = useCallback((v: EleccionSede) => setF((x) => ({ ...x, agencia: v.agencia, ciudad: v.ciudad, sede: v.sede })), []);
   const [codigo, setCodigo] = useState("");
   // Con la cuenta de comprador abierta: sus datos ya vienen llenos y su celular ya está verificado.
@@ -161,6 +165,7 @@ export function Checkout({ tienda: t, vista = false, live = false, ahora: direct
     if (f.nombre.trim().length < 3) return "Escribe tu nombre.";
     if (!/^9\d{8}$/.test(f.celular)) return "Escribe un celular de 9 dígitos que empiece con 9.";
     if (entrega === "motorizado" && !f.direccion.trim()) return "Escribe la dirección de entrega.";
+    if (entrega === "recojo" && !diaRecojo) return "Elige qué día irás a recoger tu pedido.";
     if (entrega === "agencia") {
       if (!/^\d{8}$/.test(f.dni)) return "La agencia pide tu DNI (8 dígitos) para entregarte el paquete.";
       if (!f.agencia || !f.sede.trim() || !f.ciudad.trim()) return "Elige la sede de la agencia donde recogerás.";
@@ -212,6 +217,7 @@ export function Checkout({ tienda: t, vista = false, live = false, ahora: direct
         referencia: entrega === "motorizado" ? f.referencia.trim() : "",
         agencia: entrega === "agencia" ? f.agencia : "",
         agencia_sede: entrega === "agencia" ? f.sede.trim() : "",
+        dia_recojo: entrega === "recojo" ? diaRecojo : "",
         metodo_pago: metodo,
         nota: f.nota.trim(),
         live,
@@ -358,6 +364,30 @@ export function Checkout({ tienda: t, vista = false, live = false, ahora: direct
                     {activo && (
                       <div className="mt-4 space-y-4 sm:pl-[60px]">
                         {datosEntrega}
+                        {e === "recojo" && (
+                          <div>
+                            <p className="mb-2 text-sm font-bold text-tinta">¿Qué día irás a recogerlo?</p>
+                            {diasRecojo.length ? (
+                              <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Día de recojo">
+                                {diasRecojo.map((d) => (
+                                  <button
+                                    key={d.valor}
+                                    type="button"
+                                    role="radio"
+                                    aria-checked={diaRecojo === d.valor}
+                                    onClick={() => setDiaRecojo(d.valor)}
+                                    className={cn("w-[88px] rounded-2xl bg-white py-2.5 text-center ring-1 transition", diaRecojo === d.valor ? "ring-2 ring-pino" : "ring-linea hover:ring-pino/50")}
+                                  >
+                                    <b className="block text-sm text-tinta">{d.titulo}</b>
+                                    <span className="text-xs text-gris">{d.fecha}</span>
+                                  </button>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="text-sm text-error">Esta tienda no tiene días de recojo disponibles en las próximas dos semanas.</p>
+                            )}
+                          </div>
+                        )}
                         {e === "recojo" && t.entrega.direccion_recojo && (
                           <p className="flex items-center gap-1.5 text-sm text-tinta"><MapPin className="size-4 shrink-0" /> {t.entrega.direccion_recojo}{t.horario ? ` · ${t.horario}` : ""}</p>
                         )}
@@ -366,8 +396,9 @@ export function Checkout({ tienda: t, vista = false, live = false, ahora: direct
                           {rEntrega === "al_recibir"
                             ? "Pagas por Yape o Plin al recibir tu pedido."
                             : rEntrega === "adelanto" && pEntrega
-                              ? <>Esta tienda pide un <b>adelanto de {pEntrega}%</b> para reservar. El resto lo pagas al recibir.{e === "recojo" && " Si no llegas el día acordado, el adelanto queda para la tienda."}</>
+                              ? <>Esta tienda pide un <b>adelanto de {pEntrega}%</b> para reservar. El resto lo pagas al recibir.{e === "recojo" && " Si no llegas el día que elegiste, el adelanto queda para la tienda."}</>
                               : "Pagas completo antes de que la tienda prepare tu pedido."}
+                          {e === "recojo" && " La tienda tendrá tu pedido listo el día que elijas."}
                           {e === "motorizado" && t.entrega.costo_motorizado_centimos > 0 && " El envío se lo pagas al motorizado aparte."}
                         </p>
                       </div>

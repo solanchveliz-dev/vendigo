@@ -37,6 +37,7 @@ type PedidoNuevo struct {
 	Referencia  string
 	Agencia     string
 	AgenciaSede string
+	DiaRecojo   string // AAAA-MM-DD, solo en recojo en tienda (ya validado por quien llama)
 	MetodoPago  string // yape_directo, plin_directo, tarjeta_tienda o transferencia_tienda (directo a la tienda; sin efectivo)
 	MomentoPago string // antes o al_recibir
 	Prueba      bool   // datos de prueba (solo modo desarrollo y seed)
@@ -260,10 +261,10 @@ func Crear(ctx context.Context, app *core.App, tx *sql.Tx, in PedidoNuevo) (stri
 	}
 	err := tx.QueryRowContext(ctx, `INSERT INTO pedidos (tienda_id, comprador_id, comprador_nombre, comprador_celular, comprador_dni_cifrado, entrega,
 		direccion, distrito, ciudad, referencia, agencia, agencia_sede, codigo_recojo, metodo_pago, pago_estado, culqi_cargo_id,
-		subtotal_centimos, envio_centimos, total_centimos, nota_comprador, codigo)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20, COALESCE($21, 'VG-' || nextval('pedidos_codigo_seq'))) RETURNING id, codigo`,
+		subtotal_centimos, envio_centimos, total_centimos, nota_comprador, codigo, dia_recojo)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20, COALESCE($21, 'VG-' || nextval('pedidos_codigo_seq')), NULLIF($22, '')::date) RETURNING id, codigo`,
 		in.TiendaID, comprador, in.Nombre, in.Celular, dni, in.Entrega, in.Direccion, in.Distrito, in.Ciudad, in.Referencia,
-		in.Agencia, in.AgenciaSede, codigoRecojo(), in.MetodoPago, "pendiente", nil, subtotal, envio, total, in.Nota, propio).Scan(&pid, &codigo)
+		in.Agencia, in.AgenciaSede, codigoRecojo(), in.MetodoPago, "pendiente", nil, subtotal, envio, total, in.Nota, propio, in.DiaRecojo).Scan(&pid, &codigo)
 	if err != nil {
 		return "", "", err
 	}

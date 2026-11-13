@@ -5,6 +5,7 @@ import { use, useState } from "react";
 import { Camera, ChevronRight, Flag, Lock } from "lucide-react";
 import { api, ErrorApi, useApi } from "@/lib/api";
 import { fecha, nombrePago, soles } from "@/lib/formato";
+import { textoDiaRecojo } from "@/lib/dias-recojo";
 import { subirImagen } from "@/lib/subir";
 import type { PedidoDetalle } from "@/lib/tipos";
 import { Aviso, Boton, Campo, Cargando, Entrada, Area, Modal, Tarjeta, useAvisar } from "@/components/ui";
@@ -145,6 +146,7 @@ export default function DetallePedido({ params }: { params: Promise<{ id: string
               </div>
             </div>
             <div className="mt-3">
+              {p.entrega === "recojo" && p.dia_recojo && <Dato k="Pasa a recoger el" v={textoDiaRecojo(p.dia_recojo)} />}
               {p.entrega === "agencia" && (
                 <>
                   <Dato k="DNI (para la agencia)" v={p.comprador_dni} />
