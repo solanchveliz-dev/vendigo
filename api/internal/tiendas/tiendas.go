@@ -48,6 +48,7 @@ func (m *Modulo) RutasPublicas(r chi.Router) {
 	r.Method("GET", "/tiendas/{slug}", httpx.Handler(m.publica))
 	r.Method("POST", "/tiendas/{slug}/visitas", httpx.Handler(m.registrarVisita))
 	r.Method("GET", "/catalogos", httpx.Handler(m.catalogos))
+	r.Method("GET", "/agencias/sedes", httpx.Handler(m.sedesPublicas))
 }
 
 // ID devuelve la tienda del usuario o un error claro si todavía no la crea.
@@ -638,6 +639,40 @@ func (m *Modulo) registrarVisita(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	w.WriteHeader(http.StatusNoContent)
+	return nil
+}
+
+// SedePublica: una sede activa de agencia, para elegir dónde recoger en el checkout.
+type SedePublica struct {
+	Agencia   string   `json:"agencia"`
+	Ciudad    string   `json:"ciudad"`
+	Nombre    string   `json:"nombre"`
+	Direccion string   `json:"direccion"`
+	Lat       *float64 `json:"lat"`
+	Lng       *float64 `json:"lng"`
+}
+
+// sedesPublicas lista las sedes activas que mantiene el admin (?agencia=Shalom para una sola).
+// Es información pública de las agencias; la ubicación del comprador no se envía aquí.
+func (m *Modulo) sedesPublicas(w http.ResponseWriter, r *http.Request) error {
+	rows, err := m.app.DB.QueryContext(r.Context(), `SELECT agencia, ciudad, nombre, direccion, lat, lng FROM agencias_sedes
+		WHERE activa AND ($1 = '' OR agencia = $1) ORDER BY agencia, ciudad, nombre`, strings.TrimSpace(r.URL.Query().Get("agencia")))
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	out := []SedePublica{}
+	for rows.Next() {
+		var s SedePublica
+		if err := rows.Scan(&s.Agencia, &s.Ciudad, &s.Nombre, &s.Direccion, &s.Lat, &s.Lng); err != nil {
+			return err
+		}
+		out = append(out, s)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	httpx.OK(w, map[string]any{"sedes": out})
 	return nil
 }
 

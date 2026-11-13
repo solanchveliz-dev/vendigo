@@ -25,10 +25,13 @@ type Sede struct {
 	Nombre    string `json:"nombre"`
 	Direccion string `json:"direccion"`
 	Activa    bool   `json:"activa"`
+	// Ubicación en el mapa (opcional). Sin ella la sede aparece en la lista pero no en "la más cercana".
+	Lat *float64 `json:"lat"`
+	Lng *float64 `json:"lng"`
 }
 
 func (m *Modulo) agencias(w http.ResponseWriter, r *http.Request) error {
-	rows, err := m.app.DB.QueryContext(r.Context(), `SELECT id, agencia, ciudad, nombre, direccion, activa FROM agencias_sedes ORDER BY agencia, ciudad, nombre`)
+	rows, err := m.app.DB.QueryContext(r.Context(), `SELECT id, agencia, ciudad, nombre, direccion, activa, lat, lng FROM agencias_sedes ORDER BY agencia, ciudad, nombre`)
 	if err != nil {
 		return err
 	}
@@ -36,7 +39,7 @@ func (m *Modulo) agencias(w http.ResponseWriter, r *http.Request) error {
 	out := []Sede{}
 	for rows.Next() {
 		var s Sede
-		if err := rows.Scan(&s.ID, &s.Agencia, &s.Ciudad, &s.Nombre, &s.Direccion, &s.Activa); err != nil {
+		if err := rows.Scan(&s.ID, &s.Agencia, &s.Ciudad, &s.Nombre, &s.Direccion, &s.Activa, &s.Lat, &s.Lng); err != nil {
 			return err
 		}
 		out = append(out, s)
@@ -56,6 +59,12 @@ func leerSede(r *http.Request) (Sede, error) {
 			return s, httpx.Invalido("Completa agencia, ciudad, nombre y dirección.")
 		}
 	}
+	if (s.Lat == nil) != (s.Lng == nil) {
+		return s, httpx.Invalido("La ubicación necesita latitud y longitud.")
+	}
+	if s.Lat != nil && (*s.Lat < -18.5 || *s.Lat > 0.1 || *s.Lng < -81.5 || *s.Lng > -68.5) {
+		return s, httpx.Invalido("Esa ubicación no está en el Perú. Revisa el enlace de Google Maps.")
+	}
 	return s, nil
 }
 
@@ -67,11 +76,11 @@ func (m *Modulo) guardarSede(w http.ResponseWriter, r *http.Request) error {
 	}
 	id := chi.URLParam(r, "id")
 	if id == "" {
-		err = m.app.DB.QueryRowContext(ctx, `INSERT INTO agencias_sedes (agencia, ciudad, nombre, direccion) VALUES ($1,$2,$3,$4) RETURNING id`,
-			s.Agencia, s.Ciudad, s.Nombre, s.Direccion).Scan(&id)
+		err = m.app.DB.QueryRowContext(ctx, `INSERT INTO agencias_sedes (agencia, ciudad, nombre, direccion, lat, lng) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
+			s.Agencia, s.Ciudad, s.Nombre, s.Direccion, s.Lat, s.Lng).Scan(&id)
 	} else {
 		var res interface{ RowsAffected() (int64, error) }
-		res, err = m.app.DB.ExecContext(ctx, `UPDATE agencias_sedes SET agencia=$2, ciudad=$3, nombre=$4, direccion=$5 WHERE id::text=$1`, id, s.Agencia, s.Ciudad, s.Nombre, s.Direccion)
+		res, err = m.app.DB.ExecContext(ctx, `UPDATE agencias_sedes SET agencia=$2, ciudad=$3, nombre=$4, direccion=$5, lat=$6, lng=$7 WHERE id::text=$1`, id, s.Agencia, s.Ciudad, s.Nombre, s.Direccion, s.Lat, s.Lng)
 		if err == nil {
 			if n, _ := res.RowsAffected(); n == 0 {
 				return httpx.ErrNoEncontrado

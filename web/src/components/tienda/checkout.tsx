@@ -2,14 +2,15 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Bike, Check, ChevronRight, CreditCard, Landmark, Lock, MapPin, Minus, Package, Plus, Smartphone, Store, Trash2 } from "lucide-react";
 import { api, ErrorApi, usuarioActual } from "@/lib/api";
 import { soles } from "@/lib/formato";
 import { guardarCarrito, guardarCompraDirecta, guardarSeparacion, leerCarrito, leerCompraDirecta, leerSeparacion, type ItemCarrito } from "@/lib/carrito";
 import type { Tienda, Usuario } from "@/lib/tipos";
 import type { Direccion } from "@/components/comprador/ui";
-import { Area, Aviso, Boton, Campo, Entrada, Selector, cn } from "@/components/ui";
+import { Area, Aviso, Boton, Campo, Entrada, cn } from "@/components/ui";
+import { ElegirSede, type EleccionSede } from "./elegir-sede";
 
 type FormaEntrega = "recojo" | "agencia" | "motorizado";
 type Metodo = "yape_directo" | "plin_directo" | "tarjeta_tienda" | "transferencia_tienda" | "mercadopago";
@@ -77,6 +78,7 @@ export function Checkout({ tienda: t, vista = false, live = false, ahora: direct
   const [entrega, setEntrega] = useState<FormaEntrega | "">("");
   const [metodo, setMetodo] = useState<Metodo | "">("");
   const [f, setF] = useState({ nombre: "", celular: "", dni: "", direccion: "", distrito: "", ciudad: "", referencia: "", agencia: "", sede: "", nota: "" });
+  const cambiarSede = useCallback((v: EleccionSede) => setF((x) => ({ ...x, agencia: v.agencia, ciudad: v.ciudad, sede: v.sede })), []);
   const [codigo, setCodigo] = useState("");
   // Con la cuenta de comprador abierta: sus datos ya vienen llenos y su celular ya está verificado.
   const [cuenta, setCuenta] = useState<Usuario | null>(null);
@@ -161,7 +163,7 @@ export function Checkout({ tienda: t, vista = false, live = false, ahora: direct
     if (entrega === "motorizado" && !f.direccion.trim()) return "Escribe la dirección de entrega.";
     if (entrega === "agencia") {
       if (!/^\d{8}$/.test(f.dni)) return "La agencia pide tu DNI (8 dígitos) para entregarte el paquete.";
-      if (!f.agencia || !f.sede.trim() || !f.ciudad.trim()) return "Elige la agencia, la ciudad y la sede donde recogerás.";
+      if (!f.agencia || !f.sede.trim() || !f.ciudad.trim()) return "Elige la sede de la agencia donde recogerás.";
     }
     return "";
   }
@@ -366,14 +368,7 @@ export function Checkout({ tienda: t, vista = false, live = false, ahora: direct
                   {entrega === "agencia" && (
                     <>
                       <Campo etiqueta="DNI" ayuda="La agencia lo pide para entregarte."><Entrada {...campo("dni")} onChange={(e) => setF({ ...f, dni: e.target.value.replace(/\D/g, "") })} inputMode="numeric" maxLength={8} /></Campo>
-                      <Campo etiqueta="Agencia">
-                        <Selector {...campo("agencia")}>
-                          <option value="">Elige</option>
-                          {(t.entrega.agencias ?? []).map((a) => <option key={a} value={a}>{a}</option>)}
-                        </Selector>
-                      </Campo>
-                      <Campo etiqueta="Ciudad"><Entrada {...campo("ciudad")} maxLength={80} /></Campo>
-                      <Campo etiqueta="Sede donde recoges"><Entrada {...campo("sede")} maxLength={120} placeholder="Ej. Av. Grau 520" /></Campo>
+                      <ElegirSede agencias={t.entrega.agencias ?? []} valor={{ agencia: f.agencia, ciudad: f.ciudad, sede: f.sede }} cambiar={cambiarSede} />
                     </>
                   )}
                 </div>

@@ -132,6 +132,8 @@ func (m *Modulo) comprar(w http.ResponseWriter, r *http.Request) error {
 		return httpx.Invalido("Escribe la dirección de entrega.")
 	case in.Entrega == "agencia" && (strings.TrimSpace(in.AgenciaSede) == "" || strings.TrimSpace(in.Ciudad) == ""):
 		return httpx.Invalido("Elige la agencia y la sede donde recogerás.")
+	case len([]rune(in.AgenciaSede)) > 200 || len([]rune(in.Agencia)) > 60 || len([]rune(in.Ciudad)) > 80:
+		return httpx.Invalido("La agencia, la ciudad o la sede son demasiado largas.")
 	case len(in.Nota) > 300:
 		return httpx.Invalido("La nota puede tener hasta 300 caracteres.")
 	}
