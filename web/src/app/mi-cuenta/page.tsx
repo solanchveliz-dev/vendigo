@@ -1,13 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { BadgeCheck, Bike, MapPin, Package, Search, ShoppingBag, Star, Store } from "lucide-react";
+import { Bike, MapPin, Package, ShoppingBag, Star, Store } from "lucide-react";
 import { useApi } from "@/lib/api";
 import { soles } from "@/lib/formato";
 import { rubros } from "@/lib/catalogos";
 import { Cargando, cn } from "@/components/ui";
 import { BotonGuardar, BotonSeguir } from "@/components/tienda/seguir";
+import { CarruselInicio, type FotoCarrusel } from "@/components/comprador/carrusel";
 import { EstadoPedido, Miniatura, type PedidoComprador, type TiendaFav } from "@/components/comprador/ui";
 
 type Resumen = { nombre: string; pedidos: number; en_curso: number; pedidos_en_curso: PedidoComprador[]; por_valorar: number; tiendas_seguidas: TiendaFav[] };
@@ -141,7 +141,6 @@ function TarjetaProducto({ p, slug, tienda }: { p: Prod; slug: string; tienda: s
 
 // Mi inicio del comprador: el inicio del marketplace del prototipo (#/inicio y #/mi-inicio) con datos reales.
 export default function MiInicio() {
-  const router = useRouter();
   const { datos } = useApi<Resumen>("/comprador/resumen");
   const yo = useApi<{ rol: string }>("/me");
   const seguidasIds = (datos?.tiendas_seguidas ?? []).map((t) => t.id).join(",");
@@ -149,12 +148,9 @@ export default function MiInicio() {
   const top = useApi<Busqueda>("/buscar?orden=ventas&impulsos=0");
   if (!datos) return <Cargando />;
 
-  const nombre = datos.nombre.split(" ")[0];
   const siguiendo = deSeguidas.datos?.tiendas ?? [];
   const idsSeguidas = new Set(datos.tiendas_seguidas.map((t) => t.id));
   const tiendas = top.datos?.tiendas ?? [];
-  // La tienda de la tarjetita del banner: la que más vende (como "Luna & Sol" en el prototipo).
-  const estrella = tiendas[0];
   // "Lo que está destacando": hasta 4 productos con foto, uno por tienda.
   const destacando: { p: Prod; t: TiendaR }[] = [];
   for (const t of tiendas) {
@@ -165,59 +161,15 @@ export default function MiInicio() {
   const otras = tiendas.filter((t) => !idsSeguidas.has(t.id)).slice(0, 12);
   const descubrir = otras.length > 3 ? otras.slice(0, otras.length - (otras.length % 3)) : otras;
   const pedido = datos.pedidos_en_curso[0];
+  // Pedestales del banner: tres productos reales con foto, de tiendas distintas (las que más venden).
+  const pedestales: FotoCarrusel[] = destacando.slice(0, 3).map(({ p, t }) => ({ id: p.id, url: p.imagen_url, nombre: p.nombre, precio: p.precio_final_centimos, slug: t.slug }));
 
-  function buscar(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const q = new FormData(e.currentTarget).get("q")?.toString().trim();
-    router.push(q ? `/buscar?q=${encodeURIComponent(q)}` : "/buscar");
-  }
+
 
   return (
     <div>
-      {/* Banner del prototipo (.hm-hero) */}
-      <section className="relative grid items-center gap-8 overflow-hidden rounded-[28px] bg-pino px-5 py-6 text-white md:px-11 md:py-10 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
-        <span className="pointer-events-none absolute -right-[170px] -top-[260px] size-[520px] rounded-full border border-white/[0.12] shadow-[0_0_0_60px_rgba(255,255,255,0.03),0_0_0_120px_rgba(255,255,255,0.02)]" />
-        <div className="relative">
-          <span className="inline-block rounded-full bg-coral px-3 py-1.5 text-[11px] font-extrabold uppercase tracking-[0.1em]">Hola, {nombre}</span>
-          <h1 className="mb-3 mt-[18px] font-display text-[30px] font-extrabold leading-[1.02] tracking-[-0.045em] md:text-[clamp(34px,3.8vw,54px)]">
-            Tu próxima tienda favorita está <strong className="text-coral">más cerca.</strong>
-          </h1>
-          <p className="max-w-[480px] leading-[1.65] text-[#dfe9e3]">Descubre marcas, encuentra productos y compra directamente a tiendas que tienen algo especial.</p>
-          <form onSubmit={buscar} role="search" className="mt-[22px] flex max-w-[520px] items-center gap-2 rounded-full bg-white py-1.5 pl-4 pr-1.5 shadow-[0_14px_34px_rgba(0,0,0,0.2)]">
-            <Search className="size-[18px] shrink-0 text-gris" />
-            <input name="q" aria-label="Buscar" placeholder="¿Qué estás buscando?" className="min-w-0 flex-1 bg-transparent px-1 py-2.5 text-[15px] text-tinta outline-none placeholder:text-gris" />
-            <button aria-label="Buscar" className="grid size-11 shrink-0 place-items-center rounded-full bg-coral text-lg font-extrabold text-white transition hover:brightness-95">↗</button>
-          </form>
-          <div className="mt-4 flex flex-wrap gap-x-[18px] gap-y-2 text-[13px] font-bold">
-            <span>✓ Tiendas verificadas</span>
-            <span>✓ Pagas directo a la tienda</span>
-            <span className="hidden sm:inline">✓ Envíos a todo el Perú</span>
-          </div>
-        </div>
-        <div className="relative h-[200px] overflow-hidden rounded-[22px] md:h-[240px] lg:h-[320px]">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/inicio/compras.jpg" alt="" className="size-full object-cover" />
-          {estrella && (
-            <Link href={`/t/${estrella.slug}`} className="absolute bottom-4 left-4 flex items-center gap-2.5 rounded-2xl bg-white py-2.5 pl-2.5 pr-3.5 text-tinta shadow-[0_16px_34px_-14px_rgba(0,0,0,0.45)]">
-              <span className="size-[38px] shrink-0 overflow-hidden rounded-full">
-                {estrella.logo_url ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={estrella.logo_url} alt="" className="size-full object-cover" />
-                ) : (
-                  <span className="grid size-full place-items-center bg-pino-claro font-display font-extrabold text-pino">{estrella.nombre[0].toUpperCase()}</span>
-                )}
-              </span>
-              <span>
-                <b className="flex items-center gap-1 text-[13.5px]">{estrella.nombre} <BadgeCheck className="size-3.5 text-pino" /></b>
-                <small className="text-[12px] text-gris">
-                  {estrella.valoracion != null && estrella.valoraciones > 0 ? `★ ${estrella.valoracion.toFixed(1)} · ` : ""}
-                  {rubros[estrella.rubro] ?? estrella.rubro}
-                </small>
-              </span>
-            </Link>
-          )}
-        </div>
-      </section>
+      {/* Banner principal en carrusel: mensaje de VendiGo con productos reales y campañas por rubro */}
+      <CarruselInicio productos={pedestales} />
 
       {/* Pedido en curso (.hm-order) */}
       {pedido && (
