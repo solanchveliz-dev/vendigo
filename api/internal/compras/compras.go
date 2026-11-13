@@ -38,6 +38,7 @@ func (m *Modulo) Rutas(r chi.Router) {
 	r.Method("POST", "/seguimiento/{token}/archivo", httpx.Handler(m.archivo))
 	r.Method("POST", "/seguimiento/{token}/comprobante", httpx.Handler(m.comprobante))
 	r.Method("POST", "/seguimiento/{token}/recibido", httpx.Handler(m.recibido))
+	r.Method("POST", "/seguimiento/{token}/valorar", httpx.Handler(m.valorar))
 	r.Method("POST", "/seguimiento/{token}/reclamo", httpx.Handler(m.reclamo))
 }
 
@@ -238,7 +239,7 @@ func (m *Modulo) archivo(w http.ResponseWriter, r *http.Request) error {
 	if err := httpx.Leer(r, &in); err != nil {
 		return err
 	}
-	if in.Tipo != "comprobante" && in.Tipo != "reclamo" {
+	if in.Tipo != "comprobante" && in.Tipo != "reclamo" && in.Tipo != "valoracion" {
 		return httpx.Invalido("Tipo de archivo no válido.")
 	}
 	if !strings.HasPrefix(in.ContentType, "image/") || in.Tamano <= 0 || in.Tamano > 8<<20 {
@@ -312,6 +313,29 @@ func (m *Modulo) recibido(w http.ResponseWriter, r *http.Request) error {
 		}
 		billetera.Notificar(ctx, tx, tid, "Pedido "+codigo+" recibido", "El cliente confirmó que le llegó su pedido.", "/vendedor/pedidos/"+pid)
 		return nil
+	})
+	if err != nil {
+		return err
+	}
+	return m.seguimiento(w, r)
+}
+
+// valorar: el cliente califica su pedido desde el enlace de seguimiento (tenga cuenta o no).
+// El enlace es privado de quien compró; si tiene cuenta, la calificación queda también a su nombre.
+func (m *Modulo) valorar(w http.ResponseWriter, r *http.Request) error {
+	var in pedidos.NuevaValoracion
+	if err := httpx.Leer(r, &in); err != nil {
+		return err
+	}
+	ctx := r.Context()
+	err := m.app.EnTransaccion(ctx, func(tx *sql.Tx) error {
+		pid, _, _, err := pedidos.IDPorToken(ctx, tx, chi.URLParam(r, "token"))
+		if err != nil {
+			return err
+		}
+		var comprador *string
+		tx.QueryRowContext(ctx, `SELECT comprador_id::text FROM pedidos WHERE id=$1`, pid).Scan(&comprador)
+		return pedidos.GuardarValoracion(ctx, tx, pid, comprador, in)
 	})
 	if err != nil {
 		return err

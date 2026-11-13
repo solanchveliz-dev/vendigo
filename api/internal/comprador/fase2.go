@@ -10,6 +10,7 @@ import (
 
 	"github.com/solanchveliz-dev/vendigo/api/internal/core"
 	"github.com/solanchveliz-dev/vendigo/api/internal/httpx"
+	"github.com/solanchveliz-dev/vendigo/api/internal/pedidos"
 	"github.com/solanchveliz-dev/vendigo/api/internal/productos"
 )
 
@@ -443,47 +444,19 @@ func (m *Modulo) paraValorar(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (m *Modulo) valorar(w http.ResponseWriter, r *http.Request) error {
-	var in struct {
-		Tienda     int            `json:"tienda"`
-		Productos  map[string]int `json:"productos"`
-		Comentario string         `json:"comentario"`
-	}
+	var in pedidos.NuevaValoracion
 	if err := httpx.Leer(r, &in); err != nil {
 		return err
-	}
-	in.Comentario = strings.TrimSpace(in.Comentario)
-	if in.Tienda < 1 || in.Tienda > 5 {
-		return httpx.Invalido("Elige las estrellas de la tienda.")
-	}
-	if len([]rune(in.Comentario)) > 500 {
-		return httpx.Invalido("El comentario puede tener hasta 500 caracteres.")
 	}
 	ctx := r.Context()
 	uid := usuario(r)
 	err := m.app.EnTransaccion(ctx, func(tx *sql.Tx) error {
-		pid, tid, _, _, err := m.pedidoValorable(r, tx)
+		pid, _, _, _, err := m.pedidoValorable(r, tx)
 		if err != nil {
 			return err
 		}
-		var vid string
-		if err := tx.QueryRowContext(ctx, `INSERT INTO valoraciones (pedido_id, usuario_id, tienda_id, estrellas_tienda, comentario)
-			VALUES ($1,$2,$3,$4,$5) RETURNING id`, pid, uid, tid, in.Tienda, in.Comentario).Scan(&vid); err != nil {
-			return err
-		}
-		for prod, n := range in.Productos {
-			if n < 1 || n > 5 {
-				return httpx.Invalido("Elige de 1 a 5 estrellas para cada producto.")
-			}
-			// Solo productos que estaban en el pedido.
-			if _, err := tx.ExecContext(ctx, `INSERT INTO valoraciones_productos (valoracion_id, producto_id, estrellas)
-				SELECT $1, producto_id, $3 FROM pedido_items WHERE pedido_id=$4 AND producto_id::text=$2 LIMIT 1 ON CONFLICT DO NOTHING`,
-				vid, prod, n, pid); err != nil {
-				return err
-			}
-		}
-		if _, err := tx.ExecContext(ctx, `INSERT INTO notificaciones (usuario_id, titulo, cuerpo, enlace, tipo)
-			SELECT t.usuario_id, 'Nueva valoración: ' || $2 || ' estrellas', $3, '/vendedor/pedidos', 'pedidos' FROM tiendas t WHERE t.id=$1`,
-			tid, strings.Repeat("★", in.Tienda), recortar(in.Comentario)); err != nil {
+		// La misma regla que desde el enlace de seguimiento (pedidos.GuardarValoracion).
+		if err := pedidos.GuardarValoracion(ctx, tx, pid, &uid, in); err != nil {
 			return err
 		}
 		m.app.Auditar(ctx, tx, uid, "valorar_pedido", "pedido", pid, map[string]int{"tienda": in.Tienda})
@@ -492,18 +465,8 @@ func (m *Modulo) valorar(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	httpx.OK(w, map[string]string{"mensaje": "Valoración publicada. ¡Gracias!"})
+	httpx.OK(w, map[string]string{"mensaje": "Calificación publicada. ¡Gracias!"})
 	return nil
-}
-
-func recortar(s string) string {
-	if s == "" {
-		return "Un comprador valoró su pedido."
-	}
-	if r := []rune(s); len(r) > 120 {
-		return string(r[:120]) + "…"
-	}
-	return s
 }
 
 // ---------- preguntas a la tienda ----------

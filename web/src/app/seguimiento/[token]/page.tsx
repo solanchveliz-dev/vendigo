@@ -9,6 +9,7 @@ import { textoDiaRecojo } from "@/lib/dias-recojo";
 import type { PedidoDetalle, Reclamo } from "@/lib/tipos";
 import { Area, Aviso, Boton, Campo, Cargando, Entrada, Modal, Selector, useAvisar } from "@/components/ui";
 import { LineaTiempo } from "@/components/pedidos/pasos";
+import { CalificacionHecha, CalificarPedido } from "@/components/pedidos/calificar";
 import { DEVOLUCION, EtiquetaPago } from "@/components/pagos/estado";
 import { CabeceraPublica } from "@/components/tienda/cabecera";
 import { PieLegal } from "@/components/legal/pie";
@@ -150,6 +151,8 @@ export default function Seguimiento({ params }: { params: Promise<{ token: strin
   const [captura, setCaptura] = useState<{ key: string; nombre: string } | null>(null);
   const [ocupado, setOcupado] = useState("");
   const [reclamar, setReclamar] = useState(false);
+  // Acaba de tocar "Ya lo recibí": la calificación aparece y se le lleva la vista ahí.
+  const [recienRecibido, setRecienRecibido] = useState(false);
   const [rec, setRec] = useState({ motivo: "", descripcion: "", fotos: [] as string[] });
 
   if (error) {
@@ -373,11 +376,14 @@ export default function Seguimiento({ params }: { params: Promise<{ token: strin
                 <DatosRecojo agencia={p.envio.agencia || p.agencia} guia={p.envio.numero_orden} clave={p.envio.clave_recojo} rastreo={p.envio.enlace_rastreo} />
               )}
               {puede("confirmar_recibido") && (
-                <Boton className="mt-4" cargando={ocupado === "recibido"} onClick={() => hacer("recibido", () => api.post(`/seguimiento/${token}/recibido`))}>
+                <Boton className="mt-4" cargando={ocupado === "recibido"} onClick={async () => { await hacer("recibido", () => api.post(`/seguimiento/${token}/recibido`)); setRecienRecibido(true); }}>
                   <Check className="size-4" /> Ya lo recibí
                 </Boton>
               )}
             </Seccion>
+
+            {puede("valorar") && <CalificarPedido token={token} pedido={p} tienda={t.nombre} enfocar={recienRecibido} listo={recargar} />}
+            {p.valoracion && <CalificacionHecha v={p.valoracion} titulo="Tu calificación" />}
 
             {devoluciones.length > 0 && (
               <Seccion titulo="Devolución de tu pago">

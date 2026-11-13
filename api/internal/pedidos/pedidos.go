@@ -162,6 +162,7 @@ func (m *Modulo) listar(w http.ResponseWriter, r *http.Request) error {
 // ---------- detalle ----------
 
 type Item struct {
+	ProductoID string `json:"producto_id"` // para calificar cada producto
 	Nombre    string `json:"nombre"`
 	Variante  string `json:"variante"`
 	ImagenURL string `json:"imagen_url"`
@@ -235,6 +236,7 @@ type Detalle struct {
 	Envio         *Envio   `json:"envio"`
 	Eventos       []Evento `json:"eventos"`
 	ReclamoDet    *Reclamo `json:"reclamo_detalle"`
+	Valoracion    *Valoracion `json:"valoracion"` // la calificación del cliente, si ya calificó
 	Acciones      []string `json:"acciones"`
 	// Para la línea de tiempo y la tarjeta del cliente.
 	AceptadoEn  *time.Time `json:"aceptado_en"`
@@ -319,14 +321,14 @@ func (m *Modulo) cargar(ctx context.Context, tid, pid string) (*Detalle, error) 
 	}
 	d.Neto = d.Total - d.Comision
 
-	rows, err := m.app.DB.QueryContext(ctx, `SELECT nombre, variante, imagen_key, precio_centimos, cantidad FROM pedido_items WHERE pedido_id=$1`, d.ID)
+	rows, err := m.app.DB.QueryContext(ctx, `SELECT COALESCE(producto_id::text, ''), nombre, variante, imagen_key, precio_centimos, cantidad FROM pedido_items WHERE pedido_id=$1`, d.ID)
 	if err != nil {
 		return nil, err
 	}
 	for rows.Next() {
 		var it Item
 		var img sql.NullString
-		rows.Scan(&it.Nombre, &it.Variante, &img, &it.Precio, &it.Cantidad)
+		rows.Scan(&it.ProductoID, &it.Nombre, &it.Variante, &img, &it.Precio, &it.Cantidad)
 		if img.Valid {
 			it.ImagenURL = m.app.Archivos.URLPublica(img.String)
 		}
@@ -397,6 +399,7 @@ func (m *Modulo) cargar(ctx context.Context, tid, pid string) (*Detalle, error) 
 			json.Unmarshal(raw, &d.Motorizados)
 		}
 	}
+	d.Valoracion = m.cargarValoracion(ctx, d.ID)
 	return d, nil
 }
 
@@ -1226,6 +1229,10 @@ func CargarComoComprador(ctx context.Context, app *core.App, token string) (*Det
 	}
 	if d.Estado == "enviado" && d.Entrega == "agencia" {
 		d.Acciones = append(d.Acciones, "confirmar_recibido")
+	}
+	// Entregado y todavía sin calificar (dentro de los 30 días): se le pide la calificación.
+	if d.Estado == "entregado" && d.Valoracion == nil && (d.EntregadoEn == nil || time.Since(*d.EntregadoEn) <= DiasParaValorar*24*time.Hour) {
+		d.Acciones = append(d.Acciones, "valorar")
 	}
 	if d.ReclamoDet == nil && (d.Estado == "enviado" || (d.Estado == "entregado" && d.EntregadoEn != nil && time.Since(*d.EntregadoEn) <= DiasReclamo*24*time.Hour)) {
 		d.Acciones = append(d.Acciones, "reclamar")

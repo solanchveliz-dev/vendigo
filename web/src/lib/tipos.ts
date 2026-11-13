@@ -142,7 +142,7 @@ export type PedidoDetalle = PedidoResumen & {
   neto_centimos: number;
   motivo_cancelacion: string;
   confirmado_por: string | null;
-  items_detalle: { nombre: string; variante: string; imagen_url: string; precio_centimos: number; cantidad: number }[];
+  items_detalle: { producto_id: string; nombre: string; variante: string; imagen_url: string; precio_centimos: number; cantidad: number }[];
   envio: {
     agencia: string;
     numero_orden: string;
@@ -156,6 +156,8 @@ export type PedidoDetalle = PedidoResumen & {
   } | null;
   eventos: { estado: string; detalle: string; fecha: string }[];
   reclamo_detalle: Reclamo | null;
+  // La calificación del cliente (estrellas a la tienda, comentario y fotos opcionales), si ya calificó.
+  valoracion: { estrellas: number; comentario: string; foto_urls: string[]; creado_en: string } | null;
   acciones: string[];
   aceptado_en: string | null;
   enviado_en: string | null;

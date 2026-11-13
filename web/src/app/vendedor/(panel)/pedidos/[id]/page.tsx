@@ -11,6 +11,7 @@ import type { PedidoDetalle } from "@/lib/tipos";
 import { Aviso, Boton, Campo, Cargando, Entrada, Area, Modal, Tarjeta, useAvisar } from "@/components/ui";
 import { EstadoPedido } from "@/components/pedidos/estado";
 import { AvisoAccion, LineaTiempo } from "@/components/pedidos/pasos";
+import { CalificacionHecha } from "@/components/pedidos/calificar";
 import { TarjetaPago } from "@/components/pagos/tarjeta-pago";
 import { iconoEntrega } from "@/components/pedidos/tabla";
 import { TarjetaAyuda } from "@/components/pedidos/ayuda";
@@ -111,6 +112,8 @@ export default function DetallePedido({ params }: { params: Promise<{ id: string
               )}
             </Tarjeta>
           )}
+
+          {p.valoracion && <CalificacionHecha v={p.valoracion} titulo="Calificación del cliente" />}
 
           <Tarjeta>
             <h2 className="mb-2 text-lg font-extrabold text-tinta">Productos</h2>
