@@ -348,7 +348,7 @@ func agenciasDemo(ctx context.Context, conexion *sql.DB) {
 		{"Marvisur", "Lima", "Marvisur Lima", "Av. 28 de Julio 1250, La Victoria"},
 	}
 	for _, s := range sedes {
-		conexion.ExecContext(ctx, `INSERT INTO agencias_sedes (agencia, ciudad, nombre, direccion) VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING`, s[0], s[1], s[2], s[3])
+		conexion.ExecContext(ctx, `INSERT INTO agencias_sedes (agencia, ciudad, nombre, direccion, de_ejemplo) VALUES ($1,$2,$3,$4,true) ON CONFLICT DO NOTHING`, s[0], s[1], s[2], s[3])
 	}
 }
 

@@ -650,12 +650,13 @@ type SedePublica struct {
 	Direccion string   `json:"direccion"`
 	Lat       *float64 `json:"lat"`
 	Lng       *float64 `json:"lng"`
+	DeEjemplo bool     `json:"de_ejemplo"` // sede de demostración: el checkout lo avisa
 }
 
 // sedesPublicas lista las sedes activas que mantiene el admin (?agencia=Shalom para una sola).
 // Es información pública de las agencias; la ubicación del comprador no se envía aquí.
 func (m *Modulo) sedesPublicas(w http.ResponseWriter, r *http.Request) error {
-	rows, err := m.app.DB.QueryContext(r.Context(), `SELECT agencia, ciudad, nombre, direccion, lat, lng FROM agencias_sedes
+	rows, err := m.app.DB.QueryContext(r.Context(), `SELECT agencia, ciudad, nombre, direccion, lat, lng, de_ejemplo FROM agencias_sedes
 		WHERE activa AND ($1 = '' OR agencia = $1) ORDER BY agencia, ciudad, nombre`, strings.TrimSpace(r.URL.Query().Get("agencia")))
 	if err != nil {
 		return err
@@ -664,7 +665,7 @@ func (m *Modulo) sedesPublicas(w http.ResponseWriter, r *http.Request) error {
 	out := []SedePublica{}
 	for rows.Next() {
 		var s SedePublica
-		if err := rows.Scan(&s.Agencia, &s.Ciudad, &s.Nombre, &s.Direccion, &s.Lat, &s.Lng); err != nil {
+		if err := rows.Scan(&s.Agencia, &s.Ciudad, &s.Nombre, &s.Direccion, &s.Lat, &s.Lng, &s.DeEjemplo); err != nil {
 			return err
 		}
 		out = append(out, s)

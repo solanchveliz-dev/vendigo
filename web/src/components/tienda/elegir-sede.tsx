@@ -5,7 +5,7 @@ import { LocateFixed, MapPin, Search } from "lucide-react";
 import { Campo, Entrada, cn } from "@/components/ui";
 import { distanciaKm, textoKm, type Punto } from "@/lib/ubicacion";
 
-type Sede = { agencia: string; ciudad: string; nombre: string; direccion: string; lat: number | null; lng: number | null };
+type Sede = { agencia: string; ciudad: string; nombre: string; direccion: string; lat: number | null; lng: number | null; de_ejemplo?: boolean };
 export type EleccionSede = { agencia: string; ciudad: string; sede: string };
 
 // Sin tildes ni mayúsculas, para que "jesus maria" encuentre "Jesús María".
@@ -161,7 +161,12 @@ export function ElegirSede({ agencias, valor, cambiar }: { agencias: string[]; v
               Ver las {lista.length} sedes
             </button>
           )}
-          <p className="text-xs text-gris">Tu ubicación solo se usa en tu celular para medir la distancia. No la guardamos.</p>
+          {lista.some((s) => s.de_ejemplo) && (
+            <p className="rounded-xl bg-aviso-claro px-3 py-2 text-xs font-semibold text-aviso">
+              Algunas sedes son de ejemplo para la demostración. Confirma la dirección en la app de {agencia} antes de ir.
+            </p>
+          )}
+          <p className="text-xs text-gris">Tu ubicación solo se usa en tu celular para medir la distancia. No la guardamos. Mapa de sedes con datos de © OpenStreetMap.</p>
         </>
       )}
     </div>

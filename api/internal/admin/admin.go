@@ -85,6 +85,7 @@ func (m *Modulo) Rutas(r chi.Router) {
 	r.Method("POST", "/incidencias/{n}/nota", httpx.Handler(m.notaIncidencia))
 	r.Method("GET", "/agencias", httpx.Handler(m.agencias))
 	r.Method("POST", "/agencias", httpx.Handler(m.guardarSede))
+	r.Method("POST", "/agencias/ubicar", httpx.Handler(m.ubicarSedes))
 	r.Method("PUT", "/agencias/{id}", httpx.Handler(m.guardarSede))
 	r.Method("POST", "/agencias/{id}/estado", httpx.Handler(m.activarSede))
 	r.Method("GET", "/configuracion", httpx.Handler(m.configuracion))
