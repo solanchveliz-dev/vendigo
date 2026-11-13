@@ -123,9 +123,11 @@ func (m *Modulo) buscar(w http.ResponseWriter, r *http.Request) error {
 		// Promedio de estrellas de sus compradores y cuántas valoraciones tiene (nil si aún no tiene).
 		Valoracion   *float64 `json:"valoracion"`
 		Valoraciones int      `json:"valoraciones"`
-		Entregas     []string `json:"entregas"`
-		Productos    []prod   `json:"productos"`
-		Coinciden    int      `json:"coinciden"`
+		// Insignias: todas las que salen tienen la identidad verificada; algunas además el RUC.
+		RUC       bool     `json:"ruc_verificado"`
+		Entregas  []string `json:"entregas"`
+		Productos []prod   `json:"productos"`
+		Coinciden int      `json:"coinciden"`
 	}
 	// ?ids=a,b,c: solo esas tiendas (por ejemplo, las que sigue el comprador, para mostrarlas con sus productos).
 	ids := qs.Get("ids")
@@ -141,7 +143,7 @@ func (m *Modulo) buscar(w http.ResponseWriter, r *http.Request) error {
 	}
 	rows, err := m.app.DB.QueryContext(ctx, `SELECT t.id, t.nombre, t.slug, t.rubro, t.descripcion, coalesce(nullif(t.distrito,''), t.ciudad), t.logo_key, t.reputacion,
 		(SELECT count(*) FROM pedidos pe WHERE pe.tienda_id=t.id AND pe.estado='entregado') AS ventas,
-		(SELECT avg(v.estrellas_tienda)::float8 FROM valoraciones v WHERE v.tienda_id=t.id), (SELECT count(*) FROM valoraciones v WHERE v.tienda_id=t.id),
+		(SELECT avg(v.estrellas_tienda)::float8 FROM valoraciones v WHERE v.tienda_id=t.id), (SELECT count(*) FROM valoraciones v WHERE v.tienda_id=t.id), tienda_ruc_verificado(t.id),
 		t.entrega_recojo, t.entrega_agencia, t.entrega_motorizado,
 		(SELECT count(*) FROM productos p WHERE p.tienda_id=t.id AND p.activo AND NOT p.eliminado AND `+coincide()+`) AS coinciden
 		FROM tiendas t
@@ -161,7 +163,7 @@ func (m *Modulo) buscar(w http.ResponseWriter, r *http.Request) error {
 		var t tienda
 		var logo sql.NullString
 		var rec, age, moto bool
-		if err := rows.Scan(&t.ID, &t.Nombre, &t.Slug, &t.Rubro, &t.Descripcion, &t.Lugar, &logo, &t.Reputacion, &t.Ventas, &t.Valoracion, &t.Valoraciones, &rec, &age, &moto, &t.Coinciden); err != nil {
+		if err := rows.Scan(&t.ID, &t.Nombre, &t.Slug, &t.Rubro, &t.Descripcion, &t.Lugar, &logo, &t.Reputacion, &t.Ventas, &t.Valoracion, &t.Valoraciones, &t.RUC, &rec, &age, &moto, &t.Coinciden); err != nil {
 			rows.Close()
 			return err
 		}
@@ -220,5 +222,94 @@ func (m *Modulo) buscar(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 	httpx.OK(w, map[string]any{"q": q, "destacados": destacados, "tiendas": tiendas})
+	return nil
+}
+
+// ---------- lo más vendido (con impulsados intercalados, como Marketplace) ----------
+
+// Vendido es un producto de "Lo más vendido". Impulsado: la tienda pagó para que aparezca aquí (se marca).
+type Vendido struct {
+	ID           string   `json:"id"`
+	Nombre       string   `json:"nombre"`
+	Precio       int      `json:"precio_centimos"`
+	Final        int      `json:"precio_final_centimos"`
+	Descuento    int      `json:"descuento_pct"`
+	Imagen       string   `json:"imagen_url"`
+	Tienda       string   `json:"tienda"`
+	Slug         string   `json:"tienda_slug"`
+	Vendidos     int      `json:"vendidos"`
+	Valoracion   *float64 `json:"valoracion"`
+	Valoraciones int      `json:"valoraciones"`
+	Impulsado    bool     `json:"impulsado"`
+}
+
+// GET /mas-vendidos: productos con más unidades en pedidos entregados (si aún no hay ventas, los más recientes).
+// En las posiciones 1, 4, 7 y 10 van productos impulsados con su etiqueta, como los anuncios de Marketplace.
+func (m *Modulo) masVendidos(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	rows, err := m.app.DB.QueryContext(ctx, `SELECT p.id, p.nombre, p.precio_centimos, t.nombre, t.slug,
+		(SELECT key FROM producto_imagenes i WHERE i.producto_id=p.id ORDER BY orden LIMIT 1),
+		(SELECT o.descuento_pct FROM ofertas o WHERE o.producto_id=p.id AND o.termina_en > now()),
+		(SELECT COALESCE(SUM(it.cantidad),0) FROM pedido_items it JOIN pedidos pe ON pe.id=it.pedido_id
+			WHERE it.producto_id=p.id AND pe.estado='entregado') AS vendidos,
+		(SELECT avg(vp.estrellas)::float8 FROM valoraciones_productos vp WHERE vp.producto_id=p.id),
+		(SELECT count(*) FROM valoraciones_productos vp WHERE vp.producto_id=p.id)
+		FROM productos p JOIN tiendas t ON t.id=p.tienda_id
+		WHERE p.activo AND NOT p.eliminado AND p.stock > 0
+		AND t.activa AND NOT t.pausada AND NOT t.suspendida_garantia
+		AND tienda_identidad_verificada(t.id) AND tienda_reclamo_bloqueante(t.id) IS NULL
+		ORDER BY vendidos DESC, p.creado_en DESC LIMIT 16`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	organicos := []Vendido{}
+	for rows.Next() {
+		var v Vendido
+		var key sql.NullString
+		var pct sql.NullInt64
+		if err := rows.Scan(&v.ID, &v.Nombre, &v.Precio, &v.Tienda, &v.Slug, &key, &pct, &v.Vendidos, &v.Valoracion, &v.Valoraciones); err != nil {
+			return err
+		}
+		v.Final = v.Precio
+		if pct.Valid {
+			v.Descuento = int(pct.Int64)
+			v.Final = PrecioConOferta(v.Precio, v.Descuento)
+		}
+		if key.Valid {
+			v.Imagen = m.app.Archivos.URLPublica(key.String)
+		}
+		organicos = append(organicos, v)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	pagados, err := m.impulsados(ctx, "", 4)
+	if err != nil {
+		return err
+	}
+	// Intercalar: impulsado, orgánico, orgánico, impulsado... sin repetir productos.
+	lista := []Vendido{}
+	usado := map[string]bool{}
+	for _, p := range pagados {
+		usado[p.ID] = true
+	}
+	k := 0
+	for _, o := range organicos {
+		if len(lista)%3 == 0 && k < len(pagados) {
+			p := pagados[k]
+			lista = append(lista, Vendido{ID: p.ID, Nombre: p.Nombre, Precio: p.Precio, Final: p.Final, Imagen: p.Imagen, Tienda: p.Tienda, Slug: p.Slug, Impulsado: true})
+			k++
+		}
+		if !usado[o.ID] && len(lista) < 12 {
+			lista = append(lista, o)
+			usado[o.ID] = true
+		}
+	}
+	for ; k < len(pagados) && len(lista) < 12; k++ {
+		p := pagados[k]
+		lista = append(lista, Vendido{ID: p.ID, Nombre: p.Nombre, Precio: p.Precio, Final: p.Final, Imagen: p.Imagen, Tienda: p.Tienda, Slug: p.Slug, Impulsado: true})
+	}
+	httpx.OK(w, map[string]any{"productos": lista})
 	return nil
 }

@@ -18,6 +18,7 @@ import (
 func (m *Modulo) rutasFase2(r chi.Router) {
 	r.Method("GET", "/favoritos", httpx.Handler(m.favoritos))
 	r.Method("GET", "/favoritos/ids", httpx.Handler(m.favoritosIDs))
+	r.Method("GET", "/ofertas", httpx.Handler(m.ofertas))
 	r.Method("PUT", "/favoritos/{tipo}/{id}", httpx.Handler(m.marcarFavorito))
 	r.Method("DELETE", "/favoritos/{tipo}/{id}", httpx.Handler(m.quitarFavorito))
 
@@ -546,4 +547,49 @@ func (m *Modulo) preguntar(w http.ResponseWriter, r *http.Request) error {
 	}
 	httpx.JSON(w, http.StatusCreated, map[string]string{"mensaje": "Publicamos tu pregunta. Te avisaremos cuando la tienda responda."})
 	return nil
+}
+
+// ---------- ofertas de las tiendas que sigue ----------
+
+type Oferta struct {
+	ID         string    `json:"id"`
+	Nombre     string    `json:"nombre"`
+	Precio     int       `json:"precio_centimos"`
+	Final      int       `json:"precio_final_centimos"`
+	Descuento  int       `json:"descuento_pct"`
+	ImagenURL  string    `json:"imagen_url"`
+	Tienda     string    `json:"tienda"`
+	TiendaSlug string    `json:"tienda_slug"`
+	TerminaEn  time.Time `json:"termina_en"`
+}
+
+// ofertas: los descuentos vigentes de las tiendas que el comprador sigue (primero los que terminan antes).
+// Solo de esas tiendas: así "Ofertas" en su inicio es de quienes eligió seguir, no de cualquiera.
+func (m *Modulo) ofertas(w http.ResponseWriter, r *http.Request) error {
+	rows, err := m.app.DB.QueryContext(r.Context(), `SELECT p.id, p.nombre, p.precio_centimos, o.descuento_pct, o.termina_en, t.nombre, t.slug,
+		COALESCE((SELECT key FROM producto_imagenes i WHERE i.producto_id=p.id ORDER BY orden LIMIT 1),'')
+		FROM favoritos_tiendas f JOIN tiendas t ON t.id=f.tienda_id
+		JOIN productos p ON p.tienda_id=t.id JOIN ofertas o ON o.producto_id=p.id
+		WHERE f.usuario_id=$1 AND o.termina_en > now() AND o.inicia_en <= now()
+		AND p.activo AND NOT p.eliminado AND p.stock > 0 AND `+visible+`
+		ORDER BY o.termina_en LIMIT 20`, usuario(r))
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	out := []Oferta{}
+	for rows.Next() {
+		var o Oferta
+		var img string
+		if err := rows.Scan(&o.ID, &o.Nombre, &o.Precio, &o.Descuento, &o.TerminaEn, &o.Tienda, &o.TiendaSlug, &img); err != nil {
+			return err
+		}
+		o.Final = productos.PrecioConOferta(o.Precio, o.Descuento)
+		if img != "" {
+			o.ImagenURL = m.app.Archivos.URLPublica(img)
+		}
+		out = append(out, o)
+	}
+	httpx.OK(w, map[string]any{"ofertas": out})
+	return rows.Err()
 }

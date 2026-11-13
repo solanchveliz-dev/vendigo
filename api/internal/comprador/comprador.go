@@ -134,6 +134,8 @@ func (m *Modulo) resumen(w http.ResponseWriter, r *http.Request) error {
 		NoLeidas   int         `json:"no_leidas"`
 		PorValorar int         `json:"por_valorar"`
 		Seguidas   []TiendaFav `json:"tiendas_seguidas"`
+		// Los entregados que aún no valoró (para el costado de "Mi inicio").
+		ParaValorar []Pedido `json:"pedidos_por_valorar"`
 	}
 	err := m.app.DB.QueryRowContext(ctx, `SELECT u.nombre, u.creado_en,
 		(SELECT count(*) FROM pedidos WHERE comprador_id=u.id),
@@ -150,8 +152,20 @@ func (m *Modulo) resumen(w http.ResponseWriter, r *http.Request) error {
 	if d.Curso, err = m.listar(ctx, u.ID, true, 3); err != nil {
 		return err
 	}
-	if d.Seguidas, err = m.tiendasSeguidas(r, 3); err != nil {
+	if d.Seguidas, err = m.tiendasSeguidas(r, 6); err != nil {
 		return err
+	}
+	d.ParaValorar = []Pedido{}
+	if d.PorValorar > 0 {
+		todos, err := m.listar(ctx, u.ID, false, 60)
+		if err != nil {
+			return err
+		}
+		for _, p := range todos {
+			if p.Grupo == "entregado" && !p.Valorado && len(d.ParaValorar) < 3 {
+				d.ParaValorar = append(d.ParaValorar, p)
+			}
+		}
 	}
 	httpx.OK(w, d)
 	return nil

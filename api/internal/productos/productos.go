@@ -43,6 +43,7 @@ func (m *Modulo) RutasPublicas(r chi.Router) {
 	r.Method("GET", "/tiendas/{slug}/productos", httpx.Handler(m.catalogoPublico))
 	r.Method("GET", "/tiendas/{slug}/productos/{id}", httpx.Handler(m.productoPublico))
 	r.Method("GET", "/destacados", httpx.Handler(m.destacadosPublicos))
+	r.Method("GET", "/mas-vendidos", httpx.Handler(m.masVendidos))
 	r.Method("GET", "/buscar", httpx.Handler(m.buscar))
 }
 

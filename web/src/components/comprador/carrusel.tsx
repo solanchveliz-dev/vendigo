@@ -1,18 +1,27 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, CreditCard, Play, ShieldCheck, Store, Truck } from "lucide-react";
-import { soles } from "@/lib/formato";
+import { useRouter } from "next/navigation";
+import { ChevronLeft, ChevronRight, MapPin, Play, Search } from "lucide-react";
 import { Modal, cn } from "@/components/ui";
 
-export type FotoCarrusel = { id: string; url: string; nombre: string; precio: number; slug: string };
 
 // Banner principal del inicio (hero) en carrusel:
-// 1) el mensaje de VendiGo con productos reales de las tiendas sobre pedestales;
+// 1) saludo y buscador;
 // 2–4) campañas por rubro (hogar, regalos, tecnología) con su foto y su botón.
-export function CarruselInicio({ productos, fotosRubro = {} }: { productos: FotoCarrusel[]; fotosRubro?: Record<string, string> }) {
+export function CarruselInicio({ saludo, fotosRubro = {} }: { saludo: string; fotosRubro?: Record<string, string> }) {
+  const router = useRouter();
+  function buscar(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const f = new FormData(e.currentTarget);
+    const q = new URLSearchParams();
+    const texto = f.get("q")?.toString().trim();
+    const ciudad = f.get("ciudad")?.toString().trim();
+    if (texto) q.set("q", texto);
+    if (ciudad) q.set("ciudad", ciudad);
+    router.push(`/buscar?${q}`);
+  }
   const [i, setI] = useState(0);
   const [pausa, setPausa] = useState(false);
   const [como, setComo] = useState(false);
@@ -35,7 +44,6 @@ export function CarruselInicio({ productos, fotosRubro = {} }: { productos: Foto
     { titulo: "Regalos especiales para cada ocasión", texto: "Accesorios y artesanías con detalles que no encuentras en otro lado.", boton: "Ver regalos", href: "/buscar?rubro=accesorios", img: foto("accesorios", "/inicio/aretes.jpg"), fondo: "bg-[#fbe9e3]", acento: "text-[#a8402b]" },
     { titulo: "Tecnología y más", texto: "Accesorios y gadgets de emprendedores de todo el Perú.", boton: "Explorar tecnología", href: "/buscar?rubro=tecnologia", img: foto("tecnologia", "/inicio/smartwatch.jpg"), fondo: "bg-[#e6eef6]", acento: "text-[#21476b]" },
   ];
-  const pedestales = productos.slice(0, 3);
 
   return (
     <section
@@ -48,45 +56,37 @@ export function CarruselInicio({ productos, fotosRubro = {} }: { productos: Foto
       onBlur={() => setPausa(false)}
     >
       <div className="flex transition-transform duration-700 ease-out motion-reduce:transition-none" style={{ transform: `translateX(-${i * 100}%)` }}>
-        {/* 1. Mensaje principal */}
-        <div className="relative grid min-h-[380px] w-full shrink-0 items-center gap-6 overflow-hidden bg-pino px-6 py-8 text-white md:px-14 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]" aria-hidden={i !== 0}>
-          <span className="pointer-events-none absolute -right-24 bottom-[-140px] hidden size-[460px] rounded-full bg-coral lg:block" />
-          <span className="pointer-events-none absolute -left-20 -top-28 size-[300px] rounded-full bg-pino-2/70" />
+        {/* 1. Mensaje principal: saludo y buscador */}
+        <div className="relative flex min-h-[380px] w-full shrink-0 items-center overflow-hidden bg-pino px-6 py-8 text-white md:px-14" aria-hidden={i !== 0}>
+          {/* Anillos de fondo del prototipo (.hm-hero::before) */}
+          <span className="pointer-events-none absolute -right-[120px] -top-[220px] size-[560px] rounded-full border border-white/[0.12] shadow-[0_0_0_70px_rgba(255,255,255,0.035),0_0_0_140px_rgba(255,255,255,0.02)]" />
+          <span className="pointer-events-none absolute -bottom-[160px] right-[18%] hidden size-[300px] rounded-full bg-coral/90 lg:block" />
           <div className="relative">
-            <span className="flex items-center gap-2">
-              <Image src="/logo.png" alt="" width={34} height={34} />
-              <b className="font-display text-[20px] font-extrabold">Vendi<span className="text-coral">Go</span></b>
-            </span>
-            <h1 className="mt-4 font-display text-[34px] font-extrabold leading-[1.02] tracking-[-0.04em] md:text-[50px]">
-              Descubre productos de <span className="text-coral">emprendedores</span>
+            <span className="inline-block rounded-full bg-coral px-3 py-1.5 text-[11px] font-extrabold uppercase tracking-[0.1em]">{saludo}</span>
+            <h1 className="mt-4 font-display text-[34px] font-extrabold leading-[1.02] tracking-[-0.04em] md:text-[48px]">
+              Descubre tu próxima tienda <i className="font-serif font-semibold text-coral">favorita</i>
             </h1>
-            <p className="mt-3 max-w-[480px] text-[16px] leading-relaxed text-white/80">Explora tiendas independientes, encuentra artículos únicos y compra de forma directa y segura.</p>
-            <div className="mt-6 flex flex-wrap gap-3">
-              <Link href="/buscar" tabIndex={i === 0 ? 0 : -1} className="inline-flex h-12 items-center gap-2 rounded-full bg-coral px-6 font-bold text-white transition hover:brightness-95">
-                <Store className="size-5" /> Explorar tiendas
-              </Link>
-              <button type="button" onClick={() => setComo(true)} tabIndex={i === 0 ? 0 : -1} className="inline-flex h-12 items-center gap-2 rounded-full px-6 font-bold text-white ring-2 ring-white/70 transition hover:bg-white/10">
-                <Play className="size-4 fill-current" /> Cómo funciona
-              </button>
+            <p className="mt-3 max-w-[460px] text-[16px] leading-relaxed text-white/80">Encuentra productos únicos de emprendedores peruanos y compra directamente en sus tiendas.</p>
+            <form onSubmit={buscar} role="search" className="mt-6 flex max-w-[560px] flex-col gap-1.5 rounded-[22px] bg-white p-1.5 text-tinta sm:flex-row sm:items-center sm:rounded-full">
+              <label className="flex min-w-0 flex-[1.3] items-center gap-2 px-3.5">
+                <Search className="size-5 shrink-0 text-gris" />
+                <input name="q" aria-label="Qué buscas" tabIndex={i === 0 ? 0 : -1} placeholder="¿Qué buscas?" className="h-11 min-w-0 flex-1 bg-transparent text-[15px] outline-none placeholder:text-gris" />
+              </label>
+              <label className="flex min-w-0 flex-1 items-center gap-2 border-linea px-3.5 sm:border-l">
+                <MapPin className="size-5 shrink-0 text-gris" />
+                <input name="ciudad" aria-label="Ciudad" tabIndex={i === 0 ? 0 : -1} placeholder="¿Dónde? Ej. Lima" className="h-11 min-w-0 flex-1 bg-transparent text-[15px] outline-none placeholder:text-gris" />
+              </label>
+              <button tabIndex={i === 0 ? 0 : -1} className="h-11 rounded-full bg-coral px-6 font-bold text-white transition hover:brightness-95">Buscar</button>
+            </form>
+            <div className="mt-3.5 flex flex-wrap items-center gap-2 text-[13px] text-white/75">
+              <span>Lo más buscado:</span>
+              {["Alfajores", "Joyería", "Polos", "Skincare", "Velas"].map((b) => (
+                <Link key={b} href={`/buscar?q=${encodeURIComponent(b.toLowerCase())}`} tabIndex={i === 0 ? 0 : -1} className="rounded-full bg-white/10 px-3 py-1.5 font-semibold text-white ring-1 ring-white/25 transition hover:bg-white hover:text-pino">{b}</Link>
+              ))}
             </div>
-            <ul className="mt-7 flex flex-wrap gap-x-7 gap-y-3 text-[13.5px] leading-tight text-white/85">
-              <li className="flex items-center gap-2.5"><ShieldCheck className="size-6 shrink-0" /> Tiendas<br />verificadas</li>
-              <li className="flex items-center gap-2.5"><Truck className="size-6 shrink-0" /> Envíos<br />a todo el Perú</li>
-              <li className="flex items-center gap-2.5"><CreditCard className="size-6 shrink-0" /> Yape, Plin<br />o transferencia</li>
-            </ul>
-          </div>
-          {/* Productos reales sobre pedestales */}
-          <div className="relative hidden h-[320px] items-end justify-center gap-4 lg:flex">
-            {pedestales.map((p, k) => (
-              <Link key={p.id} href={`/t/${p.slug}/p/${p.id}`} tabIndex={i === 0 ? 0 : -1} className={cn("group relative flex flex-col items-center", k === 1 ? "z-10" : "")} title={p.nombre}>
-                <span className={cn("casilla-producto block overflow-hidden rounded-[26px] shadow-[0_24px_40px_-24px_rgba(0,0,0,0.6)]", k === 1 ? "size-[210px]" : "size-[150px]")}>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={p.url} alt={p.nombre} className="foto-producto transition duration-500 group-hover:scale-105" />
-                </span>
-                <span className={cn("-mt-3 rounded-t-[14px] bg-[#f3f0ea]", k === 1 ? "h-16 w-[170px]" : "h-10 w-[120px]")} />
-                <span className="absolute left-2 top-2 rounded-full bg-white px-2.5 py-1 text-[12px] font-bold text-tinta">{soles(p.precio)}</span>
-              </Link>
-            ))}
+            <button type="button" onClick={() => setComo(true)} tabIndex={i === 0 ? 0 : -1} className="mt-4 inline-flex items-center gap-2 text-[14px] font-bold text-white/90 hover:underline">
+              <Play className="size-3.5 fill-current" /> Cómo funciona VendiGo
+            </button>
           </div>
         </div>
 

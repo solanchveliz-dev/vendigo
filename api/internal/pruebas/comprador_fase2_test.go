@@ -1,6 +1,7 @@
 package pruebas
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -154,4 +155,43 @@ func TestPreguntaDelCompradorYAvisoAlResponder(t *testing.T) {
 	if n := numero(t, `SELECT count(*) FROM notificaciones WHERE usuario_id=$1 AND enlace = '/t/' || (SELECT slug FROM tiendas WHERE id=$3) || '/p/' || $2::text`, uid, pid, tid); n != 1 {
 		t.Fatalf("debía llegar 1 aviso al comprador, llegaron %d", n)
 	}
+}
+
+// "Ofertas" del inicio muestra solo los descuentos de las tiendas que el comprador sigue.
+func TestOfertasSoloDeTiendasQueSigue(t *testing.T) {
+	necesitaBase(t)
+	seguida, otra := crearTienda(t), crearTienda(t)
+	verificar(t, seguida, "identidad")
+	verificar(t, otra, "identidad")
+	oferta := func(tid, nombre string) string {
+		var pid string
+		if err := base.QueryRow(`INSERT INTO productos (tienda_id, nombre, precio_centimos, stock) VALUES ($1, $2, 4500, 5) RETURNING id::text`, tid, nombre).Scan(&pid); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := base.Exec(`INSERT INTO ofertas (producto_id, descuento_pct, termina_en) VALUES ($1, 20, now() + interval '1 day')`, pid); err != nil {
+			t.Fatal(err)
+		}
+		return pid
+	}
+	suya, ajena := oferta(seguida, "Aretes"), oferta(otra, "Collar")
+	uid := crearUsuario(t, "comprador")
+	if c := llamarComprador(t, uid, "PUT", "/favoritos/tiendas/"+seguida, ""); c != http.StatusNoContent {
+		t.Fatalf("no se pudo seguir la tienda (respondió %d)", c)
+	}
+	rt := chi.NewRouter()
+	comprador.Nuevo(app).Rutas(rt)
+	req := httptest.NewRequest("GET", "/ofertas", nil)
+	req = req.WithContext(httpx.ConUsuario(req.Context(), httpx.Usuario{ID: uid, Rol: "comprador"}))
+	rec := httptest.NewRecorder()
+	rt.ServeHTTP(rec, req)
+	var r struct {
+		Ofertas []comprador.Oferta `json:"ofertas"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &r); err != nil {
+		t.Fatal(err)
+	}
+	if len(r.Ofertas) != 1 || r.Ofertas[0].ID != suya || r.Ofertas[0].Final != 3600 {
+		t.Fatalf("debía salir solo la oferta de la tienda seguida a S/ 36 (salió %+v)", r.Ofertas)
+	}
+	_ = ajena
 }
