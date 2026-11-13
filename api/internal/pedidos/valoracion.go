@@ -36,6 +36,9 @@ type NuevaValoracion struct {
 // Solo pedidos entregados, una vez por pedido y dentro de los 30 días. Avisa a la tienda.
 func GuardarValoracion(ctx context.Context, tx *sql.Tx, pid string, usuarioID *string, in NuevaValoracion) error {
 	in.Comentario = strings.TrimSpace(in.Comentario)
+	if in.Fotos == nil {
+		in.Fotos = []string{} // sin fotos se guarda una lista vacía, no NULL (la columna no acepta NULL)
+	}
 	switch {
 	case in.Tienda < 1 || in.Tienda > 5:
 		return httpx.Invalido("Elige de 1 a 5 estrellas para la tienda.")
