@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -53,6 +54,9 @@ export default function LayoutComprador({ children }: { children: React.ReactNod
   const u = yo.datos;
   const activo = (h: string) => (h === "/mi-cuenta" ? ruta === h : ruta.startsWith(h));
   const vende = u.rol === "vendedor";
+  // En el inicio no va la barra lateral (como el inicio del prototipo): la vitrina usa todo el ancho
+  // y se ven más tiendas. En las demás secciones de la cuenta sí está.
+  const sinRiel = ruta === "/mi-cuenta";
 
   async function salir() {
     await sesion("salir").catch(() => null);
@@ -61,7 +65,7 @@ export default function LayoutComprador({ children }: { children: React.ReactNod
 
   return (
     <div className="min-h-screen bg-crema">
-      <Riel
+      {!sinRiel && <Riel
         abierto={riel.abierto}
         inicio="/mi-cuenta"
         subtitulo="Mi cuenta"
@@ -80,11 +84,18 @@ export default function LayoutComprador({ children }: { children: React.ReactNod
             <PieRiel abierto={false} iniciales={iniciales(u.nombre)} titulo={u.nombre} linea="Comprador" />
           )
         }
-      />
+      />}
 
-      <div className={cn("transition-[padding] duration-300", margenContenido(riel.abierto))}>
+      <div className={cn("transition-[padding] duration-300", !sinRiel && margenContenido(riel.abierto))}>
         <header className="sticky top-0 z-[150] flex h-[74px] items-center gap-4 border-b border-linea bg-white/90 px-4 py-3.5 backdrop-blur md:pl-6 md:pr-7 xl:pr-9">
-          <BotonRiel onClick={riel.alternar} />
+          {sinRiel ? (
+            <Link href="/mi-cuenta" className="flex shrink-0 items-center gap-2" aria-label="VendiGo, inicio">
+              <Image src="/logo.png" alt="" width={40} height={40} />
+              <span className="hidden font-display text-[22px] font-extrabold tracking-tight text-tinta xl:block">Vendi<span className="text-coral">Go</span></span>
+            </Link>
+          ) : (
+            <BotonRiel onClick={riel.alternar} />
+          )}
           <nav className="hidden items-center gap-1 lg:flex">
             {arriba.map((l) => (
               <Link key={l.href} href={l.href} className={cn("rounded-full px-3.5 py-2 text-[14.5px] font-semibold transition", activo(l.href) ? "bg-pino-claro text-pino" : "text-gris hover:text-tinta")}>
@@ -122,7 +133,7 @@ export default function LayoutComprador({ children }: { children: React.ReactNod
             )}
           </div>
         </header>
-        <main className="w-full px-4 pb-16 pt-7 md:px-10">{children}</main>
+        <main className={cn("w-full px-4 pb-16 pt-7 md:px-10", sinRiel && "mx-auto max-w-[1480px]")}>{children}</main>
       </div>
     </div>
   );

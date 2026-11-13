@@ -161,7 +161,9 @@ export default function MiInicio() {
     const p = t.productos.find((x) => x.imagen_url);
     if (p && destacando.length < 4) destacando.push({ p, t });
   }
-  const descubrir = tiendas.filter((t) => !idsSeguidas.has(t.id)).slice(0, 6);
+  // Todas las tiendas posibles (hasta 12), en filas completas de 3 cuando hay suficientes.
+  const otras = tiendas.filter((t) => !idsSeguidas.has(t.id)).slice(0, 12);
+  const descubrir = otras.length > 3 ? otras.slice(0, otras.length - (otras.length % 3)) : otras;
   const pedido = datos.pedidos_en_curso[0];
 
   function buscar(e: React.FormEvent<HTMLFormElement>) {
@@ -250,7 +252,7 @@ export default function MiInicio() {
       {siguiendo.length > 0 && (
         <section className="mt-11">
           <Encabezado ante="Tus favoritas" titulo="Tiendas que" italica="sigues" enlace="/mi-cuenta/favoritos" texto="Ver favoritos" />
-          <div className="grid gap-5 md:grid-cols-2 2xl:grid-cols-3">{siguiendo.slice(0, 3).map((t) => <TarjetaTienda key={t.id} t={t} />)}</div>
+          <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">{siguiendo.slice(0, 6).map((t) => <TarjetaTienda key={t.id} t={t} />)}</div>
         </section>
       )}
 
@@ -264,7 +266,7 @@ export default function MiInicio() {
       {descubrir.length > 0 && (
         <section className="mt-11">
           <Encabezado ante="Tiendas" titulo="Tiendas para" italica="descubrir" enlace="/buscar" texto="Ver todas" />
-          <div className="grid gap-5 md:grid-cols-2 2xl:grid-cols-3">{descubrir.map((t) => <TarjetaTienda key={t.id} t={t} />)}</div>
+          <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">{descubrir.map((t) => <TarjetaTienda key={t.id} t={t} />)}</div>
         </section>
       )}
 
