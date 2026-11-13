@@ -8,6 +8,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/google/uuid"
+
 	"github.com/solanchveliz-dev/vendigo/api/internal/core"
 	"github.com/solanchveliz-dev/vendigo/api/internal/httpx"
 	"github.com/solanchveliz-dev/vendigo/api/internal/pedidos"
@@ -35,6 +37,7 @@ func (m *Modulo) rutasFase2(r chi.Router) {
 	r.Method("POST", "/productos/{id}/preguntas", httpx.Handler(m.preguntar))
 	r.Method("GET", "/pedidos/{codigo}/valorar", httpx.Handler(m.paraValorar))
 	r.Method("POST", "/pedidos/{codigo}/valorar", httpx.Handler(m.valorar))
+	r.Method("POST", "/pedidos/{codigo}/valorar/foto", httpx.Handler(m.fotoValoracion))
 }
 
 func usuario(r *http.Request) string {
@@ -441,6 +444,32 @@ func (m *Modulo) paraValorar(w http.ResponseWriter, r *http.Request) error {
 	}
 	httpx.OK(w, map[string]any{"codigo": chi.URLParam(r, "codigo"), "tienda": tienda, "tienda_logo": logoURL, "productos": items})
 	return rows.Err()
+}
+
+// fotoValoracion: URL firmada para subir una foto de cómo llegó el pedido (bucket privado, máx. 8 MB).
+// Solo para el dueño del pedido y si todavía lo puede calificar.
+func (m *Modulo) fotoValoracion(w http.ResponseWriter, r *http.Request) error {
+	pid, _, _, _, err := m.pedidoValorable(r, m.app.DB)
+	if err != nil {
+		return err
+	}
+	var in struct {
+		ContentType string `json:"content_type"`
+		Tamano      int64  `json:"tamano"`
+	}
+	if err := httpx.Leer(r, &in); err != nil {
+		return err
+	}
+	if !strings.HasPrefix(in.ContentType, "image/") || in.Tamano <= 0 || in.Tamano > 8<<20 {
+		return httpx.Invalido("Sube una imagen de hasta 8 MB.")
+	}
+	key := "valoracion/" + pid + "/" + uuid.NewString()
+	u, err := m.app.Archivos.URLSubida(r.Context(), false, key, in.ContentType, in.Tamano)
+	if err != nil {
+		return err
+	}
+	httpx.OK(w, map[string]string{"key": key, "url_subida": u})
+	return nil
 }
 
 func (m *Modulo) valorar(w http.ResponseWriter, r *http.Request) error {

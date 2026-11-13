@@ -8,7 +8,7 @@ import { api, ErrorApi, useApi } from "@/lib/api";
 import { Area, Aviso, Boton, Cargando, cn, useAvisar } from "@/components/ui";
 import { Titulo } from "@/components/admin/ui";
 import { Vacio } from "@/components/comprador/ui";
-import { RespuestasRapidas } from "@/components/pedidos/calificar";
+import { FotosLlegada, RespuestasRapidas, type FotoSubida } from "@/components/pedidos/calificar";
 
 type Datos = { codigo: string; tienda: string; tienda_logo: string; productos: { producto_id: string; nombre: string; variante: string; imagen_url: string }[] };
 
@@ -34,6 +34,7 @@ export default function Valorar({ params }: { params: Promise<{ codigo: string }
   const [prods, setProds] = useState<Record<string, number>>({});
   const [comentario, setComentario] = useState("");
   const [etiquetas, setEtiquetas] = useState<string[]>([]);
+  const [fotos, setFotos] = useState<FotoSubida[]>([]);
   const [falta, setFalta] = useState("");
   const [enviando, setEnviando] = useState(false);
 
@@ -50,7 +51,7 @@ export default function Valorar({ params }: { params: Promise<{ codigo: string }
     if (!tienda || datos!.productos.some((p) => !prods[p.producto_id])) return setFalta("Elige las estrellas de cada producto y de la tienda para publicar.");
     setEnviando(true);
     try {
-      const r = await api.post<{ mensaje: string }>(`/comprador/pedidos/${encodeURIComponent(codigo)}/valorar`, { tienda, productos: prods, comentario, etiquetas });
+      const r = await api.post<{ mensaje: string }>(`/comprador/pedidos/${encodeURIComponent(codigo)}/valorar`, { tienda, productos: prods, comentario, etiquetas, fotos: fotos.map((f) => f.key) });
       avisar(r.mensaje);
       router.replace("/mi-cuenta/pedidos");
     } catch (err) {
@@ -104,6 +105,11 @@ export default function Valorar({ params }: { params: Promise<{ codigo: string }
         <label className="mb-1.5 block text-sm font-semibold text-tinta">Comentario (opcional)</label>
         <Area value={comentario} onChange={(e) => setComentario(e.target.value)} maxLength={500} placeholder="Cuéntale a otros compradores cómo te fue" />
         <p className="mt-1 text-xs text-gris">Evita compartir datos personales.</p>
+        <FotosLlegada
+          valor={fotos}
+          cambiar={setFotos}
+          pedirSubida={(f) => api.post<{ key: string; url_subida: string }>(`/comprador/pedidos/${encodeURIComponent(codigo)}/valorar/foto`, { content_type: f.type || "image/jpeg", tamano: f.size })}
+        />
       </div>
       {falta && <Aviso tono="error">{falta}</Aviso>}
       <div className="flex flex-wrap gap-2">

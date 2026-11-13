@@ -17,12 +17,11 @@ const MALAS = ["Llegó tarde", "Mal empacado", "Distinto a la foto", "Llegó da�
 export function CalificarPedido({ token, pedido, tienda, enfocar, listo }: { token: string; pedido: PedidoDetalle; tienda: string; enfocar: boolean; listo: () => void }) {
   const avisar = useAvisar();
   const caja = useRef<HTMLElement>(null);
-  const entrada = useRef<HTMLInputElement>(null);
   const [estrellas, setEstrellas] = useState(0);
   const [productos, setProductos] = useState<Record<string, number>>({});
   const [comentario, setComentario] = useState("");
   const [etiquetas, setEtiquetas] = useState<string[]>([]);
-  const [fotos, setFotos] = useState<{ key: string; vista: string }[]>([]);
+  const [fotos, setFotos] = useState<FotoSubida[]>([]);
   const [ocupado, setOcupado] = useState("");
   const [error, setError] = useState("");
 
@@ -32,27 +31,6 @@ export function CalificarPedido({ token, pedido, tienda, enfocar, listo }: { tok
   }, [enfocar]);
 
   const unicos = pedido.items_detalle.filter((it, i, arr) => it.producto_id && arr.findIndex((x) => x.producto_id === it.producto_id) === i);
-
-  async function agregarFotos(lista: FileList | null) {
-    if (!lista?.length) return;
-    setOcupado("fotos");
-    try {
-      const nuevas: { key: string; vista: string }[] = [];
-      for (const f of Array.from(lista).slice(0, 3 - fotos.length)) {
-        if (f.size > 8 * 1024 * 1024) throw new Error("Cada foto puede pesar hasta 8 MB.");
-        const s = await api.post<{ key: string; url_subida: string }>(`/seguimiento/${token}/archivo`, { tipo: "valoracion", content_type: f.type || "image/jpeg", tamano: f.size });
-        const r = await fetch(s.url_subida, { method: "PUT", headers: { "Content-Type": f.type || "image/jpeg" }, body: f });
-        if (!r.ok) throw new Error("No se pudo subir la foto. Inténtalo de nuevo.");
-        nuevas.push({ key: s.key, vista: URL.createObjectURL(f) });
-      }
-      setFotos((x) => [...x, ...nuevas]);
-    } catch (e) {
-      avisar((e as ErrorApi).message || (e as Error).message, "error");
-    } finally {
-      setOcupado("");
-      if (entrada.current) entrada.current.value = "";
-    }
-  }
 
   async function enviar() {
     if (!estrellas) return setError(`Elige cuántas estrellas le das a ${tienda}.`);
@@ -106,23 +84,11 @@ export function CalificarPedido({ token, pedido, tienda, enfocar, listo }: { tok
       <p className="mt-4 text-sm font-bold text-tinta">Cuéntanos más <span className="font-normal text-gris">(opcional)</span></p>
       <Area value={comentario} onChange={(e) => setComentario(e.target.value)} maxLength={500} rows={3} placeholder="Ej. Llegó bien empacado y a tiempo." className="mt-1.5" />
 
-      <p className="mt-4 text-sm font-bold text-tinta">Fotos de cómo te llegó <span className="font-normal text-gris">(opcional, hasta 3)</span></p>
-      <div className="mt-2 flex flex-wrap gap-2">
-        {fotos.map((f) => (
-          <span key={f.key} className="relative">
-            <img src={f.vista} alt="Foto de cómo llegó el pedido" className="size-20 rounded-xl object-cover ring-1 ring-linea" />
-            <button type="button" onClick={() => setFotos((x) => x.filter((y) => y.key !== f.key))} className="absolute -right-1.5 -top-1.5 grid size-6 place-items-center rounded-full bg-tinta text-white" aria-label="Quitar foto">
-              <X className="size-3.5" />
-            </button>
-          </span>
-        ))}
-        {fotos.length < 3 && (
-          <button type="button" onClick={() => entrada.current?.click()} disabled={ocupado === "fotos"} className="grid size-20 place-items-center rounded-xl border-2 border-dashed border-linea text-gris hover:border-pino hover:text-pino">
-            {ocupado === "fotos" ? <span className="text-xs">Subiendo…</span> : <ImagePlus className="size-6" />}
-          </button>
-        )}
-        <input ref={entrada} type="file" accept="image/*" multiple hidden onChange={(e) => agregarFotos(e.target.files)} />
-      </div>
+      <FotosLlegada
+        valor={fotos}
+        cambiar={setFotos}
+        pedirSubida={(f) => api.post<{ key: string; url_subida: string }>(`/seguimiento/${token}/archivo`, { tipo: "valoracion", content_type: f.type || "image/jpeg", tamano: f.size })}
+      />
 
       <Boton className="mt-5 w-full" cargando={ocupado === "enviar"} onClick={enviar}>Enviar calificación</Boton>
     </section>
@@ -151,6 +117,59 @@ export function RespuestasRapidas({ estrellas, valor, cambiar }: { estrellas: nu
             </button>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+export type FotoSubida = { key: string; vista: string };
+
+// Fotos de cómo llegó el pedido (opcional, hasta 3). Cada una se sube al bucket privado con una URL firmada
+// que entrega la API (desde el seguimiento o desde "Mi cuenta"): pedirSubida dice a dónde pedirla.
+export function FotosLlegada({ valor, cambiar, pedirSubida }: { valor: FotoSubida[]; cambiar: (v: FotoSubida[]) => void; pedirSubida: (f: File) => Promise<{ key: string; url_subida: string }> }) {
+  const avisar = useAvisar();
+  const entrada = useRef<HTMLInputElement>(null);
+  const [subiendo, setSubiendo] = useState(false);
+
+  async function agregar(lista: FileList | null) {
+    if (!lista?.length) return;
+    setSubiendo(true);
+    try {
+      const nuevas: FotoSubida[] = [];
+      for (const f of Array.from(lista).slice(0, 3 - valor.length)) {
+        if (f.size > 8 * 1024 * 1024) throw new Error("Cada foto puede pesar hasta 8 MB.");
+        const s = await pedirSubida(f);
+        const r = await fetch(s.url_subida, { method: "PUT", headers: { "Content-Type": f.type || "image/jpeg" }, body: f });
+        if (!r.ok) throw new Error("No se pudo subir la foto. Inténtalo de nuevo.");
+        nuevas.push({ key: s.key, vista: URL.createObjectURL(f) });
+      }
+      cambiar([...valor, ...nuevas]);
+    } catch (e) {
+      avisar((e as ErrorApi).message || (e as Error).message, "error");
+    } finally {
+      setSubiendo(false);
+      if (entrada.current) entrada.current.value = "";
+    }
+  }
+
+  return (
+    <div>
+      <p className="mt-4 text-sm font-bold text-tinta">Fotos de cómo te llegó <span className="font-normal text-gris">(opcional, hasta 3)</span></p>
+      <div className="mt-2 flex flex-wrap gap-2">
+        {valor.map((f) => (
+          <span key={f.key} className="relative">
+            <img src={f.vista} alt="Foto de cómo llegó el pedido" className="size-20 rounded-xl object-cover ring-1 ring-linea" />
+            <button type="button" onClick={() => cambiar(valor.filter((y) => y.key !== f.key))} className="absolute -right-1.5 -top-1.5 grid size-6 place-items-center rounded-full bg-tinta text-white" aria-label="Quitar foto">
+              <X className="size-3.5" />
+            </button>
+          </span>
+        ))}
+        {valor.length < 3 && (
+          <button type="button" onClick={() => entrada.current?.click()} disabled={subiendo} className="grid size-20 place-items-center rounded-xl border-2 border-dashed border-linea text-gris hover:border-pino hover:text-pino" aria-label="Agregar foto">
+            {subiendo ? <span className="text-xs">Subiendo…</span> : <ImagePlus className="size-6" />}
+          </button>
+        )}
+        <input ref={entrada} type="file" accept="image/*" multiple hidden onChange={(e) => agregar(e.target.files)} />
       </div>
     </div>
   );
