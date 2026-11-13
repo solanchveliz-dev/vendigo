@@ -50,6 +50,9 @@ export function ElegirSede({ agencias, valor, cambiar }: { agencias: string[]; v
   }, [sedes, q, yo]);
 
   const cercana = yo && lista[0]?.km != null && lista[0].km < 60 ? lista[0] : null;
+  const conUbicacion = (sedes ?? []).some((s) => s.lat != null && s.lng != null);
+  // Ya se conoce la ubicación del comprador pero ninguna sede queda a menos de 60 km.
+  const lejos = !!yo && conUbicacion && !q && !cercana;
 
   function elegir(s: Sede) {
     cambiar({ agencia, ciudad: s.ciudad, sede: textoSede(s) });
@@ -57,6 +60,9 @@ export function ElegirSede({ agencias, valor, cambiar }: { agencias: string[]; v
 
   function ubicarme() {
     setErrorUbicacion("");
+    // Sin sedes ubicadas en el mapa no hay con qué medir: se avisa en vez de no hacer nada.
+    if (!conUbicacion) return setErrorUbicacion(`Las sedes de ${agencia} todavía no tienen su ubicación en el mapa. Por ahora escribe tu distrito o ciudad y elige de la lista.`);
+    if (!window.isSecureContext) return setErrorUbicacion("La ubicación solo funciona en páginas seguras (https o localhost). Abre VendiGo con tu enlace https o escribe tu distrito.");
     if (!navigator.geolocation) return setErrorUbicacion("Tu navegador no permite usar tu ubicación. Escribe tu distrito o ciudad.");
     setUbicando(true);
     navigator.geolocation.getCurrentPosition(
@@ -65,11 +71,18 @@ export function ElegirSede({ agencias, valor, cambiar }: { agencias: string[]; v
         setQ("");
         setYo({ lat: p.coords.latitude, lng: p.coords.longitude });
       },
-      () => {
+      (e) => {
         setUbicando(false);
-        setErrorUbicacion("No pudimos usar tu ubicación. Revisa el permiso del navegador o escribe tu distrito o ciudad.");
+        // Cada causa con su propio mensaje, para saber qué revisar.
+        setErrorUbicacion(
+          e.code === e.PERMISSION_DENIED
+            ? "Bloqueaste el permiso de ubicación. Actívalo en el ícono a la izquierda de la dirección del navegador (y en tu Mac: Ajustes → Privacidad y seguridad → Localización → Chrome) o escribe tu distrito."
+            : e.code === e.TIMEOUT
+              ? "Tu equipo tardó demasiado en encontrar tu ubicación. Vuelve a intentarlo o escribe tu distrito o ciudad."
+              : "Tu equipo no pudo saber dónde estás (pasa en computadoras sin Wi-Fi). Escribe tu distrito o ciudad.",
+        );
       },
-      { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 },
+      { enableHighAccuracy: false, timeout: 15000, maximumAge: 300000 },
     );
   }
 
@@ -121,6 +134,7 @@ export function ElegirSede({ agencias, valor, cambiar }: { agencias: string[]; v
             <LocateFixed className="size-4" /> {ubicando ? "Buscando tu ubicación…" : `Buscar la ${agencia} más cercana a mí`}
           </button>
           {errorUbicacion && <p className="text-sm text-error">{errorUbicacion}</p>}
+          {lejos && <p className="text-sm text-aviso">No hay sedes de {agencia} a menos de 60 km de ti. Revisa la lista o escribe tu ciudad.</p>}
           <label className="flex h-11 items-center gap-2 rounded-full bg-white px-4 ring-1 ring-linea focus-within:ring-2 focus-within:ring-pino">
             <Search className="size-4 shrink-0 text-gris" />
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="O escribe tu distrito o ciudad" aria-label="Buscar sede por distrito o ciudad" className="min-w-0 flex-1 bg-transparent text-sm outline-none" />
