@@ -318,6 +318,11 @@ export default async function TiendaPublica({ params, searchParams }: { params: 
                             ))}
                           </span>
                         </div>
+                        {(o.etiquetas ?? []).length > 0 && (
+                          <div className="mt-1.5 flex flex-wrap gap-1.5">
+                            {o.etiquetas!.map((e) => <span key={e} className="rounded-full bg-arena px-2.5 py-1 text-xs font-semibold text-tinta">{e}</span>)}
+                          </div>
+                        )}
                         {o.comentario && <p className="mt-1.5 text-sm leading-relaxed text-tinta/85">{o.comentario}</p>}
                         <p className="mt-1 text-xs text-gris">Compra entregada · {fecha(o.creado_en)}</p>
                       </li>

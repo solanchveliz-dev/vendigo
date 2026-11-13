@@ -6,6 +6,11 @@ import { api, ErrorApi } from "@/lib/api";
 import { Area, Boton, useAvisar } from "@/components/ui";
 import type { PedidoDetalle } from "@/lib/tipos";
 
+// Respuestas rápidas (como en inDrive): con 4 o 5 estrellas, lo bueno para destacar; con 1 a 3, lo que falló.
+// Son las mismas que valida la API (pedidos.EtiquetasBuenas / EtiquetasMalas).
+const BUENAS = ["Llegó a tiempo", "Bien empacado", "Igual que en la foto", "Buena calidad", "Buena atención", "Buen precio"];
+const MALAS = ["Llegó tarde", "Mal empacado", "Distinto a la foto", "Llegó dañado", "Mala atención", "Faltó algo"];
+
 // Calificar el pedido desde el enlace de seguimiento, apenas el cliente lo recibe.
 // Las estrellas de la tienda son obligatorias; las de cada producto, el comentario y las fotos de cómo llegó son opcionales.
 // Las fotos van al bucket privado con una URL firmada para este pedido.
@@ -16,6 +21,7 @@ export function CalificarPedido({ token, pedido, tienda, enfocar, listo }: { tok
   const [estrellas, setEstrellas] = useState(0);
   const [productos, setProductos] = useState<Record<string, number>>({});
   const [comentario, setComentario] = useState("");
+  const [etiquetas, setEtiquetas] = useState<string[]>([]);
   const [fotos, setFotos] = useState<{ key: string; vista: string }[]>([]);
   const [ocupado, setOcupado] = useState("");
   const [error, setError] = useState("");
@@ -53,7 +59,7 @@ export function CalificarPedido({ token, pedido, tienda, enfocar, listo }: { tok
     setError("");
     setOcupado("enviar");
     try {
-      await api.post(`/seguimiento/${token}/valorar`, { tienda: estrellas, productos, comentario, fotos: fotos.map((f) => f.key) });
+      await api.post(`/seguimiento/${token}/valorar`, { tienda: estrellas, productos, comentario, etiquetas, fotos: fotos.map((f) => f.key) });
       avisar("¡Gracias por calificar! Tu opinión ayuda a la tienda y a otros compradores.");
       listo();
     } catch (e) {
@@ -69,8 +75,20 @@ export function CalificarPedido({ token, pedido, tienda, enfocar, listo }: { tok
       <p className="mt-1 text-sm text-gris">Tu calificación ayuda a {tienda} a mejorar y a otros compradores a decidir.</p>
 
       <p className="mt-4 text-sm font-bold text-tinta">Califica a {tienda}</p>
-      <Estrellas valor={estrellas} cambiar={(n) => { setEstrellas(n); setError(""); }} grande etiqueta={`Estrellas para ${tienda}`} />
+      <Estrellas
+        valor={estrellas}
+        cambiar={(n) => {
+          // Al pasar de buena a mala (o al revés) cambian las respuestas: se quitan las que ya no aplican.
+          if ((n >= 4) !== (estrellas >= 4)) setEtiquetas([]);
+          setEstrellas(n);
+          setError("");
+        }}
+        grande
+        etiqueta={`Estrellas para ${tienda}`}
+      />
       {error && <p className="mt-1 text-sm text-error">{error}</p>}
+
+      <RespuestasRapidas estrellas={estrellas} valor={etiquetas} cambiar={setEtiquetas} />
 
       {unicos.length > 0 && (
         <div className="mt-4 space-y-2">
@@ -111,6 +129,33 @@ export function CalificarPedido({ token, pedido, tienda, enfocar, listo }: { tok
   );
 }
 
+// Respuestas rápidas según las estrellas. Al pasar de buena a mala (o al revés) quien llama limpia la selección.
+export function RespuestasRapidas({ estrellas, valor, cambiar }: { estrellas: number; valor: string[]; cambiar: (v: string[]) => void }) {
+  if (!estrellas) return null;
+  const buena = estrellas >= 4;
+  return (
+    <div className="mt-4">
+      <p className="text-sm font-bold text-tinta">{buena ? "¿Qué te gustó?" : "¿Qué pasó?"} <span className="font-normal text-gris">(toca las que apliquen)</span></p>
+      <div className="mt-2 flex flex-wrap gap-2">
+        {(buena ? BUENAS : MALAS).map((o) => {
+          const activa = valor.includes(o);
+          return (
+            <button
+              key={o}
+              type="button"
+              aria-pressed={activa}
+              onClick={() => cambiar(activa ? valor.filter((y) => y !== o) : [...valor, o])}
+              className={`rounded-full px-3.5 py-2 text-sm font-semibold transition ${activa ? (buena ? "bg-pino text-white" : "bg-error text-white") : "bg-white text-tinta ring-1 ring-linea hover:ring-pino/50"}`}
+            >
+              {o}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // Estrellas que se tocan (también con teclado: cada estrella es un botón).
 export function Estrellas({ valor, cambiar, grande = false, etiqueta }: { valor: number; cambiar?: (n: number) => void; grande?: boolean; etiqueta: string }) {
   return (
@@ -135,6 +180,11 @@ export function CalificacionHecha({ v, titulo }: { v: NonNullable<PedidoDetalle[
     <section className="rounded-[22px] bg-white p-5 shadow-suave ring-1 ring-linea/60">
       <h2 className="mb-2 text-lg font-extrabold text-tinta">{titulo}</h2>
       <Estrellas valor={v.estrellas} etiqueta="Calificación" />
+      {(v.etiquetas ?? []).length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {v.etiquetas.map((e) => <span key={e} className="rounded-full bg-arena px-2.5 py-1 text-xs font-semibold text-tinta">{e}</span>)}
+        </div>
+      )}
       {v.comentario && <p className="mt-2 text-sm leading-relaxed text-tinta/85">“{v.comentario}”</p>}
       {v.foto_urls.length > 0 && (
         <div className="mt-3 flex flex-wrap gap-2">

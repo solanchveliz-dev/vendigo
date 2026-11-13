@@ -60,7 +60,10 @@ func TestCalificarDesdeElSeguimiento(t *testing.T) {
 	if c := llamar("POST", "/valorar", `{"tienda":5,"fotos":["valoracion/otro-pedido/x"]}`).Code; c != http.StatusBadRequest {
 		t.Fatalf("una foto de otro pedido no se acepta (respondió %d)", c)
 	}
-	if c := llamar("POST", "/valorar", `{"tienda":4,"comentario":"Llegó bien empacado"}`).Code; c != http.StatusOK {
+	if c := llamar("POST", "/valorar", `{"tienda":4,"etiquetas":["Llegó tarde"]}`).Code; c != http.StatusBadRequest {
+		t.Fatalf("con 4 estrellas no se ofrecen respuestas de queja (respondió %d)", c)
+	}
+	if c := llamar("POST", "/valorar", `{"tienda":4,"comentario":"Todo bien","etiquetas":["Bien empacado","Llegó a tiempo","Bien empacado"]}`).Code; c != http.StatusOK {
 		t.Fatalf("debía poder calificar (respondió %d)", c)
 	}
 	if c := llamar("POST", "/valorar", `{"tienda":4}`).Code; c != http.StatusConflict {
@@ -71,6 +74,9 @@ func TestCalificarDesdeElSeguimiento(t *testing.T) {
 	}
 	if n := numero(t, `SELECT estrellas_tienda FROM valoraciones WHERE pedido_id=$1`, pid); n != 4 {
 		t.Fatalf("debía guardar 4 estrellas, guardó %d", n)
+	}
+	if n := numero(t, `SELECT cardinality(etiquetas) FROM valoraciones WHERE pedido_id=$1`, pid); n != 2 {
+		t.Fatalf("debía guardar 2 respuestas rápidas sin repetir, guardó %d", n)
 	}
 
 	// Pasados 30 días ya no se puede calificar.

@@ -593,14 +593,15 @@ type OpinionTienda struct {
 	Autor      string    `json:"autor"`
 	Estrellas  int       `json:"estrellas"`
 	Comentario string    `json:"comentario"`
+	Etiquetas  []string  `json:"etiquetas"`
 	CreadoEn   time.Time `json:"creado_en"`
 }
 
 // opinionesTienda: las 6 más recientes (solo existen valoraciones de pedidos entregados).
 func (m *Modulo) opinionesTienda(ctx context.Context, tiendaID string) ([]OpinionTienda, error) {
-	rows, err := m.app.DB.QueryContext(ctx, `SELECT split_part(COALESCE(u.nombre, d.comprador_nombre), ' ', 1), v.estrellas_tienda, v.comentario, v.creado_en
+	rows, err := m.app.DB.QueryContext(ctx, `SELECT split_part(COALESCE(u.nombre, d.comprador_nombre), ' ', 1), v.estrellas_tienda, v.comentario, v.etiquetas, v.creado_en
 		FROM valoraciones v JOIN pedidos d ON d.id=v.pedido_id LEFT JOIN usuarios u ON u.id=v.usuario_id
-		WHERE v.tienda_id=$1 ORDER BY (v.comentario <> '') DESC, v.creado_en DESC LIMIT 6`, tiendaID)
+		WHERE v.tienda_id=$1 ORDER BY (v.comentario <> '' OR cardinality(v.etiquetas) > 0) DESC, v.creado_en DESC LIMIT 6`, tiendaID)
 	if err != nil {
 		return nil, err
 	}
@@ -608,7 +609,7 @@ func (m *Modulo) opinionesTienda(ctx context.Context, tiendaID string) ([]Opinio
 	out := []OpinionTienda{}
 	for rows.Next() {
 		var o OpinionTienda
-		if err := rows.Scan(&o.Autor, &o.Estrellas, &o.Comentario, &o.CreadoEn); err != nil {
+		if err := rows.Scan(&o.Autor, &o.Estrellas, &o.Comentario, pq.Array(&o.Etiquetas), &o.CreadoEn); err != nil {
 			return nil, err
 		}
 		out = append(out, o)

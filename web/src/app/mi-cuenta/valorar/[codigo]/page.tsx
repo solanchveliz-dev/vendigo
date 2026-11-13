@@ -8,6 +8,7 @@ import { api, ErrorApi, useApi } from "@/lib/api";
 import { Area, Aviso, Boton, Cargando, cn, useAvisar } from "@/components/ui";
 import { Titulo } from "@/components/admin/ui";
 import { Vacio } from "@/components/comprador/ui";
+import { RespuestasRapidas } from "@/components/pedidos/calificar";
 
 type Datos = { codigo: string; tienda: string; tienda_logo: string; productos: { producto_id: string; nombre: string; variante: string; imagen_url: string }[] };
 
@@ -32,6 +33,7 @@ export default function Valorar({ params }: { params: Promise<{ codigo: string }
   const [tienda, setTienda] = useState(0);
   const [prods, setProds] = useState<Record<string, number>>({});
   const [comentario, setComentario] = useState("");
+  const [etiquetas, setEtiquetas] = useState<string[]>([]);
   const [falta, setFalta] = useState("");
   const [enviando, setEnviando] = useState(false);
 
@@ -48,7 +50,7 @@ export default function Valorar({ params }: { params: Promise<{ codigo: string }
     if (!tienda || datos!.productos.some((p) => !prods[p.producto_id])) return setFalta("Elige las estrellas de cada producto y de la tienda para publicar.");
     setEnviando(true);
     try {
-      const r = await api.post<{ mensaje: string }>(`/comprador/pedidos/${encodeURIComponent(codigo)}/valorar`, { tienda, productos: prods, comentario });
+      const r = await api.post<{ mensaje: string }>(`/comprador/pedidos/${encodeURIComponent(codigo)}/valorar`, { tienda, productos: prods, comentario, etiquetas });
       avisar(r.mensaje);
       router.replace("/mi-cuenta/pedidos");
     } catch (err) {
@@ -86,7 +88,17 @@ export default function Valorar({ params }: { params: Promise<{ codigo: string }
           <b className="block text-tinta">{datos.tienda}</b>
           <span className="text-sm text-gris">Atención, empaque y cumplimiento de la entrega</span>
         </div>
-        <Estrellas nombre={datos.tienda} valor={tienda} cambiar={setTienda} />
+        <Estrellas
+          nombre={datos.tienda}
+          valor={tienda}
+          cambiar={(n) => {
+            if ((n >= 4) !== (tienda >= 4)) setEtiquetas([]);
+            setTienda(n);
+          }}
+        />
+        <div className="w-full">
+          <RespuestasRapidas estrellas={tienda} valor={etiquetas} cambiar={setEtiquetas} />
+        </div>
       </div>
       <div className="rounded-[22px] bg-white p-5 shadow-suave ring-1 ring-linea/60">
         <label className="mb-1.5 block text-sm font-semibold text-tinta">Comentario (opcional)</label>

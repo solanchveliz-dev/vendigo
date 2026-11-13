@@ -3,6 +3,7 @@ package pedidos
 import (
 	"context"
 	"database/sql"
+	"slices"
 	"strings"
 	"time"
 
@@ -16,10 +17,29 @@ import (
 // DiasParaValorar: plazo para calificar un pedido desde que se entregó.
 const DiasParaValorar = 30
 
+// Etiquetas: respuestas rápidas al calificar. Las buenas se ofrecen con 4 o 5 estrellas y las malas con 1 a 3
+// (la web muestra las mismas). Lista fija: así se pueden contar por tienda.
+var EtiquetasBuenas = []string{"Llegó a tiempo", "Bien empacado", "Igual que en la foto", "Buena calidad", "Buena atención", "Buen precio"}
+var EtiquetasMalas = []string{"Llegó tarde", "Mal empacado", "Distinto a la foto", "Llegó dañado", "Mala atención", "Faltó algo"}
+
+func etiquetaValida(e string, estrellas int) bool {
+	lista := EtiquetasMalas
+	if estrellas >= 4 {
+		lista = EtiquetasBuenas
+	}
+	for _, x := range lista {
+		if x == e {
+			return true
+		}
+	}
+	return false
+}
+
 // Valoracion: la calificación que dejó el cliente, para mostrarla en el pedido (a él y a la tienda).
 type Valoracion struct {
 	Estrellas  int       `json:"estrellas"`
 	Comentario string    `json:"comentario"`
+	Etiquetas  []string  `json:"etiquetas"`
 	FotoURLs   []string  `json:"foto_urls"`
 	CreadoEn   time.Time `json:"creado_en"`
 }
@@ -29,6 +49,7 @@ type NuevaValoracion struct {
 	Tienda     int            `json:"tienda"`     // estrellas para la tienda (1 a 5), obligatorio
 	Productos  map[string]int `json:"productos"`  // estrellas por producto (opcional)
 	Comentario string         `json:"comentario"` // opcional, hasta 500 caracteres
+	Etiquetas  []string       `json:"etiquetas"`  // respuestas rápidas (opcional), de la lista según las estrellas
 	Fotos      []string       `json:"fotos"`      // keys subidas al bucket privado (opcional, hasta 3)
 }
 
@@ -38,6 +59,15 @@ func GuardarValoracion(ctx context.Context, tx *sql.Tx, pid string, usuarioID *s
 	in.Comentario = strings.TrimSpace(in.Comentario)
 	if in.Fotos == nil {
 		in.Fotos = []string{} // sin fotos se guarda una lista vacía, no NULL (la columna no acepta NULL)
+	}
+	etiquetas := []string{}
+	for _, e := range in.Etiquetas {
+		if !etiquetaValida(e, in.Tienda) {
+			return httpx.Invalido("Una de las respuestas rápidas no corresponde a tu calificación.")
+		}
+		if !slices.Contains(etiquetas, e) {
+			etiquetas = append(etiquetas, e)
+		}
 	}
 	switch {
 	case in.Tienda < 1 || in.Tienda > 5:
@@ -73,8 +103,8 @@ func GuardarValoracion(ctx context.Context, tx *sql.Tx, pid string, usuarioID *s
 		return httpx.Invalido("El plazo para calificar este pedido ya terminó.")
 	}
 	var vid string
-	if err := tx.QueryRowContext(ctx, `INSERT INTO valoraciones (pedido_id, usuario_id, tienda_id, estrellas_tienda, comentario, foto_keys)
-		VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`, pid, usuarioID, tid, in.Tienda, in.Comentario, pq.Array(in.Fotos)).Scan(&vid); err != nil {
+	if err := tx.QueryRowContext(ctx, `INSERT INTO valoraciones (pedido_id, usuario_id, tienda_id, estrellas_tienda, comentario, foto_keys, etiquetas)
+		VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`, pid, usuarioID, tid, in.Tienda, in.Comentario, pq.Array(in.Fotos), pq.Array(etiquetas)).Scan(&vid); err != nil {
 		return err
 	}
 	for prod, n := range in.Productos {
@@ -88,7 +118,8 @@ func GuardarValoracion(ctx context.Context, tx *sql.Tx, pid string, usuarioID *s
 			return err
 		}
 	}
-	cuerpo := in.Comentario
+	cuerpo := strings.Join(append(append([]string{}, etiquetas...), in.Comentario), ". ")
+	cuerpo = strings.Trim(cuerpo, ". ")
 	if r := []rune(cuerpo); len(r) > 120 {
 		cuerpo = string(r[:120]) + "…"
 	}
@@ -106,8 +137,8 @@ func GuardarValoracion(ctx context.Context, tx *sql.Tx, pid string, usuarioID *s
 func (m *Modulo) cargarValoracion(ctx context.Context, pid string) *Valoracion {
 	var v Valoracion
 	var keys []string
-	err := m.app.DB.QueryRowContext(ctx, `SELECT estrellas_tienda, comentario, foto_keys, creado_en FROM valoraciones WHERE pedido_id=$1`, pid).
-		Scan(&v.Estrellas, &v.Comentario, pq.Array(&keys), &v.CreadoEn)
+	err := m.app.DB.QueryRowContext(ctx, `SELECT estrellas_tienda, comentario, foto_keys, etiquetas, creado_en FROM valoraciones WHERE pedido_id=$1`, pid).
+		Scan(&v.Estrellas, &v.Comentario, pq.Array(&keys), pq.Array(&v.Etiquetas), &v.CreadoEn)
 	if err != nil {
 		return nil
 	}

@@ -25,7 +25,7 @@ export type Tienda = {
   valoracion?: number | null;
   valoraciones?: number;
   seguidores?: number;
-  opiniones?: { autor: string; estrellas: number; comentario: string; creado_en: string }[];
+  opiniones?: { autor: string; estrellas: number; comentario: string; etiquetas?: string[] | null; creado_en: string }[];
   nombre: string;
   slug: string;
   rubro: string;
@@ -157,7 +157,7 @@ export type PedidoDetalle = PedidoResumen & {
   eventos: { estado: string; detalle: string; fecha: string }[];
   reclamo_detalle: Reclamo | null;
   // La calificación del cliente (estrellas a la tienda, comentario y fotos opcionales), si ya calificó.
-  valoracion: { estrellas: number; comentario: string; foto_urls: string[]; creado_en: string } | null;
+  valoracion: { estrellas: number; comentario: string; etiquetas: string[]; foto_urls: string[]; creado_en: string } | null;
   acciones: string[];
   aceptado_en: string | null;
   enviado_en: string | null;
