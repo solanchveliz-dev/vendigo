@@ -49,6 +49,7 @@ func (m *Modulo) RutasPublicas(r chi.Router) {
 	r.Method("POST", "/tiendas/{slug}/visitas", httpx.Handler(m.registrarVisita))
 	r.Method("GET", "/catalogos", httpx.Handler(m.catalogos))
 	r.Method("GET", "/agencias/sedes", httpx.Handler(m.sedesPublicas))
+	r.Method("GET", "/agencias/cerca", httpx.Handler(m.agenciasCerca))
 }
 
 // ID devuelve la tienda del usuario o un error claro si todavía no la crea.
@@ -654,10 +655,11 @@ type SedePublica struct {
 }
 
 // sedesPublicas lista las sedes activas que mantiene el admin (?agencia=Shalom para una sola).
+// Las sedes de ejemplo (demostración) no se muestran al comprador.
 // Es información pública de las agencias; la ubicación del comprador no se envía aquí.
 func (m *Modulo) sedesPublicas(w http.ResponseWriter, r *http.Request) error {
 	rows, err := m.app.DB.QueryContext(r.Context(), `SELECT agencia, ciudad, nombre, direccion, lat, lng, de_ejemplo FROM agencias_sedes
-		WHERE activa AND ($1 = '' OR agencia = $1) ORDER BY agencia, ciudad, nombre`, strings.TrimSpace(r.URL.Query().Get("agencia")))
+		WHERE activa AND NOT de_ejemplo AND ($1 = '' OR agencia = $1) ORDER BY agencia, ciudad, nombre`, strings.TrimSpace(r.URL.Query().Get("agencia")))
 	if err != nil {
 		return err
 	}
