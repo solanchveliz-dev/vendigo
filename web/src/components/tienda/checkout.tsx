@@ -230,6 +230,41 @@ export function Checkout({ tienda: t, vista = false, live = false, ahora: direct
     }
   }
 
+  // Datos de quien recibe, dentro de la tarjeta de la forma de entrega elegida (como en el prototipo).
+  const datosEntrega = (
+    <div className={cn("grid gap-4", entrega === "agencia" ? "sm:grid-cols-3" : "sm:grid-cols-2")}>
+                  <Campo etiqueta={entrega === "agencia" ? "Nombre de quien recoge" : "Nombre y apellido"}><Entrada {...campo("nombre")} maxLength={80} autoComplete="name" /></Campo>
+                  <Campo etiqueta="Celular" ayuda={sinCodigo ? "Es el celular de tu cuenta: no necesitas código." : cuenta ? "Te enviaremos un código a este número para confirmar." : "Te enviamos un código para confirmar. ¿Tienes cuenta? Ingresa y no te lo pediremos."}><Entrada {...campo("celular")} onChange={(e) => setF({ ...f, celular: e.target.value.replace(/\D/g, "") })} inputMode="numeric" maxLength={9} placeholder="9XXXXXXXX" autoComplete="tel" /></Campo>
+                  {entrega === "motorizado" && (
+                    <>
+                      {direcciones.length > 0 && (
+                        <div className="flex flex-wrap gap-2 sm:col-span-2">
+                          {direcciones.map((d) => (
+                            <button
+                              key={d.id}
+                              type="button"
+                              onClick={() => setF({ ...f, direccion: d.direccion, distrito: d.distrito, referencia: d.referencia })}
+                              className={cn("inline-flex items-center gap-1.5 rounded-full px-3.5 py-2 text-sm font-semibold ring-1 transition", f.direccion === d.direccion ? "bg-pino text-white ring-pino" : "bg-white text-tinta ring-linea hover:ring-pino")}
+                            >
+                              <MapPin className="size-4" /> {d.etiqueta}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      <Campo etiqueta="Dirección"><Entrada {...campo("direccion")} maxLength={200} autoComplete="street-address" /></Campo>
+                      <Campo etiqueta="Distrito"><Entrada {...campo("distrito")} maxLength={80} /></Campo>
+                      <Campo etiqueta="Referencia (opcional)"><Entrada {...campo("referencia")} maxLength={200} /></Campo>
+                    </>
+                  )}
+                  {entrega === "agencia" && (
+                    <>
+                      <Campo etiqueta="DNI" ayuda="La agencia lo pide para entregarte."><Entrada {...campo("dni")} onChange={(e) => setF({ ...f, dni: e.target.value.replace(/\D/g, "") })} inputMode="numeric" maxLength={8} /></Campo>
+                      <div className="sm:col-span-3"><ElegirSede agencias={t.entrega.agencias ?? []} valor={{ agencia: f.agencia, ciudad: f.ciudad, sede: f.sede }} cambiar={cambiarSede} /></div>
+                    </>
+                  )}
+                </div>
+  );
+
   const titulos: Record<Paso, [string, string]> = {
     1: [`Tu pedido a ${t.nombre}`, "Revisa y continúa. Son 3 pasos cortos."],
     2: ["¿Cómo quieres recibirlo?", `Opciones que ofrece ${t.nombre}.`],
@@ -321,7 +356,8 @@ export function Checkout({ tienda: t, vista = false, live = false, ahora: direct
                       <b className="text-sm text-tinta">{precio}</b>
                     </button>
                     {activo && (
-                      <div className="mt-4 space-y-3 sm:pl-[60px]">
+                      <div className="mt-4 space-y-4 sm:pl-[60px]">
+                        {datosEntrega}
                         {e === "recojo" && t.entrega.direccion_recojo && (
                           <p className="flex items-center gap-1.5 text-sm text-tinta"><MapPin className="size-4 shrink-0" /> {t.entrega.direccion_recojo}{t.horario ? ` · ${t.horario}` : ""}</p>
                         )}
@@ -340,39 +376,6 @@ export function Checkout({ tienda: t, vista = false, live = false, ahora: direct
                 );
               })}
 
-              <Tarjeta titulo="Tus datos">
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <Campo etiqueta="Nombre y apellido"><Entrada {...campo("nombre")} maxLength={80} autoComplete="name" /></Campo>
-                  <Campo etiqueta="Celular" ayuda={sinCodigo ? "Es el celular de tu cuenta: no necesitas código." : cuenta ? "Te enviaremos un código a este número para confirmar." : "Te enviamos un código para confirmar. ¿Tienes cuenta? Ingresa y no te lo pediremos."}><Entrada {...campo("celular")} onChange={(e) => setF({ ...f, celular: e.target.value.replace(/\D/g, "") })} inputMode="numeric" maxLength={9} placeholder="9XXXXXXXX" autoComplete="tel" /></Campo>
-                  {entrega === "motorizado" && (
-                    <>
-                      {direcciones.length > 0 && (
-                        <div className="flex flex-wrap gap-2 sm:col-span-2">
-                          {direcciones.map((d) => (
-                            <button
-                              key={d.id}
-                              type="button"
-                              onClick={() => setF({ ...f, direccion: d.direccion, distrito: d.distrito, referencia: d.referencia })}
-                              className={cn("inline-flex items-center gap-1.5 rounded-full px-3.5 py-2 text-sm font-semibold ring-1 transition", f.direccion === d.direccion ? "bg-pino text-white ring-pino" : "bg-white text-tinta ring-linea hover:ring-pino")}
-                            >
-                              <MapPin className="size-4" /> {d.etiqueta}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                      <Campo etiqueta="Dirección"><Entrada {...campo("direccion")} maxLength={200} autoComplete="street-address" /></Campo>
-                      <Campo etiqueta="Distrito"><Entrada {...campo("distrito")} maxLength={80} /></Campo>
-                      <Campo etiqueta="Referencia (opcional)"><Entrada {...campo("referencia")} maxLength={200} /></Campo>
-                    </>
-                  )}
-                  {entrega === "agencia" && (
-                    <>
-                      <Campo etiqueta="DNI" ayuda="La agencia lo pide para entregarte."><Entrada {...campo("dni")} onChange={(e) => setF({ ...f, dni: e.target.value.replace(/\D/g, "") })} inputMode="numeric" maxLength={8} /></Campo>
-                      <ElegirSede agencias={t.entrega.agencias ?? []} valor={{ agencia: f.agencia, ciudad: f.ciudad, sede: f.sede }} cambiar={cambiarSede} />
-                    </>
-                  )}
-                </div>
-              </Tarjeta>
             </>
           )}
 
