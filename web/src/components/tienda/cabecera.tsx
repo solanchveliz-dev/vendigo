@@ -24,9 +24,6 @@ export function CabeceraPublica({ q = "" }: { q?: string }) {
             <ShieldCheck className="size-4" /> Pedido con seguimiento
           </span>
           <CuentaPublica />
-          <Link href="/registro" className="hidden rounded-full bg-pino px-5 py-2.5 text-sm font-bold text-white transition hover:bg-pino-2 sm:inline-block">
-            Crea tu tienda
-          </Link>
         </div>
       </div>
     </header>

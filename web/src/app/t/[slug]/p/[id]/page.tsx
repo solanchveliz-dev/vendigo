@@ -11,7 +11,7 @@ import { InsigniasTienda } from "@/components/tienda/insignias";
 import { hace, soles } from "@/lib/formato";
 import { rubros } from "@/lib/catalogos";
 import type { Producto, Tienda } from "@/lib/tipos";
-import { CabeceraPublica } from "@/components/tienda/cabecera";
+import { CabeceraTienda } from "@/components/tienda/cabecera-tienda";
 import { CompraProducto, GaleriaProducto } from "@/components/tienda/compra-producto";
 import { BotonPregunta } from "@/components/tienda/pregunta";
 
@@ -79,7 +79,7 @@ export default async function ProductoPublico({ params, searchParams }: Params &
     <div className="min-h-screen bg-crema">
       {!vista && (
         <>
-          <CabeceraPublica />
+          <CabeceraTienda tienda={t} />
           <ContarVisita slug={slug} productoId={p.id} />
           <RegistrarVisto id={p.id} nombre={p.nombre} slug={t.slug} tienda={t.nombre} imagen={p.imagenes[0]?.url ?? ""} precio={p.oferta?.precio_final_centimos ?? p.precio_centimos} />
         </>

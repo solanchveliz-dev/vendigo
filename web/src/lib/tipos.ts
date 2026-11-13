@@ -24,6 +24,8 @@ export type Tienda = {
   id: string;
   valoracion?: number | null;
   valoraciones?: number;
+  seguidores?: number;
+  opiniones?: { autor: string; estrellas: number; comentario: string; creado_en: string }[];
   nombre: string;
   slug: string;
   rubro: string;

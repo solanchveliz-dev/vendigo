@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -102,6 +103,9 @@ type Tienda struct {
 	// Valoraciones de sus compradores (solo en la página pública).
 	Valoracion   *float64 `json:"valoracion,omitempty"`
 	Valoraciones int      `json:"valoraciones"`
+	// Cuántas personas la siguen y las últimas opiniones de compras entregadas (solo en la página pública).
+	Seguidores int             `json:"seguidores"`
+	Opiniones  []OpinionTienda `json:"opiniones,omitempty"`
 	Aviso        string   `json:"aviso"`
 	Historia     string   `json:"historia"`
 	HistoriaKey  *string  `json:"historia_foto_key"`
@@ -565,6 +569,12 @@ func (m *Modulo) publica(w http.ResponseWriter, r *http.Request) error {
 		return httpx.ErrNoEncontrado
 	}
 	m.app.DB.QueryRowContext(r.Context(), `SELECT avg(estrellas_tienda), count(*) FROM valoraciones WHERE tienda_id=$1`, t.ID).Scan(&t.Valoracion, &t.Valoraciones)
+	m.app.DB.QueryRowContext(r.Context(), `SELECT count(*) FROM favoritos_tiendas WHERE tienda_id=$1`, t.ID).Scan(&t.Seguidores)
+	ops, err := m.opinionesTienda(r.Context(), t.ID)
+	if err != nil {
+		return err
+	}
+	t.Opiniones = ops
 	t.ReclamoPedidoID = "" // dato interno de la tienda
 	// El WhatsApp y el correo son solo para que VendiGo avise a la tienda: no se muestran a los compradores.
 	// Los datos de Yape/Plin se muestran recién en el seguimiento del pedido, al momento de pagar.
@@ -574,6 +584,34 @@ func (m *Modulo) publica(w http.ResponseWriter, r *http.Request) error {
 	t.PlinQRKey, t.PlinQRURL, t.TransfBanco, t.TransfCuenta, t.TransfCCI, t.TransfTitular = nil, "", "", "", "", ""
 	httpx.OK(w, t)
 	return nil
+}
+
+// OpinionTienda: una valoración de una compra entregada. Del comprador solo se muestra el primer nombre.
+type OpinionTienda struct {
+	Autor      string    `json:"autor"`
+	Estrellas  int       `json:"estrellas"`
+	Comentario string    `json:"comentario"`
+	CreadoEn   time.Time `json:"creado_en"`
+}
+
+// opinionesTienda: las 6 más recientes (solo existen valoraciones de pedidos entregados).
+func (m *Modulo) opinionesTienda(ctx context.Context, tiendaID string) ([]OpinionTienda, error) {
+	rows, err := m.app.DB.QueryContext(ctx, `SELECT split_part(COALESCE(u.nombre, d.comprador_nombre), ' ', 1), v.estrellas_tienda, v.comentario, v.creado_en
+		FROM valoraciones v JOIN pedidos d ON d.id=v.pedido_id LEFT JOIN usuarios u ON u.id=v.usuario_id
+		WHERE v.tienda_id=$1 ORDER BY (v.comentario <> '') DESC, v.creado_en DESC LIMIT 6`, tiendaID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []OpinionTienda{}
+	for rows.Next() {
+		var o OpinionTienda
+		if err := rows.Scan(&o.Autor, &o.Estrellas, &o.Comentario, &o.CreadoEn); err != nil {
+			return nil, err
+		}
+		out = append(out, o)
+	}
+	return out, rows.Err()
 }
 
 // registrarVisita suma una visita del día a la tienda o a uno de sus productos (para "Rendimiento" y sugerencias).

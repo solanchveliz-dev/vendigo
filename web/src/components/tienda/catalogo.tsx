@@ -8,9 +8,13 @@ import { BotonGuardar } from "./seguir";
 
 type Filtro = "todos" | "nuevo" | "vendidos";
 
-// Productos de la tienda con filtros: Todos, Lo nuevo y Más vendidos, y las categorías propias de la tienda.
-export function Catalogo({ productos, slug, vista = false }: { productos: Producto[]; slug: string; vista?: boolean }) {
-  const [filtro, setFiltro] = useState<Filtro>("todos");
+// Sin tildes ni mayúsculas, para que "torta" encuentre "Tórta" y "alfajor" encuentre "Alfajores".
+const plano = (t: string) => t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+
+// Productos de la tienda en una sola fila de pestañas: Todos, Lo nuevo, Más vendidos y las categorías propias
+// de la tienda. Con `q` muestra solo lo que coincide con la búsqueda hecha en la barra de la tienda.
+export function Catalogo({ productos, slug, vista = false, q = "", filtroInicial = "todos" }: { productos: Producto[]; slug: string; vista?: boolean; q?: string; filtroInicial?: Filtro }) {
+  const [filtro, setFiltro] = useState<Filtro>(filtroInicial);
   const [categoria, setCategoria] = useState("");
   // Las categorías salen del tipo de cada producto (Aretes, Collares…). Solo se muestran si hay 2 o más.
   const categorias = useMemo(() => {
@@ -20,46 +24,51 @@ export function Catalogo({ productos, slug, vista = false }: { productos: Produc
   }, [productos]);
 
   const lista = useMemo(() => {
-    const copia = productos.filter((p) => !categoria || p.categoria === categoria);
+    const palabras = plano(q).split(/\s+/).filter(Boolean);
+    const copia = productos.filter((p) => {
+      if (categoria && p.categoria !== categoria) return false;
+      if (!palabras.length) return true;
+      const texto = plano(`${p.nombre} ${p.categoria ?? ""} ${p.descripcion ?? ""}`);
+      return palabras.every((w) => texto.includes(w));
+    });
     if (filtro === "nuevo") return copia.sort((a, b) => b.creado_en.localeCompare(a.creado_en)).slice(0, 8);
     if (filtro === "vendidos") return copia.filter((p) => p.vendidos > 0).sort((a, b) => b.vendidos - a.vendidos).slice(0, 8);
     return copia;
-  }, [productos, filtro, categoria]);
+  }, [productos, filtro, categoria, q]);
 
-  const boton = (k: Filtro, texto: string) => (
+  const pestana = (activa: boolean, texto: string, alTocar: () => void) => (
     <button
-      key={k}
-      onClick={() => setFiltro(k)}
-      className={`rounded-full px-3.5 py-1.5 text-sm font-semibold transition ${filtro === k ? "bg-pino text-white" : "bg-white text-tinta ring-1 ring-linea hover:bg-arena/60"}`}
+      key={texto}
+      onClick={alTocar}
+      aria-pressed={activa}
+      className={`shrink-0 rounded-full px-4 py-2 text-sm font-semibold transition ${activa ? "bg-pino text-white" : "bg-white text-tinta ring-1 ring-linea hover:bg-arena/60"}`}
     >
       {texto}
     </button>
   );
 
   return (
-    <section id="productos" className="mt-12 scroll-mt-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-2xl font-extrabold text-tinta">Productos de la tienda</h2>
-        <div className="flex gap-2">
-          {boton("todos", `Todos (${productos.length})`)}
-          {boton("nuevo", "Lo nuevo")}
-          {boton("vendidos", "Más vendidos")}
+    <section id="productos" className="mt-12 scroll-mt-28">
+      {q ? (
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="text-2xl font-extrabold text-tinta">
+            {lista.length} {lista.length === 1 ? "resultado" : "resultados"} para “{q}”
+          </h2>
+          <span className="flex gap-4 text-sm font-bold">
+            <Link href={`/t/${slug}#productos`} className="text-pino hover:underline">Ver todos los productos</Link>
+            <Link href={`/buscar?q=${encodeURIComponent(q)}`} className="text-gris hover:text-tinta hover:underline">Buscar en todo VendiGo</Link>
+          </span>
         </div>
-      </div>
-
-      {categorias.length >= 2 && (
-        <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
-          {[["", productos.length] as [string, number], ...categorias].map(([c, n]) => (
-            <button
-              key={c || "todas"}
-              onClick={() => setCategoria(c)}
-              className={`shrink-0 rounded-full px-3.5 py-1.5 text-sm font-semibold transition ${categoria === c ? "bg-coral text-white" : "bg-white/70 text-tinta ring-1 ring-linea hover:bg-arena/60"}`}
-            >
-              {c || "Todas las categorías"} <span className="opacity-70">({n})</span>
-            </button>
-          ))}
-        </div>
+      ) : (
+        <h2 className="text-2xl font-extrabold text-tinta">Productos</h2>
       )}
+
+      <div className="-mx-5 mt-4 flex gap-2 overflow-x-auto px-5 pb-1 sm:mx-0 sm:flex-wrap sm:px-0">
+        {pestana(filtro === "todos" && !categoria, `Todos (${productos.length})`, () => { setFiltro("todos"); setCategoria(""); })}
+        {pestana(filtro === "nuevo" && !categoria, "Lo nuevo", () => { setFiltro("nuevo"); setCategoria(""); })}
+        {pestana(filtro === "vendidos" && !categoria, "Más vendidos", () => { setFiltro("vendidos"); setCategoria(""); })}
+        {categorias.length >= 2 && categorias.map(([c]) => pestana(categoria === c, c, () => { setFiltro("todos"); setCategoria(c); }))}
+      </div>
 
       <div className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
         {lista.map((p) => (
@@ -97,7 +106,7 @@ export function Catalogo({ productos, slug, vista = false }: { productos: Produc
 
       {!lista.length && (
         <p className="mt-8 rounded-2xl bg-white/70 p-8 text-center text-gris">
-          {productos.length ? "Aún no hay productos en esta sección." : "Esta tienda aún no publica productos."}
+          {q ? `No encontramos “${q}” en esta tienda. Prueba con otra palabra o busca en todo VendiGo.` : productos.length ? "Aún no hay productos en esta sección." : "Esta tienda aún no publica productos."}
         </p>
       )}
     </section>

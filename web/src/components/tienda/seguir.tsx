@@ -67,12 +67,14 @@ function Globo({ texto, derecha }: { texto: string; derecha?: boolean }) {
 }
 
 // Corazón para seguir la tienda (queda en Favoritos → Emprendedores).
-export function BotonSeguir({ clase, tiendaId }: { clase: string; tiendaId: string }) {
+// Con `conTexto` el botón dice "Seguir" o "Siguiendo" (página de la tienda).
+export function BotonSeguir({ clase, tiendaId, conTexto = false }: { clase: string; tiendaId: string; conTexto?: boolean }) {
   const { activo, aviso, tocar } = useFavorito("tiendas", tiendaId);
   return (
     <div className="relative">
-      <button onClick={tocar} className={cn(clase, activo && "!border-[#f6c9c9] !bg-[#fdecec] !text-[#e5484d]")} aria-pressed={activo} aria-label={activo ? "Dejar de seguir" : "Seguir tienda"} title={activo ? "Dejar de seguir" : "Seguir tienda"}>
+      <button onClick={tocar} className={cn(clase, activo && "!border-[#f6c9c9] !bg-[#fdecec] !text-[#e5484d] !ring-[#f6c9c9]")} aria-pressed={activo} aria-label={activo ? "Dejar de seguir" : "Seguir tienda"} title={activo ? "Dejar de seguir" : "Seguir tienda"}>
         <Heart className={cn("size-5", activo && "fill-current")} />
+        {conTexto && <span>{activo ? "Siguiendo" : "Seguir"}</span>}
       </button>
       <Globo texto={aviso} />
     </div>
