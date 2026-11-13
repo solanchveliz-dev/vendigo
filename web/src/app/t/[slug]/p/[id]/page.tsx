@@ -85,7 +85,7 @@ export default async function ProductoPublico({ params, searchParams }: Params &
         </>
       )}
 
-      <main className="mx-auto max-w-[1400px] px-5 pb-16 sm:px-10" style={estiloTema(t)}>
+      <main className="w-full px-4 pb-16 sm:px-6 lg:px-10" style={estiloTema(t)}>
         <nav className="flex items-center gap-1.5 py-6 text-sm text-gris">
           <Link href="/" className="shrink-0 hover:text-tinta">Inicio</Link>
           <ChevronRight className="size-3.5 shrink-0" />

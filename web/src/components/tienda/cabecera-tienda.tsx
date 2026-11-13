@@ -14,7 +14,7 @@ export function CabeceraTienda({ tienda, q = "" }: { tienda: { id: string; slug:
     <header className="sticky top-0 z-20 border-b border-linea/70 bg-crema/95 backdrop-blur">
       {duena && (
         <div className="bg-aviso-claro text-aviso">
-          <div className="mx-auto flex max-w-[1400px] flex-wrap items-center gap-x-5 gap-y-1 px-5 py-2 text-sm sm:px-10">
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-1 px-4 py-2 text-sm sm:px-6 lg:px-10">
             <span className="flex flex-1 items-center gap-2 font-semibold">
               <Eye className="size-4 shrink-0" /> Así ven tu tienda tus clientes
             </span>
@@ -23,7 +23,7 @@ export function CabeceraTienda({ tienda, q = "" }: { tienda: { id: string; slug:
           </div>
         </div>
       )}
-      <div className="mx-auto flex max-w-[1400px] flex-wrap items-center gap-x-4 gap-y-2 px-5 py-3 sm:px-10">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 sm:px-6 lg:px-10">
         <Link href="/" className="flex shrink-0 items-center gap-2" aria-label="Ir al inicio de VendiGo">
           <Image src="/logo.png" alt="" width={34} height={34} className="rounded-full bg-white" />
           <span className="hidden font-display text-lg font-extrabold text-pino sm:inline">

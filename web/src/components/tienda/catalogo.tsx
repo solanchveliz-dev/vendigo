@@ -70,7 +70,7 @@ export function Catalogo({ productos, slug, vista = false, q = "", filtroInicial
         {categorias.length >= 2 && categorias.map(([c]) => pestana(categoria === c, c, () => { setFiltro("todos"); setCategoria(c); }))}
       </div>
 
-      <div className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+      <div className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
         {lista.map((p) => (
           <Link
             key={p.id}

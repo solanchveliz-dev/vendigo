@@ -98,7 +98,7 @@ export default async function TiendaPublica({ params, searchParams }: { params: 
     <div className="min-h-screen bg-crema">
       {!vista && <><CabeceraTienda tienda={t} q={q} /><ContarVisita slug={t.slug} /></>}
 
-      <main className="mx-auto max-w-[1296px] px-5 pb-16 sm:px-8" style={estiloTema(t)}>
+      <main className="w-full px-4 pb-16 sm:px-6 lg:px-10" style={estiloTema(t)}>
         {t.pausada && (
           <div className="mt-5 flex items-center gap-3 rounded-2xl bg-arena px-5 py-3 text-sm text-tinta ring-1 ring-linea">
             <Clock className="size-5 shrink-0" />
@@ -123,7 +123,7 @@ export default async function TiendaPublica({ params, searchParams }: { params: 
             </div>
 
             {/* Identidad: logo, nombre, insignias, datos de confianza y acciones. Alineado a la izquierda. */}
-            <section className="relative px-1 sm:px-6">
+            <section className="relative px-1 sm:px-8">
               <div className="-mt-12 flex flex-wrap items-end justify-between gap-4 sm:-mt-14">
                 <div className="size-24 shrink-0 overflow-hidden rounded-full bg-white ring-4 ring-crema sm:size-28">
                   {t.logo_url ? (
@@ -189,7 +189,7 @@ export default async function TiendaPublica({ params, searchParams }: { params: 
             </section>
 
             {franja.length > 0 && (
-              <ul className="mt-7 grid overflow-hidden rounded-2xl bg-linea/70 ring-1 ring-linea/70 sm:grid-cols-2 lg:grid-cols-4" style={{ gap: 1 }}>
+              <ul className="mt-7 grid overflow-hidden rounded-2xl bg-linea/70 ring-1 ring-linea/70" style={{ gap: 1, gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
                 {franja.map((f) => (
                   <li key={f.texto} className="flex items-center gap-2.5 bg-white px-4 py-3 text-sm font-semibold text-tinta">
                     <span className="text-pino">{f.icono}</span> {f.texto}
